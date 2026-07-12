@@ -1,0 +1,179 @@
+# ============================================================
+# SaveAny-Bot 完整配置模板
+# 复制为 config.toml 后修改占位符即可使用
+# 文件请保存为 UTF-8 编码
+# 环境变量前缀: SAVEANY_ (如 SAVEANY_TELEGRAM_TOKEN)
+# 详细文档: https://sabot.unv.app/deployment/configuration
+# ============================================================
+
+# ---------- 全局 ----------
+lang = "zh-Hans"          # zh-Hans | en
+workers = 4               # 并发任务数
+retry = 3                 # 任务失败重试次数
+threads = 4               # 单任务下载线程数（非 stream 模式）
+stream = false            # 流式传输，省磁盘但速度较慢
+# proxy = "socks5://127.0.0.1:7890"  # 全局 HTTP 代理（可选）
+no_clean_cache = false    # 退出时是否保留缓存
+
+# ---------- 日志 ----------
+[log]
+level = "info"            # debug | info | warn | error | fatal
+
+# ---------- 数据库 ----------
+[db]
+path = "data/saveany.db"       # 业务数据库（含 watch 路由）
+session = "data/session.db"      # Bot 会话；更换 token 需删除此文件
+
+# ---------- 临时目录 ----------
+[temp]
+base_path = "cache/"
+
+# ---------- 缓存 ----------
+[cache]
+ttl = 86400
+num_counters = 100000
+max_cost = 1000000
+
+# ---------- Telegram（必填）----------
+[telegram]
+token = "YOUR_BOT_TOKEN"         # @BotFather 获取
+app_id = 12345678                # https://my.telegram.org — 启用 UserBot 时强烈建议用自己的
+app_hash = "YOUR_APP_HASH"
+rpc_retry = 5
+media_group_timeout = 5          # 相册聚合等待秒数（9宫格转发/保存均依赖）
+
+[telegram.proxy]
+enable = false
+url = "socks5://127.0.0.1:7890"
+
+# watch 监听 / 转发 必须开启 UserBot
+[telegram.userbot]
+enable = true
+session = "data/usersession.db"  # 首次启动需在终端登录个人账号
+
+# ---------- Aria2（可选）----------
+[aria2]
+enable = false
+url = "http://localhost:6800/jsonrpc"
+secret = ""
+keep_file = false                # false = 转存后删除 Aria2 下载的本地文件
+
+# ---------- yt-dlp（可选）----------
+[ytdlp]
+max_height = 1080
+format = ""
+recode = "mp4"
+
+# ---------- HTTP API（可选）----------
+[api]
+enable = false
+host = "0.0.0.0"
+port = 8080
+token = "CHANGE_ME"
+
+# ---------- 解析器插件（可选）----------
+[parsers]
+plugin_enable = false
+plugin_dirs = ["./plugins"]
+# proxy = "socks5://127.0.0.1:7890"
+
+# ---------- 任务钩子（可选）----------
+[hook.exec]
+# task_before_start = "echo task start"
+# task_success = "echo task ok"
+# task_fail = "echo task fail"
+# task_cancel = "echo task cancel"
+
+# ============================================================
+# 存储端（至少启用一个；/watch 保存模式需在 Bot 内设置默认存储）
+# ============================================================
+
+[[storages]]
+name = "本地存储"
+type = "local"
+enable = true
+base_path = "./downloads"
+
+# [[storages]]
+# name = "WebDAV"
+# type = "webdav"
+# enable = false
+# url = "https://example.com/dav"
+# username = "user"
+# password = "pass"
+# base_path = "/telegram"
+
+# [[storages]]
+# name = "S3"
+# type = "s3"
+# enable = false
+# endpoint = "s3.amazonaws.com"
+# region = "us-east-1"
+# access_key_id = "AKIA..."
+# secret_access_key = "..."
+# bucket_name = "my-bucket"
+# base_path = "/saveany"
+# use_ssl = true
+# virtual_host = true
+
+# [[storages]]
+# name = "MinIO"
+# type = "minio"
+# enable = false
+# endpoint = "127.0.0.1:9000"
+# access_key_id = "minioadmin"
+# secret_access_key = "minioadmin"
+# bucket_name = "saveany"
+# base_path = "/"
+# use_ssl = false
+
+# [[storages]]
+# name = "Alist"
+# type = "alist"
+# enable = false
+# url = "https://alist.example.com"
+# username = "admin"
+# password = "password"
+# base_path = "/saveany"
+# token_exp = 3600
+
+# [[storages]]
+# name = "TG存储"
+# type = "telegram"
+# enable = false
+# chat_id = "-1001234567890"
+# force_file = false
+# skip_large = false
+# spilt_size_mb = 2000
+
+# [[storages]]
+# name = "Rclone"
+# type = "rclone"
+# enable = false
+# remote = "gdrive"
+# base_path = "/SaveAnyBot"
+# config_path = ""
+# flags = ["--transfers", "4"]
+
+# ============================================================
+# 用户白名单（填写你的 Telegram User ID）
+# ============================================================
+
+[[users]]
+id = 123456789            # @userinfobot 可查询
+storages = []             # 空列表 + blacklist=true → 可用全部存储
+blacklist = true
+
+# [[users]]
+# id = 987654321
+# storages = ["本地存储"]   # 白名单：仅允许列出的存储
+# blacklist = false
+
+# ============================================================
+# watch 命令速查（需 UserBot）
+#   /watch <source>              保存到默认存储（target=0）
+#   /watch <source> <target>     UserBot 转发到目标群/频道
+#   /watch <source> msgre:.*x.*  带过滤器保存
+#   /lswatch                     列出 [id] source target [filter]
+#   /unwatch <id>                按主键删除
+# ============================================================

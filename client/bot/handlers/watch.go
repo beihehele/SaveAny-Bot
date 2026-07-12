@@ -1,9 +1,10 @@
 package handlers
 
 import (
-	"fmt"
+	"errors"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -30,8 +31,8 @@ import (
 
 func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 	logger := log.FromContext(ctx)
-	args := strings.Split(update.EffectiveMessage.Text, " ")
-	if len(args) < 2 {
+	parts := strings.Fields(update.EffectiveMessage.Text)
+	if len(parts) < 2 {
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchHelpText)), nil)
 		return dispatcher.EndGroups
 	}
@@ -42,57 +43,84 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorGetUserFailed)), nil)
 		return dispatcher.EndGroups
 	}
-	if user.DefaultStorage == "" {
-		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorDefaultStorageNotSet)), nil)
+	parsed, err := parseWatchArgs(parts[1:])
+	if err != nil {
+		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchHelpText)), nil)
 		return dispatcher.EndGroups
 	}
-	chatArg := args[1]
-	chatID, err := tgutil.ParseChatID(ctx, chatArg)
+	sourceID, err := tgutil.ParseChatID(ctx, parsed.SourceArg)
 	if err != nil {
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorInvalidIdOrUsername, map[string]any{"Error": err.Error()})), nil)
 		return dispatcher.EndGroups
 	}
-	watching, err := user.WatchingChat(ctx, chatID)
+	targetID := int64(0)
+	targetArg := "0"
+	if !parsed.TargetOmitted {
+		if parsed.TargetArg == "0" {
+			targetID = 0
+		} else {
+			targetID, err = tgutil.ParseChatID(ctx, parsed.TargetArg)
+			if err != nil {
+				ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorInvalidIdOrUsername, map[string]any{"Error": err.Error()})), nil)
+				return dispatcher.EndGroups
+			}
+			targetArg = parsed.TargetArg
+		}
+	}
+	if targetID == 0 && user.DefaultStorage == "" {
+		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorDefaultStorageNotSet)), nil)
+		return dispatcher.EndGroups
+	}
+	if targetID != 0 {
+		uctx := userclient.GetCtx()
+		if uctx == nil {
+			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorUserbotUnavailable)), nil)
+			return dispatcher.EndGroups
+		}
+		if _, err := uctx.GetChat(targetID); err != nil {
+			logger.Errorf("UserBot cannot access target chat %d: %s", targetID, err)
+			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorTargetUnreachable, map[string]any{
+				"Target": targetID,
+				"Error":  err.Error(),
+			})), nil)
+			return dispatcher.EndGroups
+		}
+	}
+	filter, err := validateAndNormalizeFilter(parsed.FilterArg)
 	if err != nil {
-		logger.Errorf("Failed to check if user is watching chat %d: %s", chatID, err)
+		switch {
+		case errors.Is(err, errWatchFilterFormatInvalid):
+			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorFilterFormatInvalid)), nil)
+		case errors.Is(err, errWatchFilterTypeUnsupported):
+			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorFilterTypeUnsupported)), nil)
+		default:
+			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorInvalidRegex, map[string]any{"Error": err.Error()})), nil)
+		}
+		return dispatcher.EndGroups
+	}
+	watching, err := user.WatchingRoute(ctx, sourceID, targetID)
+	if err != nil {
+		logger.Errorf("Failed to check if user is watching route %d -> %d: %s", sourceID, targetID, err)
 		return dispatcher.EndGroups
 	}
 	if watching {
-		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchInfoAlreadyWatchingChat)), nil)
+		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchInfoAlreadyWatchingRoute)), nil)
 		return dispatcher.EndGroups
 	}
-	filter := ""
-	if len(args) > 2 {
-		filterArg := strings.Join(args[2:], " ")
-		filterType := strings.Split(filterArg, ":")[0]
-		filterData := strings.Split(filterArg, ":")[1]
-		if filterType == "" || filterData == "" {
-			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorFilterFormatInvalid)), nil)
-			return dispatcher.EndGroups
-		}
-		switch filterType {
-		case "msgre":
-			_, err := regexp.Compile(filterData)
-			if err != nil {
-				ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorInvalidRegex, map[string]any{"Error": err.Error()})), nil)
-				return dispatcher.EndGroups
-			}
-			filter = filterType + ":" + filterData
-		default:
-			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorFilterTypeUnsupported)), nil)
-			return dispatcher.EndGroups
-		}
-	}
 	if err := user.WatchChat(ctx, database.WatchChat{
-		UserID: user.ID,
-		ChatID: chatID,
-		Filter: filter,
+		UserID:   user.ID,
+		ChatID:   sourceID,
+		TargetID: targetID,
+		Filter:   filter,
 	}); err != nil {
-		logger.Errorf("Failed to watch chat %d: %s", chatID, err)
+		logger.Errorf("Failed to watch route %d -> %d: %s", sourceID, targetID, err)
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorWatchChatFailed, map[string]any{"Error": err.Error()})), nil)
 		return dispatcher.EndGroups
 	}
-	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchInfoWatchChatStarted, map[string]any{"Chat": chatArg})), nil)
+	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchInfoWatchRouteStarted, map[string]any{
+		"Source": parsed.SourceArg,
+		"Target": targetArg,
+	})), nil)
 	return dispatcher.EndGroups
 }
 
@@ -113,13 +141,7 @@ func handleLswatchCmd(ctx *ext.Context, update *ext.Update) error {
 	var sb strings.Builder
 	sb.WriteString(i18n.T(i18nk.BotMsgWatchInfoWatchListHeader))
 	for _, chat := range chats {
-		sb.WriteString("- ")
-		sb.WriteString(fmt.Sprintf("%d", chat.ChatID))
-		if chat.Filter != "" {
-			sb.WriteString(i18n.T(i18nk.BotMsgWatchInfoWatchListFilterPrefix))
-			sb.WriteString(chat.Filter)
-			sb.WriteString(")")
-		}
+		sb.WriteString(formatWatchListLine(chat.ID, chat.ChatID, chat.TargetID, chat.Filter))
 		sb.WriteString("\n")
 	}
 	ctx.Reply(update, ext.ReplyTextString(sb.String()), nil)
@@ -128,9 +150,9 @@ func handleLswatchCmd(ctx *ext.Context, update *ext.Update) error {
 
 func handleUnwatchCmd(ctx *ext.Context, update *ext.Update) error {
 	logger := log.FromContext(ctx)
-	args := strings.Split(update.EffectiveMessage.Text, " ")
-	if len(args) < 2 {
-		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorUnwatchNoChatProvided)), nil)
+	parts := strings.Fields(update.EffectiveMessage.Text)
+	if len(parts) < 2 {
+		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorUnwatchNoIdProvided)), nil)
 		return dispatcher.EndGroups
 	}
 	userChatID := update.GetUserChat().GetID()
@@ -140,18 +162,17 @@ func handleUnwatchCmd(ctx *ext.Context, update *ext.Update) error {
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorGetUserFailed)), nil)
 		return dispatcher.EndGroups
 	}
-	chatArg := args[1]
-	chatID, err := tgutil.ParseChatID(ctx, chatArg)
+	id, err := strconv.ParseUint(parts[1], 10, 64)
 	if err != nil {
-		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorInvalidIdOrUsername, map[string]any{"Error": err.Error()})), nil)
+		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorUnwatchInvalidId)), nil)
 		return dispatcher.EndGroups
 	}
-	if err := user.UnwatchChat(ctx, chatID); err != nil {
-		logger.Errorf("Failed to unwatch chat %d: %s", chatID, err)
+	if err := user.UnwatchByID(ctx, uint(id)); err != nil {
+		logger.Errorf("Failed to unwatch id %d: %s", id, err)
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorUnwatchChatFailed, map[string]any{"Error": err.Error()})), nil)
 		return dispatcher.EndGroups
 	}
-	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchInfoWatchChatStopped, map[string]any{"Chat": chatArg})), nil)
+	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchInfoWatchRouteStopped, map[string]any{"ID": id})), nil)
 	return dispatcher.EndGroups
 }
 
@@ -237,6 +258,16 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 					logger.Warnf("Unsupported filter type %s in chat %d, skipping", filterType, chat.ChatID)
 					continue
 				}
+			}
+			if chat.TargetID != 0 {
+				groupID, isGroup := file.Message().GetGroupedID()
+				timeout := time.Duration(max(config.C().Telegram.MediaGroupTimeout, 1)) * time.Second
+				if isGroup && groupID != 0 {
+					watchForwardAlbumBuf.add(event.ChatID, chat.TargetID, groupID, event.MessageID, timeout)
+				} else if err := userclient.ForwardMessagesDropAuthor(event.Ctx, event.ChatID, chat.TargetID, []int{event.MessageID}); err != nil {
+					logger.Errorf("forward failed source=%d target=%d msg=%d: %v", event.ChatID, chat.TargetID, event.MessageID, err)
+				}
+				continue
 			}
 			user, err := database.GetUserByID(ctx, chat.UserID)
 			if err != nil {

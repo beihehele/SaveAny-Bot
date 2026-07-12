@@ -9,28 +9,56 @@ weight: 4
 该功能需开启 UserBot 集成.
 {{< /hint >}}
 
-监听指定聊天的消息, 并自动保存到默认存储中, 遵从存储规则, 并且可以设置过滤器来只保存匹配的消息.
+监听指定聊天的媒体消息。`target=0`（或省略）时自动保存到默认存储；`target` 为其他频道/群 ID 时由 UserBot 转发（不下载）。
 
-监听聊天:
-
-```
-/watch <chat_id/username> [filter] 
-```
-
-取消监听:
+## 监听聊天
 
 ```
-/unwatch <chat_id/username>
+/watch <source_id> [target_id] [filter]
 ```
 
-过滤器类型:
+示例:
 
-## msgre
+```
+/watch -1002229835658
+/watch -1002229835658 0 msgre:.*hello.*
+/watch -1002229835658 -1003333444555
+/watch -1002229835658 -1003333444555 msgre:.*hello.*
+```
+
+## 列出监听
+
+```
+/lswatch
+```
+
+输出格式:
+
+```
+[id] <source_id> <target_id> [filter]
+```
+
+## 取消监听
+
+```
+/unwatch <id>
+```
+
+`id` 为 `/lswatch` 返回的自增主键。
+
+## 过滤器
+
+### msgre
 
 正则匹配消息文本, 例如:
 
 ```
-/watch 12345678 msgre:.*hello.*
+/watch -1002229835658 msgre:.*hello.*
 ```
 
-这将会监听 ID 为 12345678 的聊天, 并且只保存消息文本中包含 "hello" 的消息.
+## 转发说明
+
+- 转发由 **UserBot 个人账号** 执行，Bot 仅负责管理命令
+- 使用无来源复制（`DropAuthor`），目标侧为独立副本，源消息删除不影响目标
+- 相册/9 宫格媒体会聚合后一次转发，避免被打散
+- 源聊天需可读，目标聊天需有发消息权限

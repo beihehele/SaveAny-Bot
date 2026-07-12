@@ -11,22 +11,24 @@ func (user *User) WatchChat(ctx context.Context, chat WatchChat) error {
 	return db.WithContext(ctx).Save(user.WatchChats).Error
 }
 
-func (user *User) UnwatchChat(ctx context.Context, chatID int64) error {
-	var watchChat WatchChat
-	err := db.WithContext(ctx).Where("chat_id = ? AND user_id = ?", chatID, user.ID).First(&watchChat).Error
-	if err != nil {
-		return err
-	}
-	return db.WithContext(ctx).Unscoped().Delete(&watchChat).Error
-}
-
-func (user *User) WatchingChat(ctx context.Context, chatID int64) (bool, error) {
+func (user *User) WatchingRoute(ctx context.Context, sourceID, targetID int64) (bool, error) {
 	var count int64
-	err := db.WithContext(ctx).Model(&WatchChat{}).Where("chat_id = ? AND user_id = ?", chatID, user.ID).Count(&count).Error
+	err := db.WithContext(ctx).Model(&WatchChat{}).
+		Where("chat_id = ? AND target_id = ? AND user_id = ?", sourceID, targetID, user.ID).
+		Count(&count).Error
 	if err != nil {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (user *User) UnwatchByID(ctx context.Context, id uint) error {
+	var watchChat WatchChat
+	err := db.WithContext(ctx).Where("id = ? AND user_id = ?", id, user.ID).First(&watchChat).Error
+	if err != nil {
+		return err
+	}
+	return db.WithContext(ctx).Unscoped().Delete(&watchChat).Error
 }
 
 func GetWatchChatsByChatID(ctx context.Context, chatID int64) ([]*WatchChat, error) {

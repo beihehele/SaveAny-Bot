@@ -77,19 +77,23 @@ bot:
       Example:
       /save @acherkrau 114-514
     watch_help_text: |
-      Use /watch to watch messages in a chat and automatically save them to the default storage, following storage rules.
+      Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target forwards via UserBot (no download).
 
       Syntax:
-      /watch <chat_id> [filter]
+      /watch <source_id> [target_id] [filter]
+      /lswatch
+      /unwatch <id>
 
       Parameters:
-      - <chat_id>: Chat ID or username
-      - [filter]: Optional, format is filter_type:expression , see docs for all supported filters
+      - <source_id>: Source chat ID or username
+      - [target_id]: Target chat ID; 0 means save to default storage
+      - [filter]: Optional, format is filter_type:expression
 
-      Example:
-      /watch -1002229835658 msgre:.*plana.*
-
-      This will watch chat with ID -1002229835658 and save all media messages containing "plana".
+      Examples:
+      /watch -1002229835658
+      /watch -1002229835658 0 msgre:.*plana.*
+      /watch -1002229835658 -1003333444555
+      /watch -1002229835658 -1003333444555 msgre:.*plana.*
     common:
       cancel_button_text: "Cancel"
       error_invalid_regex: "Invalid regex: {{.Error}}"
@@ -147,14 +151,16 @@ bot:
       error_filter_format_invalid: "Invalid filter format, please use <type>:<expression>"
       error_filter_type_unsupported: "Unsupported filter type, please see the docs"
       error_watch_chat_failed: "Failed to watch chat: {{.Error}}"
-      info_watch_chat_started: "Started watching chat: {{.Chat}}"
-      info_already_watching_chat: "Already watching this chat"
+      error_userbot_unavailable: "UserBot is not available for forward routes"
+      error_target_unreachable: "UserBot cannot access target chat {{.Target}}: {{.Error}}"
+      info_watch_route_started: "Started watching: {{.Source}} → {{.Target}}"
+      info_already_watching_route: "Already watching this route"
       info_watch_list_empty: "No chats are being watched currently"
-      info_watch_list_header: "Currently watched chats:\n"
-      info_watch_list_filter_prefix: " (filter: "
-      error_unwatch_no_chat_provided: "Please provide a chat ID or username to unwatch"
-      error_unwatch_chat_failed: "Failed to unwatch chat: {{.Error}}"
-      info_watch_chat_stopped: "Stopped watching chat: {{.Chat}}"
+      info_watch_list_header: "Current watches:\n"
+      error_unwatch_no_id_provided: "Please provide a watch ID to unwatch"
+      error_unwatch_invalid_id: "Invalid watch ID"
+      error_unwatch_chat_failed: "Failed to unwatch: {{.Error}}"
+      info_watch_route_stopped: "Stopped watching: [{{.ID}}]"
     tasks:
       usage_cancel: "Usage: /tasks cancel <task_id>"
       usage: "Usage: /tasks [running|queued|cancel <task_id>]"

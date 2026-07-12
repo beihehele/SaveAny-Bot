@@ -78,19 +78,23 @@ bot:
       示例:
       /save @acherkrau 114-514
     watch_help_text: |
-      使用 /watch 命令监听一个聊天的消息, 并自动保存到默认存储中, 遵从存储规则.
+      使用 /watch 监听聊天。target=0（或省略）时保存到默认存储；target 为频道/群 ID 时由 UserBot 转发（不下载）。
 
       命令语法:
-      /watch <chat_id> [filter]
+      /watch <source_id> [target_id] [filter]
+      /lswatch
+      /unwatch <id>
 
       参数:
-      - <chat_id>: 聊天的 ID 或用户名
-      - [filter]: 可选, 格式为 过滤器类型:表达式 , 所有支持类型的过滤器请查看文档
+      - <source_id>: 源聊天 ID 或用户名
+      - [target_id]: 目标聊天 ID，0 表示保存到默认存储
+      - [filter]: 可选，格式为 过滤器类型:表达式
 
       命令示例:
-      /watch -1002229835658 msgre:.*plana.*
-
-      这将监听 ID 为 -1002229835658 的聊天, 并转存所有包含 "plana" 的媒体消息
+      /watch -1002229835658
+      /watch -1002229835658 0 msgre:.*plana.*
+      /watch -1002229835658 -1003333444555
+      /watch -1002229835658 -1003333444555 msgre:.*plana.*
     common:
       cancel_button_text: "取消任务"
       error_invalid_regex: "无效的正则表达式: {{.Error}}"
@@ -148,14 +152,16 @@ bot:
       error_filter_format_invalid: "过滤器格式错误, 请使用 <过滤器类型>:<表达式>"
       error_filter_type_unsupported: "不支持的过滤器类型, 请参阅文档"
       error_watch_chat_failed: "监听聊天失败: {{.Error}}"
-      info_watch_chat_started: "已开始监听聊天: {{.Chat}}"
-      info_already_watching_chat: "已经在监听此聊天"
+      error_userbot_unavailable: "UserBot 未就绪，无法添加转发路由"
+      error_target_unreachable: "UserBot 无法访问目标聊天 {{.Target}}: {{.Error}}"
+      info_watch_route_started: "已开始监听: {{.Source}} → {{.Target}}"
+      info_already_watching_route: "已经在监听此路由"
       info_watch_list_empty: "当前没有监听任何聊天"
-      info_watch_list_header: "当前监听的聊天:\n"
-      info_watch_list_filter_prefix: " (过滤器: "
-      error_unwatch_no_chat_provided: "请提供要取消监听的聊天ID或用户名"
-      error_unwatch_chat_failed: "取消监听聊天失败: {{.Error}}"
-      info_watch_chat_stopped: "已取消监听聊天: {{.Chat}}"
+      info_watch_list_header: "当前监听:\n"
+      error_unwatch_no_id_provided: "请提供要取消的监听 ID"
+      error_unwatch_invalid_id: "无效的监听 ID"
+      error_unwatch_chat_failed: "取消监听失败: {{.Error}}"
+      info_watch_route_stopped: "已取消监听: [{{.ID}}]"
     tasks:
       usage_cancel: "用法: /tasks cancel <task_id>"
       usage: "用法: /tasks [running|queued|cancel <task_id>]"
