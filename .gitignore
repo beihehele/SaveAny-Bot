@@ -13,3 +13,4 @@ testplugins/
 *.exe
 tmp-*
 saveany-bot
+.worktrees/
