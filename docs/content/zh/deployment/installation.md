@@ -112,7 +112,7 @@ chmod +x /usr/bin/sabot
 
 ### Docker Compose
 
-下载 [docker-compose.yml](https://github.com/krau/SaveAny-Bot/blob/main/docker-compose.yml) 文件, 在同目录下新建 `config.toml` 文件, 参考 [config.example.toml](https://github.com/krau/SaveAny-Bot/blob/main/config.example.toml) 编辑配置文件.
+下载 [docker-compose.yml](https://github.com/beihehele/SaveAny-Bot/blob/main/docker-compose.yml) 文件, 在同目录下新建 `config.toml` 文件, 参考 [config.example.toml](https://github.com/beihehele/SaveAny-Bot/blob/main/config.example.toml) 编辑配置文件.
 
 启动:
 
@@ -126,20 +126,11 @@ docker compose up -d
 docker run -d --name saveany-bot \
     -v /path/to/config.toml:/app/config.toml \
     -v /path/to/downloads:/app/downloads \
-    ghcr.io/krau/saveany-bot:latest
+    ghcr.io/beihehele/saveany-bot:latest
 ```
 
 {{< hint info >}}
-关于 docker 镜像的变体版本
-<br />
-<ul>
-<li>默认版本: 包含所有功能和依赖, 体积较大. 如果没有特殊需要, 请使用此版本</li>
-<li>micro: 精简版本, 去除部分可选依赖, 体积较小</li>
-<li>pico: 极简版本, 仅包含核心功能, 体积最小</li>
-</ul>
-你可以根据需要, 通过指定不同的标签来拉取合适的版本, 例如: <code>ghcr.io/krau/saveany-bot:micro</code>
-<br />
-关于变体版本的更详细的区别, 请参考项目根目录下的 Dockerfile 文件.
+当前发布的为默认完整版镜像, 包含所有功能和依赖. 也可按版本号拉取指定发布, 例如: <code>ghcr.io/beihehele/saveany-bot:0.1.0</code>
 {{< /hint >}}
 
 ## 更新
@@ -155,7 +146,7 @@ docker run -d --name saveany-bot \
 docker:
 
 ```bash
-docker pull ghcr.io/krau/saveany-bot:latest
+docker pull ghcr.io/beihehele/saveany-bot:latest
 docker restart saveany-bot
 ```
 

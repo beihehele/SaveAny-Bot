@@ -112,7 +112,7 @@ Usage: <code>sudo sabot start|stop|restart|status|enable|disable</code>
 
 ### Docker Compose
 
-Download the [docker-compose.yml](https://github.com/krau/SaveAny-Bot/blob/main/docker-compose.yml) file, create a new `config.toml` file in the same directory, refer to [config.example.toml](https://github.com/krau/SaveAny-Bot/blob/main/config.example.toml) to edit the configuration file.
+Download the [docker-compose.yml](https://github.com/beihehele/SaveAny-Bot/blob/main/docker-compose.yml) file, create a new `config.toml` file in the same directory, refer to [config.example.toml](https://github.com/beihehele/SaveAny-Bot/blob/main/config.example.toml) to edit the configuration file.
 
 Start:
 
@@ -126,20 +126,11 @@ docker compose up -d
 docker run -d --name saveany-bot \
     -v /path/to/config.toml:/app/config.toml \
     -v /path/to/downloads:/app/downloads \
-    ghcr.io/krau/saveany-bot:latest
+    ghcr.io/beihehele/saveany-bot:latest
 ```
 
 {{< hint info >}}
-About Docker image variants
-<br />
-<ul>
-<li>Default: Includes all features and dependencies, larger in size. Use this if you don't have special requirements.</li>
-<li>micro: Slimmed-down image with some optional dependencies removed, smaller in size.</li>
-<li>pico: Minimal image containing only core features, smallest in size.</li>
-</ul>
-You can pull different variants by specifying tags, for example: <code>ghcr.io/krau/saveany-bot:micro</code>
-<br />
-For more details about the variants, see the Dockerfile in the project root.
+The published image is the default variant with all features and dependencies. You can also pull a specific release tag, for example: <code>ghcr.io/beihehele/saveany-bot:0.1.0</code>
 {{< /hint >}}
 
 ## Updates
@@ -157,7 +148,7 @@ If you deployed with Docker, use the following commands to update:
 docker:
 
 ```bash
-docker pull ghcr.io/krau/saveany-bot:latest
+docker pull ghcr.io/beihehele/saveany-bot:latest
 docker restart saveany-bot
 ```
 
