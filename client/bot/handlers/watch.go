@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"path"
 	"regexp"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/enums/fnamest"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
+	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/storage"
 	"github.com/rs/xid"
 )
@@ -54,7 +56,6 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	targetID := int64(0)
-	targetArg := "0"
 	if !parsed.TargetOmitted {
 		if parsed.TargetArg == "0" {
 			targetID = 0
@@ -64,20 +65,32 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 				ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorInvalidIdOrUsername, map[string]any{"Error": err.Error()})), nil)
 				return dispatcher.EndGroups
 			}
-			targetArg = parsed.TargetArg
 		}
 	}
 	if targetID == 0 && user.DefaultStorage == "" {
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorDefaultStorageNotSet)), nil)
 		return dispatcher.EndGroups
 	}
-	if targetID != 0 {
-		uctx := userclient.GetCtx()
-		if uctx == nil {
-			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorUserbotUnavailable)), nil)
-			return dispatcher.EndGroups
-		}
-		if _, err := uctx.GetChat(targetID); err != nil {
+	uctx := userclient.GetCtx()
+	if uctx == nil {
+		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorUserbotUnavailable)), nil)
+		return dispatcher.EndGroups
+	}
+	sourceName, err := resolveWatchChatTitle(uctx, sourceID)
+	if err != nil {
+		logger.Errorf("UserBot cannot access source chat %d: %s", sourceID, err)
+		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorSourceUnreachable, map[string]any{
+			"Source": sourceID,
+			"Error":  err.Error(),
+		})), nil)
+		return dispatcher.EndGroups
+	}
+	var targetName string
+	if targetID == 0 {
+		targetName = i18n.T(i18nk.BotMsgWatchTargetLocal)
+	} else {
+		targetName, err = resolveWatchChatTitle(uctx, targetID)
+		if err != nil {
 			logger.Errorf("UserBot cannot access target chat %d: %s", targetID, err)
 			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorTargetUnreachable, map[string]any{
 				"Target": targetID,
@@ -108,18 +121,20 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	if err := user.WatchChat(ctx, database.WatchChat{
-		UserID:   user.ID,
-		ChatID:   sourceID,
-		TargetID: targetID,
-		Filter:   filter,
+		UserID:     user.ID,
+		ChatID:     sourceID,
+		SourceName: sourceName,
+		TargetID:   targetID,
+		TargetName: targetName,
+		Filter:     filter,
 	}); err != nil {
 		logger.Errorf("Failed to watch route %d -> %d: %s", sourceID, targetID, err)
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorWatchChatFailed, map[string]any{"Error": err.Error()})), nil)
 		return dispatcher.EndGroups
 	}
 	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchInfoWatchRouteStarted, map[string]any{
-		"Source": parsed.SourceArg,
-		"Target": targetArg,
+		"Source": sourceName,
+		"Target": targetName,
 	})), nil)
 	return dispatcher.EndGroups
 }
@@ -141,7 +156,7 @@ func handleLswatchCmd(ctx *ext.Context, update *ext.Update) error {
 	var sb strings.Builder
 	sb.WriteString(i18n.T(i18nk.BotMsgWatchInfoWatchListHeader))
 	for _, chat := range chats {
-		sb.WriteString(formatWatchListLine(chat.ID, chat.ChatID, chat.TargetID, chat.Filter))
+		sb.WriteString(formatWatchListLine(chat.ID, chat.SourceName, chat.TargetName, chat.Filter))
 		sb.WriteString("\n")
 	}
 	ctx.Reply(update, ext.ReplyTextString(sb.String()), nil)
@@ -174,6 +189,41 @@ func handleUnwatchCmd(ctx *ext.Context, update *ext.Update) error {
 	}
 	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchInfoWatchRouteStopped, map[string]any{"ID": id})), nil)
 	return dispatcher.EndGroups
+}
+
+func resolveWatchChatTitle(ctx *ext.Context, chatID int64) (string, error) {
+	inputPeer, err := ctx.ResolveInputPeerById(chatID)
+	if err != nil {
+		return "", err
+	}
+	switch p := inputPeer.(type) {
+	case *tg.InputPeerChannel:
+		result, err := ctx.Raw.ChannelsGetChannels(ctx, []tg.InputChannelClass{
+			&tg.InputChannel{ChannelID: p.ChannelID, AccessHash: p.AccessHash},
+		})
+		if err != nil {
+			return "", err
+		}
+		for _, ch := range result.GetChats() {
+			if c, ok := ch.(*tg.Channel); ok && c.ID == p.ChannelID {
+				return c.GetTitle(), nil
+			}
+		}
+		return "", fmt.Errorf("channel not found")
+	case *tg.InputPeerChat:
+		result, err := ctx.Raw.MessagesGetChats(ctx, []int64{p.ChatID})
+		if err != nil {
+			return "", err
+		}
+		for _, ch := range result.GetChats() {
+			if c, ok := ch.(*tg.Chat); ok && c.ID == p.ChatID {
+				return c.GetTitle(), nil
+			}
+		}
+		return "", fmt.Errorf("chat not found")
+	default:
+		return "", fmt.Errorf("not a group or channel")
+	}
 }
 
 type watchMediaGroupHandler struct {

@@ -21,10 +21,12 @@ type User struct {
 
 type WatchChat struct {
 	gorm.Model
-	UserID   uint  `gorm:"uniqueIndex:idx_watch_route;not null"`
-	ChatID   int64 `gorm:"uniqueIndex:idx_watch_route;not null"` // source
-	TargetID int64 `gorm:"uniqueIndex:idx_watch_route;not null;default:0"`
-	Filter   string
+	UserID     uint   `gorm:"uniqueIndex:idx_watch_route;not null"`
+	ChatID     int64  `gorm:"uniqueIndex:idx_watch_route;not null"` // source
+	SourceName string // resolved at /watch time
+	TargetID   int64  `gorm:"uniqueIndex:idx_watch_route;not null;default:0"`
+	TargetName string // resolved at /watch time; "本地" when TargetID is 0
+	Filter     string
 }
 
 type Dir struct {

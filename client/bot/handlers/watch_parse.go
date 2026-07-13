@@ -41,8 +41,8 @@ func parseWatchArgs(args []string) (parsedWatchArgs, error) {
 	return out, nil
 }
 
-func formatWatchListLine(id uint, sourceID, targetID int64, filter string) string {
-	line := fmt.Sprintf("[%d] %d %d", id, sourceID, targetID)
+func formatWatchListLine(id uint, sourceName, targetName, filter string) string {
+	line := fmt.Sprintf("[%d] %s -> %s", id, sourceName, targetName)
 	if filter != "" {
 		line += " " + filter
 	}

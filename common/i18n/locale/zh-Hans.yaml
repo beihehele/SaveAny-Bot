@@ -40,6 +40,8 @@ bot:
       /watch - 监听聊天并自动保存 (UserBot)
       /unwatch - 取消监听聊天 (UserBot)
       /lswatch - 列出正在监听的聊天 (UserBot)
+      /lschannel - 列出频道 (UserBot)
+      /lsgroup - 列出群组 (UserBot)
       /syncpeers - 同步对话列表 (UserBot)
       /update - 检查更新并升级
 
@@ -61,6 +63,8 @@ bot:
       watch: "监听聊天(UserBot)"
       unwatch: "取消监听聊天(UserBot)"
       lswatch: "列出监听的聊天(UserBot)"
+      lschannel: "列出频道(UserBot)"
+      lsgroup: "列出群组(UserBot)"
       syncpeers: "同步对话列表(UserBot)"
       config: "修改配置"
       fnametmpl: "设置文件命名模板"
@@ -84,6 +88,8 @@ bot:
       /watch <source_id> [target_id] [filter]
       /lswatch
       /unwatch <id>
+      /lschannel
+      /lsgroup
 
       参数:
       - <source_id>: 源聊天 ID 或用户名
@@ -153,7 +159,9 @@ bot:
       error_filter_type_unsupported: "不支持的过滤器类型, 请参阅文档"
       error_watch_chat_failed: "监听聊天失败: {{.Error}}"
       error_userbot_unavailable: "UserBot 未就绪，无法添加转发路由"
+      error_source_unreachable: "UserBot 无法访问源聊天 {{.Source}}: {{.Error}}"
       error_target_unreachable: "UserBot 无法访问目标聊天 {{.Target}}: {{.Error}}"
+      target_local: "本地"
       info_watch_route_started: "已开始监听: {{.Source}} → {{.Target}}"
       info_already_watching_route: "已经在监听此路由"
       info_watch_list_empty: "当前没有监听任何聊天"
@@ -162,6 +170,14 @@ bot:
       error_unwatch_invalid_id: "无效的监听 ID"
       error_unwatch_chat_failed: "取消监听失败: {{.Error}}"
       info_watch_route_stopped: "已取消监听: [{{.ID}}]"
+    lschannel:
+      info_list_empty: "当前没有可列出的频道"
+      info_list_header: "频道列表:\n"
+      error_list_failed: "列出频道失败: {{.Error}}"
+    lsgroup:
+      info_list_empty: "当前没有可列出的群组"
+      info_list_header: "群组列表:\n"
+      error_list_failed: "列出群组失败: {{.Error}}"
     tasks:
       usage_cancel: "用法: /tasks cancel <task_id>"
       usage: "用法: /tasks [running|queued|cancel <task_id>]"

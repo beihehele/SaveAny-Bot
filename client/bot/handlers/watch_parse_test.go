@@ -53,13 +53,13 @@ func TestParseWatchArgs(t *testing.T) {
 }
 
 func TestFormatWatchListLine(t *testing.T) {
-	got := formatWatchListLine(3, -1002229835658, -1003333444555, "msgre:.*plana.*")
-	want := "[3] -1002229835658 -1003333444555 msgre:.*plana.*"
+	got := formatWatchListLine(3, "源频道", "目标群", "msgre:.*plana.*")
+	want := "[3] 源频道 -> 目标群 msgre:.*plana.*"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
-	got0 := formatWatchListLine(1, -1001, 0, "")
-	want0 := "[1] -1001 0"
+	got0 := formatWatchListLine(1, "源频道", "本地", "")
+	want0 := "[1] 源频道 -> 本地"
 	if got0 != want0 {
 		t.Fatalf("got %q want %q", got0, want0)
 	}

@@ -39,6 +39,8 @@ bot:
       /watch - Watch chats and auto save (UserBot)
       /unwatch - Stop watching chats (UserBot)
       /lswatch - List watched chats (UserBot)
+      /lschannel - List channels (UserBot)
+      /lsgroup - List groups (UserBot)
       /syncpeers - Sync peer chats (UserBot)
       /update - Check and upgrade to latest version
 
@@ -60,6 +62,8 @@ bot:
       watch: "Watch chats (UserBot)"
       unwatch: "Stop watching chats (UserBot)"
       lswatch: "List watched chats (UserBot)"
+      lschannel: "List channels (UserBot)"
+      lsgroup: "List groups (UserBot)"
       config: "Modify configuration"
       fnametmpl: "Set filename template"
       help: "Show help"
@@ -83,6 +87,8 @@ bot:
       /watch <source_id> [target_id] [filter]
       /lswatch
       /unwatch <id>
+      /lschannel
+      /lsgroup
 
       Parameters:
       - <source_id>: Source chat ID or username
@@ -152,7 +158,9 @@ bot:
       error_filter_type_unsupported: "Unsupported filter type, please see the docs"
       error_watch_chat_failed: "Failed to watch chat: {{.Error}}"
       error_userbot_unavailable: "UserBot is not available for forward routes"
+      error_source_unreachable: "UserBot cannot access source chat {{.Source}}: {{.Error}}"
       error_target_unreachable: "UserBot cannot access target chat {{.Target}}: {{.Error}}"
+      target_local: "Local"
       info_watch_route_started: "Started watching: {{.Source}} → {{.Target}}"
       info_already_watching_route: "Already watching this route"
       info_watch_list_empty: "No chats are being watched currently"
@@ -161,6 +169,14 @@ bot:
       error_unwatch_invalid_id: "Invalid watch ID"
       error_unwatch_chat_failed: "Failed to unwatch: {{.Error}}"
       info_watch_route_stopped: "Stopped watching: [{{.ID}}]"
+    lschannel:
+      info_list_empty: "No channels to list"
+      info_list_header: "Channels:\n"
+      error_list_failed: "Failed to list channels: {{.Error}}"
+    lsgroup:
+      info_list_empty: "No groups to list"
+      info_list_header: "Groups:\n"
+      error_list_failed: "Failed to list groups: {{.Error}}"
     tasks:
       usage_cancel: "Usage: /tasks cancel <task_id>"
       usage: "Usage: /tasks [running|queued|cancel <task_id>]"

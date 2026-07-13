@@ -35,7 +35,22 @@ Examples:
 Output format:
 
 ```
-[id] <source_id> <target_id> [filter]
+[id] <source_name> -> <target_name> [filter]
+```
+
+When `target` is `0`, the name is shown as **Local**. Use `/lschannel` and `/lsgroup` to look up names and IDs.
+
+## List channels / groups
+
+```
+/lschannel
+/lsgroup
+```
+
+Output format:
+
+```
+<name> -> <id>
 ```
 
 ## Stop watching

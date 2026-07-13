@@ -35,7 +35,22 @@ weight: 4
 输出格式:
 
 ```
-[id] <source_id> <target_id> [filter]
+[id] <source名> -> <target名> [filter]
+```
+
+`target` 为 `0` 时显示为「本地」。可用 `/lschannel`、`/lsgroup` 查看名称与 ID 对应关系。
+
+## 列出频道 / 群组
+
+```
+/lschannel
+/lsgroup
+```
+
+输出格式:
+
+```
+<名称> -> <id>
 ```
 
 ## 取消监听
