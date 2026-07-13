@@ -19,6 +19,8 @@ func TestParseWatchArgs(t *testing.T) {
 		{name: "source only", args: []string{"-1001"}, wantSource: "-1001", omitTarget: true},
 		{name: "source+filter", args: []string{"-1001", "msgre:.*a.*"}, wantSource: "-1001", wantFilter: "msgre:.*a.*", targetIsFilter: true, omitTarget: true},
 		{name: "source+target", args: []string{"-1001", "-1002"}, wantSource: "-1001", wantTarget: "-1002"},
+		{name: "source+target+topic", args: []string{"-1001", "-1002:12345"}, wantSource: "-1001", wantTarget: "-1002:12345"},
+		{name: "source+target+topic+filter", args: []string{"-1001", "-1002:12345", "msgre:.*a.*"}, wantSource: "-1001", wantTarget: "-1002:12345", wantFilter: "msgre:.*a.*"},
 		{name: "source+zero+filter", args: []string{"-1001", "0", "msgre:.*a.*"}, wantSource: "-1001", wantTarget: "0", wantFilter: "msgre:.*a.*"},
 		{name: "source+target+filter", args: []string{"-1001", "-1002", "msgre:.*a.*"}, wantSource: "-1001", wantTarget: "-1002", wantFilter: "msgre:.*a.*"},
 		{name: "empty", args: nil, wantErr: true},
@@ -52,9 +54,51 @@ func TestParseWatchArgs(t *testing.T) {
 	}
 }
 
+func TestParseTargetWithTopic(t *testing.T) {
+	tests := []struct {
+		name      string
+		arg       string
+		wantChat  string
+		wantTopic int
+		wantErr   bool
+	}{
+		{name: "plain target", arg: "-1002", wantChat: "-1002"},
+		{name: "target with topic", arg: "-1002:12345", wantChat: "-1002", wantTopic: 12345},
+		{name: "invalid topic", arg: "-1002:abc", wantErr: true},
+		{name: "empty topic", arg: "-1002:", wantErr: true},
+		{name: "zero topic", arg: "-1002:0", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseTargetWithTopic(tt.arg)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.ChatIDArg != tt.wantChat || got.TopicID != tt.wantTopic {
+				t.Fatalf("got %+v want chat=%q topic=%d", got, tt.wantChat, tt.wantTopic)
+			}
+		})
+	}
+}
+
+func TestFormatWatchTargetDisplay(t *testing.T) {
+	if got := formatWatchTargetDisplay("目标群", ""); got != "目标群" {
+		t.Fatalf("got %q", got)
+	}
+	if got := formatWatchTargetDisplay("目标群", "VIP"); got != "目标群#VIP" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestFormatWatchListLine(t *testing.T) {
-	got := formatWatchListLine(3, "源频道", "目标群", "msgre:.*plana.*")
-	want := "[3] 源频道 -> 目标群 msgre:.*plana.*"
+	got := formatWatchListLine(3, "源频道", "目标群#VIP", "msgre:.*plana.*")
+	want := "[3] 源频道 -> 目标群#VIP msgre:.*plana.*"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}

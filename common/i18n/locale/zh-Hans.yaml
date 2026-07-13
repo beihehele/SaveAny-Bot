@@ -42,6 +42,7 @@ bot:
       /lswatch - 列出正在监听的聊天 (UserBot)
       /lschannel - 列出频道 (UserBot)
       /lsgroup - 列出群组 (UserBot)
+      /lstopic - 列出论坛群话题 (UserBot)
       /syncpeers - 同步对话列表 (UserBot)
       /update - 检查更新并升级
 
@@ -65,6 +66,7 @@ bot:
       lswatch: "列出监听的聊天(UserBot)"
       lschannel: "列出频道(UserBot)"
       lsgroup: "列出群组(UserBot)"
+      lstopic: "列出论坛群话题(UserBot)"
       syncpeers: "同步对话列表(UserBot)"
       config: "修改配置"
       fnametmpl: "设置文件命名模板"
@@ -82,25 +84,27 @@ bot:
       示例:
       /save @acherkrau 114-514
     watch_help_text: |
-      使用 /watch 监听聊天。target=0（或省略）时保存到默认存储；target 为频道/群 ID 时由 UserBot 转发（不下载）。
+      使用 /watch 监听聊天。target=0（或省略）时保存到默认存储；target 为频道/群 ID 时由 UserBot 转发（不下载）。目标可为 target:topicId 指定论坛话题。
 
       命令语法:
-      /watch <source_id> [target_id] [filter]
+      /watch <source_id> [target_id[:topicId]] [filter]
       /lswatch
       /unwatch <id>
       /lschannel
       /lsgroup
+      /lstopic <group_id>
 
       参数:
       - <source_id>: 源聊天 ID 或用户名
-      - [target_id]: 目标聊天 ID，0 表示保存到默认存储
+      - [target_id[:topicId]]: 目标聊天 ID，0 表示保存到默认存储；:topicId 为论坛话题（top_msg_id）
       - [filter]: 可选，格式为 过滤器类型:表达式
 
       命令示例:
       /watch -1002229835658
       /watch -1002229835658 0 msgre:.*plana.*
       /watch -1002229835658 -1003333444555
-      /watch -1002229835658 -1003333444555 msgre:.*plana.*
+      /watch -1002229835658 -1003333444555:12345
+      /watch -1002229835658 -1003333444555:12345 msgre:.*plana.*
     common:
       cancel_button_text: "取消任务"
       error_invalid_regex: "无效的正则表达式: {{.Error}}"
@@ -161,6 +165,10 @@ bot:
       error_userbot_unavailable: "UserBot 未就绪，无法添加转发路由"
       error_source_unreachable: "UserBot 无法访问源聊天 {{.Source}}: {{.Error}}"
       error_target_unreachable: "UserBot 无法访问目标聊天 {{.Target}}: {{.Error}}"
+      error_topic_invalid: "无效的话题 ID，请使用 /lstopic 查看话题列表"
+      error_target_not_forum: "目标 {{.Target}} 不是论坛群，无法指定话题"
+      error_topic_not_found: "目标 {{.Target}} 中未找到话题 {{.TopicID}}"
+      error_topic_resolve_failed: "解析论坛话题失败: {{.Error}}"
       target_local: "本地"
       info_watch_route_started: "已开始监听: {{.Source}} → {{.Target}}"
       info_already_watching_route: "已经在监听此路由"
@@ -178,6 +186,15 @@ bot:
       info_list_empty: "当前没有可列出的群组"
       info_list_header: "群组列表:\n"
       error_list_failed: "列出群组失败: {{.Error}}"
+    lstopic:
+      help_text: |
+        用法: /lstopic <group_id>
+        列出论坛群全部话题，格式: 话题名 -> topicId
+        topicId 为 top_msg_id，用于 /watch 的 target:topicId 语法。
+      info_list_empty: "该群没有可列出的话题"
+      info_list_header: "话题列表:\n"
+      error_list_failed: "列出话题失败: {{.Error}}"
+      error_not_forum: "群组 {{.Group}} 不是论坛群"
     tasks:
       usage_cancel: "用法: /tasks cancel <task_id>"
       usage: "用法: /tasks [running|queued|cancel <task_id>]"

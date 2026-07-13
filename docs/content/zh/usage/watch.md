@@ -14,7 +14,7 @@ weight: 4
 ## 监听聊天
 
 ```
-/watch <source_id> [target_id] [filter]
+/watch <source_id> [target_id[:topicId]] [filter]
 ```
 
 示例:
@@ -23,7 +23,8 @@ weight: 4
 /watch -1002229835658
 /watch -1002229835658 0 msgre:.*hello.*
 /watch -1002229835658 -1003333444555
-/watch -1002229835658 -1003333444555 msgre:.*hello.*
+/watch -1002229835658 -1003333444555:12345
+/watch -1002229835658 -1003333444555:12345 msgre:.*hello.*
 ```
 
 ## 列出监听
@@ -38,7 +39,21 @@ weight: 4
 [id] <source名> -> <target名> [filter]
 ```
 
-`target` 为 `0` 时显示为「本地」。可用 `/lschannel`、`/lsgroup` 查看名称与 ID 对应关系。
+`target` 为 `0` 时显示为「本地」。有论坛话题时显示为 `目标群#话题名`。可用 `/lschannel`、`/lsgroup` 查看名称与 ID 对应关系。
+
+## 列出论坛话题
+
+```
+/lstopic <group_id>
+```
+
+输出格式:
+
+```
+话题名 -> topicId
+```
+
+`topicId` 为 `top_msg_id`，用于 `/watch` 的 `target:topicId` 语法。
 
 ## 列出频道 / 群组
 

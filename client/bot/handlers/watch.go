@@ -56,15 +56,26 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	targetID := int64(0)
+	targetTopicID := 0
 	if !parsed.TargetOmitted {
-		if parsed.TargetArg == "0" {
+		pt, err := parseTargetWithTopic(parsed.TargetArg)
+		if err != nil {
+			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorTopicInvalid)), nil)
+			return dispatcher.EndGroups
+		}
+		if pt.ChatIDArg == "0" {
 			targetID = 0
 		} else {
-			targetID, err = tgutil.ParseChatID(ctx, parsed.TargetArg)
+			targetID, err = tgutil.ParseChatID(ctx, pt.ChatIDArg)
 			if err != nil {
 				ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorInvalidIdOrUsername, map[string]any{"Error": err.Error()})), nil)
 				return dispatcher.EndGroups
 			}
+		}
+		if targetID == 0 {
+			targetTopicID = 0
+		} else {
+			targetTopicID = pt.TopicID
 		}
 	}
 	if targetID == 0 && user.DefaultStorage == "" {
@@ -86,6 +97,7 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	var targetName string
+	var targetTopicName string
 	if targetID == 0 {
 		targetName = i18n.T(i18nk.BotMsgWatchTargetLocal)
 	} else {
@@ -97,6 +109,24 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 				"Error":  err.Error(),
 			})), nil)
 			return dispatcher.EndGroups
+		}
+		if targetTopicID > 0 {
+			targetTopicName, err = resolveForumTopicByTopMsgID(uctx, targetID, targetTopicID)
+			if err != nil {
+				switch {
+				case errors.Is(err, errNotForumGroup):
+					ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorTargetNotForum, map[string]any{"Target": targetName})), nil)
+				case errors.Is(err, errTopicNotFound):
+					ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorTopicNotFound, map[string]any{
+						"Target":  targetName,
+						"TopicID": targetTopicID,
+					})), nil)
+				default:
+					logger.Errorf("Failed to resolve forum topic %d in %d: %s", targetTopicID, targetID, err)
+					ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorTopicResolveFailed, map[string]any{"Error": err.Error()})), nil)
+				}
+				return dispatcher.EndGroups
+			}
 		}
 	}
 	filter, err := validateAndNormalizeFilter(parsed.FilterArg)
@@ -111,9 +141,9 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 		}
 		return dispatcher.EndGroups
 	}
-	watching, err := user.WatchingRoute(ctx, sourceID, targetID)
+	watching, err := user.WatchingRoute(ctx, sourceID, targetID, targetTopicID)
 	if err != nil {
-		logger.Errorf("Failed to check if user is watching route %d -> %d: %s", sourceID, targetID, err)
+		logger.Errorf("Failed to check if user is watching route %d -> %d (topic %d): %s", sourceID, targetID, targetTopicID, err)
 		return dispatcher.EndGroups
 	}
 	if watching {
@@ -121,20 +151,22 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	if err := user.WatchChat(ctx, database.WatchChat{
-		UserID:     user.ID,
-		ChatID:     sourceID,
-		SourceName: sourceName,
-		TargetID:   targetID,
-		TargetName: targetName,
-		Filter:     filter,
+		UserID:          user.ID,
+		ChatID:          sourceID,
+		SourceName:      sourceName,
+		TargetID:        targetID,
+		TargetName:      targetName,
+		TargetTopicID:   targetTopicID,
+		TargetTopicName: targetTopicName,
+		Filter:          filter,
 	}); err != nil {
-		logger.Errorf("Failed to watch route %d -> %d: %s", sourceID, targetID, err)
+		logger.Errorf("Failed to watch route %d -> %d (topic %d): %s", sourceID, targetID, targetTopicID, err)
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorWatchChatFailed, map[string]any{"Error": err.Error()})), nil)
 		return dispatcher.EndGroups
 	}
 	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchInfoWatchRouteStarted, map[string]any{
 		"Source": sourceName,
-		"Target": targetName,
+		"Target": formatWatchTargetDisplay(targetName, targetTopicName),
 	})), nil)
 	return dispatcher.EndGroups
 }
@@ -156,7 +188,8 @@ func handleLswatchCmd(ctx *ext.Context, update *ext.Update) error {
 	var sb strings.Builder
 	sb.WriteString(i18n.T(i18nk.BotMsgWatchInfoWatchListHeader))
 	for _, chat := range chats {
-		sb.WriteString(formatWatchListLine(chat.ID, chat.SourceName, chat.TargetName, chat.Filter))
+		targetDisplay := formatWatchTargetDisplay(chat.TargetName, chat.TargetTopicName)
+		sb.WriteString(formatWatchListLine(chat.ID, chat.SourceName, targetDisplay, chat.Filter))
 		sb.WriteString("\n")
 	}
 	ctx.Reply(update, ext.ReplyTextString(sb.String()), nil)
@@ -313,9 +346,9 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 				groupID, isGroup := file.Message().GetGroupedID()
 				timeout := time.Duration(max(config.C().Telegram.MediaGroupTimeout, 1)) * time.Second
 				if isGroup && groupID != 0 {
-					watchForwardAlbumBuf.add(event.ChatID, chat.TargetID, groupID, event.MessageID, timeout)
-				} else if err := userclient.ForwardMessagesDropAuthor(event.Ctx, event.ChatID, chat.TargetID, []int{event.MessageID}); err != nil {
-					logger.Errorf("forward failed source=%d target=%d msg=%d: %v", event.ChatID, chat.TargetID, event.MessageID, err)
+					watchForwardAlbumBuf.add(event.ChatID, chat.TargetID, chat.TargetTopicID, groupID, event.MessageID, timeout)
+				} else if err := userclient.ForwardMessagesDropAuthor(event.Ctx, event.ChatID, chat.TargetID, []int{event.MessageID}, chat.TargetTopicID); err != nil {
+					logger.Errorf("forward failed source=%d target=%d topic=%d msg=%d: %v", event.ChatID, chat.TargetID, chat.TargetTopicID, event.MessageID, err)
 				}
 				continue
 			}

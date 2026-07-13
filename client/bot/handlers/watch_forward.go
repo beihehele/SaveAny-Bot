@@ -9,19 +9,20 @@ import (
 )
 
 type forwardAlbumKey struct {
-	SourceID  int64
-	TargetID  int64
-	GroupedID int64
+	SourceID      int64
+	TargetID      int64
+	TargetTopicID int
+	GroupedID     int64
 }
 
 type forwardAlbumBuffer struct {
 	mu      sync.Mutex
 	groups  map[forwardAlbumKey][]int
 	timers  map[forwardAlbumKey]*time.Timer
-	onFlush func(sourceID, targetID int64, ids []int)
+	onFlush func(sourceID, targetID int64, targetTopicID int, ids []int)
 }
 
-func newForwardAlbumBuffer(onFlush func(sourceID, targetID int64, ids []int)) *forwardAlbumBuffer {
+func newForwardAlbumBuffer(onFlush func(sourceID, targetID int64, targetTopicID int, ids []int)) *forwardAlbumBuffer {
 	return &forwardAlbumBuffer{
 		groups:  make(map[forwardAlbumKey][]int),
 		timers:  make(map[forwardAlbumKey]*time.Timer),
@@ -29,10 +30,10 @@ func newForwardAlbumBuffer(onFlush func(sourceID, targetID int64, ids []int)) *f
 	}
 }
 
-func (b *forwardAlbumBuffer) add(sourceID, targetID, groupedID int64, messageID int, timeout time.Duration) {
+func (b *forwardAlbumBuffer) add(sourceID, targetID int64, targetTopicID int, groupedID int64, messageID int, timeout time.Duration) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	key := forwardAlbumKey{SourceID: sourceID, TargetID: targetID, GroupedID: groupedID}
+	key := forwardAlbumKey{SourceID: sourceID, TargetID: targetID, TargetTopicID: targetTopicID, GroupedID: groupedID}
 	if t, ok := b.timers[key]; ok {
 		t.Stop()
 	}
@@ -46,17 +47,17 @@ func (b *forwardAlbumBuffer) add(sourceID, targetID, groupedID int64, messageID 
 		if len(ids) == 0 {
 			return
 		}
-		b.onFlush(sourceID, targetID, ids)
+		b.onFlush(sourceID, targetID, targetTopicID, ids)
 	})
 }
 
-var watchForwardAlbumBuf = newForwardAlbumBuffer(func(sourceID, targetID int64, ids []int) {
+var watchForwardAlbumBuf = newForwardAlbumBuffer(func(sourceID, targetID int64, targetTopicID int, ids []int) {
 	uctx := userclient.GetCtx()
 	if uctx == nil {
 		return
 	}
 	logger := log.FromContext(uctx)
-	if err := userclient.ForwardMessagesDropAuthor(uctx, sourceID, targetID, ids); err != nil {
-		logger.Errorf("forward album failed source=%d target=%d ids=%v: %v", sourceID, targetID, ids, err)
+	if err := userclient.ForwardMessagesDropAuthor(uctx, sourceID, targetID, ids, targetTopicID); err != nil {
+		logger.Errorf("forward album failed source=%d target=%d topic=%d ids=%v: %v", sourceID, targetID, targetTopicID, ids, err)
 	}
 })

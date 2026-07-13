@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
 var (
 	errWatchFilterFormatInvalid   = errors.New("watch filter format invalid")
 	errWatchFilterTypeUnsupported = errors.New("watch filter type unsupported")
+	errWatchTargetTopicInvalid    = errors.New("watch target topic invalid")
 )
 
 type parsedWatchArgs struct {
@@ -17,6 +19,15 @@ type parsedWatchArgs struct {
 	TargetArg     string
 	TargetOmitted bool // true → target 语义为 0
 	FilterArg     string
+}
+
+type parsedTarget struct {
+	ChatIDArg string
+	TopicID   int // 0 when unspecified
+}
+
+func isWatchFilterArg(s string) bool {
+	return strings.HasPrefix(s, "msgre:")
 }
 
 func parseWatchArgs(args []string) (parsedWatchArgs, error) {
@@ -29,7 +40,7 @@ func parseWatchArgs(args []string) (parsedWatchArgs, error) {
 		return out, nil
 	}
 	second := args[1]
-	if strings.Contains(second, ":") {
+	if isWatchFilterArg(second) {
 		out.TargetOmitted = true
 		out.FilterArg = strings.Join(args[1:], " ")
 		return out, nil
@@ -39,6 +50,28 @@ func parseWatchArgs(args []string) (parsedWatchArgs, error) {
 		out.FilterArg = strings.Join(args[2:], " ")
 	}
 	return out, nil
+}
+
+func parseTargetWithTopic(targetArg string) (parsedTarget, error) {
+	if !strings.Contains(targetArg, ":") {
+		return parsedTarget{ChatIDArg: targetArg}, nil
+	}
+	parts := strings.SplitN(targetArg, ":", 2)
+	if parts[0] == "" || parts[1] == "" {
+		return parsedTarget{}, errWatchTargetTopicInvalid
+	}
+	topicID, err := strconv.Atoi(parts[1])
+	if err != nil || topicID <= 0 {
+		return parsedTarget{}, errWatchTargetTopicInvalid
+	}
+	return parsedTarget{ChatIDArg: parts[0], TopicID: topicID}, nil
+}
+
+func formatWatchTargetDisplay(targetName, topicName string) string {
+	if topicName == "" {
+		return targetName
+	}
+	return targetName + "#" + topicName
 }
 
 func formatWatchListLine(id uint, sourceName, targetName, filter string) string {

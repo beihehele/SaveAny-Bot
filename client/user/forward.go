@@ -11,7 +11,7 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, messageIDs []int) error {
+func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, messageIDs []int, topMsgID int) error {
 	if ctx == nil {
 		return fmt.Errorf("user context is nil")
 	}
@@ -39,13 +39,18 @@ func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, mes
 		randomIDs[i] = int64(binary.LittleEndian.Uint64(b[:]))
 	}
 
-	_, err = ctx.Raw.MessagesForwardMessages(ctx, &tg.MessagesForwardMessagesRequest{
+	req := &tg.MessagesForwardMessagesRequest{
 		DropAuthor: true,
 		FromPeer:   fromPeer,
 		ID:         ids,
 		RandomID:   randomIDs,
 		ToPeer:     toPeer,
-	})
+	}
+	if topMsgID > 0 {
+		req.SetTopMsgID(topMsgID)
+	}
+
+	_, err = ctx.Raw.MessagesForwardMessages(ctx, req)
 	if err != nil {
 		return fmt.Errorf("forward messages: %w", err)
 	}

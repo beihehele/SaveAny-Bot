@@ -11,10 +11,10 @@ func (user *User) WatchChat(ctx context.Context, chat WatchChat) error {
 	return db.WithContext(ctx).Save(user.WatchChats).Error
 }
 
-func (user *User) WatchingRoute(ctx context.Context, sourceID, targetID int64) (bool, error) {
+func (user *User) WatchingRoute(ctx context.Context, sourceID, targetID int64, targetTopicID int) (bool, error) {
 	var count int64
 	err := db.WithContext(ctx).Model(&WatchChat{}).
-		Where("chat_id = ? AND target_id = ? AND user_id = ?", sourceID, targetID, user.ID).
+		Where("chat_id = ? AND target_id = ? AND target_topic_id = ? AND user_id = ?", sourceID, targetID, targetTopicID, user.ID).
 		Count(&count).Error
 	if err != nil {
 		return false, err

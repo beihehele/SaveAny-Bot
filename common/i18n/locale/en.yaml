@@ -41,6 +41,7 @@ bot:
       /lswatch - List watched chats (UserBot)
       /lschannel - List channels (UserBot)
       /lsgroup - List groups (UserBot)
+      /lstopic - List forum topics (UserBot)
       /syncpeers - Sync peer chats (UserBot)
       /update - Check and upgrade to latest version
 
@@ -64,6 +65,7 @@ bot:
       lswatch: "List watched chats (UserBot)"
       lschannel: "List channels (UserBot)"
       lsgroup: "List groups (UserBot)"
+      lstopic: "List forum topics (UserBot)"
       config: "Modify configuration"
       fnametmpl: "Set filename template"
       help: "Show help"
@@ -81,25 +83,27 @@ bot:
       Example:
       /save @acherkrau 114-514
     watch_help_text: |
-      Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target forwards via UserBot (no download).
+      Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target forwards via UserBot (no download). Use target:topicId to forward into a forum topic.
 
       Syntax:
-      /watch <source_id> [target_id] [filter]
+      /watch <source_id> [target_id[:topicId]] [filter]
       /lswatch
       /unwatch <id>
       /lschannel
       /lsgroup
+      /lstopic <group_id>
 
       Parameters:
       - <source_id>: Source chat ID or username
-      - [target_id]: Target chat ID; 0 means save to default storage
+      - [target_id[:topicId]]: Target chat ID; 0 means save to default storage; :topicId is a forum topic (top_msg_id)
       - [filter]: Optional, format is filter_type:expression
 
       Examples:
       /watch -1002229835658
       /watch -1002229835658 0 msgre:.*plana.*
       /watch -1002229835658 -1003333444555
-      /watch -1002229835658 -1003333444555 msgre:.*plana.*
+      /watch -1002229835658 -1003333444555:12345
+      /watch -1002229835658 -1003333444555:12345 msgre:.*plana.*
     common:
       cancel_button_text: "Cancel"
       error_invalid_regex: "Invalid regex: {{.Error}}"
@@ -160,6 +164,10 @@ bot:
       error_userbot_unavailable: "UserBot is not available for forward routes"
       error_source_unreachable: "UserBot cannot access source chat {{.Source}}: {{.Error}}"
       error_target_unreachable: "UserBot cannot access target chat {{.Target}}: {{.Error}}"
+      error_topic_invalid: "Invalid topic ID; use /lstopic to list topics"
+      error_target_not_forum: "Target {{.Target}} is not a forum group; cannot specify a topic"
+      error_topic_not_found: "Topic {{.TopicID}} not found in {{.Target}}"
+      error_topic_resolve_failed: "Failed to resolve forum topic: {{.Error}}"
       target_local: "Local"
       info_watch_route_started: "Started watching: {{.Source}} → {{.Target}}"
       info_already_watching_route: "Already watching this route"
@@ -177,6 +185,15 @@ bot:
       info_list_empty: "No groups to list"
       info_list_header: "Groups:\n"
       error_list_failed: "Failed to list groups: {{.Error}}"
+    lstopic:
+      help_text: |
+        Usage: /lstopic <group_id>
+        Lists all forum topics as: topic name -> topicId
+        topicId is top_msg_id, used in /watch target:topicId syntax.
+      info_list_empty: "No topics to list in this group"
+      info_list_header: "Topics:\n"
+      error_list_failed: "Failed to list topics: {{.Error}}"
+      error_not_forum: "Group {{.Group}} is not a forum group"
     tasks:
       usage_cancel: "Usage: /tasks cancel <task_id>"
       usage: "Usage: /tasks [running|queued|cancel <task_id>]"
