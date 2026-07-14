@@ -47,7 +47,7 @@ func handleLstopicCmd(ctx *ext.Context, update *ext.Update) error {
 	var sb strings.Builder
 	sb.WriteString(i18n.T(i18nk.BotMsgLstopicInfoListHeader))
 	for _, entry := range entries {
-		fmt.Fprintf(&sb, "%s -> %d\n", entry.title, entry.topMsgID)
+		fmt.Fprintf(&sb, "%s -> %d\n", entry.title, entry.topicID)
 	}
 	ctx.Reply(update, ext.ReplyTextString(strings.TrimRight(sb.String(), "\n")), nil)
 	return dispatcher.EndGroups

@@ -15,39 +15,54 @@ type forwardAlbumKey struct {
 	GroupedID     int64
 }
 
+type forwardAlbumGroup struct {
+	ids     []int
+	matched bool
+}
+
 type forwardAlbumBuffer struct {
 	mu      sync.Mutex
-	groups  map[forwardAlbumKey][]int
+	groups  map[forwardAlbumKey]*forwardAlbumGroup
 	timers  map[forwardAlbumKey]*time.Timer
 	onFlush func(sourceID, targetID int64, targetTopicID int, ids []int)
 }
 
 func newForwardAlbumBuffer(onFlush func(sourceID, targetID int64, targetTopicID int, ids []int)) *forwardAlbumBuffer {
 	return &forwardAlbumBuffer{
-		groups:  make(map[forwardAlbumKey][]int),
+		groups:  make(map[forwardAlbumKey]*forwardAlbumGroup),
 		timers:  make(map[forwardAlbumKey]*time.Timer),
 		onFlush: onFlush,
 	}
 }
 
-func (b *forwardAlbumBuffer) add(sourceID, targetID int64, targetTopicID int, groupedID int64, messageID int, timeout time.Duration) {
+// add buffers one album part. filterMatched marks whether this part (or no filter) matched;
+// the album is forwarded only if any part matched.
+func (b *forwardAlbumBuffer) add(sourceID, targetID int64, targetTopicID int, groupedID int64, messageID int, filterMatched bool, timeout time.Duration) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	key := forwardAlbumKey{SourceID: sourceID, TargetID: targetID, TargetTopicID: targetTopicID, GroupedID: groupedID}
 	if t, ok := b.timers[key]; ok {
 		t.Stop()
 	}
-	b.groups[key] = append(b.groups[key], messageID)
+	g := b.groups[key]
+	if g == nil {
+		g = &forwardAlbumGroup{}
+		b.groups[key] = g
+	}
+	g.ids = append(g.ids, messageID)
+	if filterMatched {
+		g.matched = true
+	}
 	b.timers[key] = time.AfterFunc(timeout, func() {
 		b.mu.Lock()
-		ids := b.groups[key]
+		g := b.groups[key]
 		delete(b.groups, key)
 		delete(b.timers, key)
 		b.mu.Unlock()
-		if len(ids) == 0 {
+		if g == nil || len(g.ids) == 0 || !g.matched {
 			return
 		}
-		b.onFlush(sourceID, targetID, targetTopicID, ids)
+		b.onFlush(sourceID, targetID, targetTopicID, g.ids)
 	})
 }
 

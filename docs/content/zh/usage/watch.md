@@ -53,7 +53,7 @@ weight: 4
 话题名 -> topicId
 ```
 
-`topicId` 为 `top_msg_id`，用于 `/watch` 的 `target:topicId` 语法。
+`topicId` 为论坛话题 ID（与 `t.me/c/<群>/<topicId>/...` 中一致），用于 `/watch` 的 `target:topicId` 语法。请用 `/lstopic` 获取。
 
 ## 列出频道 / 群组
 

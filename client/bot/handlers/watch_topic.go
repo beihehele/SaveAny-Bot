@@ -15,8 +15,8 @@ var (
 )
 
 type forumTopicEntry struct {
-	title    string
-	topMsgID int
+	title   string
+	topicID int // forumTopic.ID (== message_thread_id / TopMsgID for forward)
 }
 
 func getChannelFromInputPeer(ctx *ext.Context, inputPeer tg.InputPeerClass) (*tg.Channel, error) {
@@ -138,8 +138,8 @@ func collectForumTopics(ctx *ext.Context, chatID int64) ([]forumTopicEntry, erro
 				continue
 			}
 			entries = append(entries, forumTopicEntry{
-				title:    topic.Title,
-				topMsgID: topic.TopMessage,
+				title:   topic.Title,
+				topicID: topic.ID,
 			})
 		}
 		return false, nil
@@ -150,41 +150,39 @@ func collectForumTopics(ctx *ext.Context, chatID int64) ([]forumTopicEntry, erro
 
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].title == entries[j].title {
-			return entries[i].topMsgID < entries[j].topMsgID
+			return entries[i].topicID < entries[j].topicID
 		}
 		return entries[i].title < entries[j].title
 	})
 	return entries, nil
 }
 
-func resolveForumTopicByTopMsgID(ctx *ext.Context, chatID int64, topMsgID int) (string, error) {
-	if topMsgID <= 0 {
+// resolveForumTopicByID looks up a forum topic by forumTopic.ID (message_thread_id).
+// Telegram TopMsgID for forward/send into a topic must be this stable ID, not TopMessage
+// (which is the latest message in the topic and changes over time).
+func resolveForumTopicByID(ctx *ext.Context, chatID int64, topicID int) (string, error) {
+	if topicID <= 0 {
 		return "", nil
 	}
 	inputPeer, err := requireForumInputPeer(ctx, chatID)
 	if err != nil {
 		return "", err
 	}
-
-	var found string
-	err = forEachForumTopicsPage(ctx, inputPeer, func(topics []tg.ForumTopicClass, _ map[int]int) (bool, error) {
-		for _, t := range topics {
-			topic, ok := t.(*tg.ForumTopic)
-			if !ok {
-				continue
-			}
-			if topic.TopMessage == topMsgID {
-				found = topic.Title
-				return true, nil
-			}
-		}
-		return false, nil
+	result, err := ctx.Raw.MessagesGetForumTopicsByID(ctx, &tg.MessagesGetForumTopicsByIDRequest{
+		Peer:   inputPeer,
+		Topics: []int{topicID},
 	})
 	if err != nil {
 		return "", err
 	}
-	if found == "" {
-		return "", errTopicNotFound
+	for _, t := range result.Topics {
+		topic, ok := t.(*tg.ForumTopic)
+		if !ok {
+			continue
+		}
+		if topic.ID == topicID {
+			return topic.Title, nil
+		}
 	}
-	return found, nil
+	return "", errTopicNotFound
 }

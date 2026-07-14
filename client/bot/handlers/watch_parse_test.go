@@ -96,6 +96,21 @@ func TestFormatWatchTargetDisplay(t *testing.T) {
 	}
 }
 
+func TestWatchFilterMatches(t *testing.T) {
+	if !watchFilterMatches("", "anything") {
+		t.Fatal("empty filter should match")
+	}
+	if !watchFilterMatches("msgre:hello", "say hello") {
+		t.Fatal("expected match")
+	}
+	if watchFilterMatches("msgre:hello", "") {
+		t.Fatal("empty caption should not match unless pattern allows")
+	}
+	if watchFilterMatches("msgre:hello", "world") {
+		t.Fatal("expected no match")
+	}
+}
+
 func TestFormatWatchListLine(t *testing.T) {
 	got := formatWatchListLine(3, "源频道", "目标群#VIP", "msgre:.*plana.*")
 	want := "[3] 源频道 -> 目标群#VIP msgre:.*plana.*"

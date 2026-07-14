@@ -95,7 +95,7 @@ bot:
 
       Parameters:
       - <source_id>: Source chat ID or username
-      - [target_id[:topicId]]: Target chat ID; 0 means save to default storage; :topicId is a forum topic (top_msg_id)
+      - [target_id[:topicId]]: Target chat ID; 0 means save to default storage; :topicId is forum topic ID (from /lstopic)
       - [filter]: Optional, format is filter_type:expression
 
       Examples:
@@ -189,7 +189,7 @@ bot:
       help_text: |
         Usage: /lstopic <group_id>
         Lists all forum topics as: topic name -> topicId
-        topicId is top_msg_id, used in /watch target:topicId syntax.
+        topicId is the forum topic ID from /lstopic, used in /watch target:topicId syntax.
       info_list_empty: "No topics to list in this group"
       info_list_header: "Topics:\n"
       error_list_failed: "Failed to list topics: {{.Error}}"

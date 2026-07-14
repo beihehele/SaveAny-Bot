@@ -96,7 +96,7 @@ bot:
 
       参数:
       - <source_id>: 源聊天 ID 或用户名
-      - [target_id[:topicId]]: 目标聊天 ID，0 表示保存到默认存储；:topicId 为论坛话题（top_msg_id）
+      - [target_id[:topicId]]: 目标聊天 ID，0 表示保存到默认存储；:topicId 为论坛话题 ID（见 /lstopic）
       - [filter]: 可选，格式为 过滤器类型:表达式
 
       命令示例:
@@ -190,7 +190,7 @@ bot:
       help_text: |
         用法: /lstopic <group_id>
         列出论坛群全部话题，格式: 话题名 -> topicId
-        topicId 为 top_msg_id，用于 /watch 的 target:topicId 语法。
+        topicId 为论坛话题 ID（见 /lstopic），用于 /watch 的 target:topicId 语法。
       info_list_empty: "该群没有可列出的话题"
       info_list_header: "话题列表:\n"
       error_list_failed: "列出话题失败: {{.Error}}"

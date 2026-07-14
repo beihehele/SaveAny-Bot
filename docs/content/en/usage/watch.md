@@ -53,7 +53,7 @@ Output format:
 topic name -> topicId
 ```
 
-`topicId` is `top_msg_id`, used in `/watch` `target:topicId` syntax.
+`topicId` is the forum topic ID (same as in `t.me/c/<chat>/<topicId>/...`), used in `/watch` `target:topicId` syntax. Get it from `/lstopic`.
 
 ## List channels / groups
 

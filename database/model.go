@@ -26,7 +26,7 @@ type WatchChat struct {
 	SourceName      string // resolved at /watch time
 	TargetID        int64  `gorm:"uniqueIndex:idx_watch_route;not null;default:0"`
 	TargetName      string // resolved at /watch time; "本地" when TargetID is 0
-	TargetTopicID   int    `gorm:"uniqueIndex:idx_watch_route;not null;default:0"` // 0=unspecified; non-zero=top_msg_id
+	TargetTopicID   int    `gorm:"uniqueIndex:idx_watch_route;not null;default:0"` // 0=unspecified; non-zero=forumTopic.ID (TopMsgID)
 	TargetTopicName string // resolved at /watch time; empty when TargetTopicID is 0
 	Filter          string
 }
