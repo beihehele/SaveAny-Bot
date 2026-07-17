@@ -34,8 +34,15 @@ func GetLatestMessageID(ctx *ext.Context, chatID int64) (int, error) {
 		return 0, fmt.Errorf("unexpected history type %T", res)
 	}
 	for _, mc := range list {
-		if msg, ok := mc.(*tg.Message); ok && msg != nil {
-			return msg.GetID(), nil
+		switch msg := mc.(type) {
+		case *tg.Message:
+			if msg != nil {
+				return msg.GetID(), nil
+			}
+		case *tg.MessageService:
+			if msg != nil {
+				return msg.GetID(), nil
+			}
 		}
 	}
 	return 0, fmt.Errorf("no messages in chat %d", chatID)
