@@ -37,6 +37,7 @@ bot:
       /parser - Manage parser plugins
       /task - Manage task queue
       /watch - Watch chats and auto save (UserBot)
+      /copy - Copy history messages to a target chat (UserBot)
       /unwatch - Stop watching chats (UserBot)
       /lswatch - List watched chats (UserBot)
       /lschannel - List channels (UserBot)
@@ -61,6 +62,7 @@ bot:
       task: "Manage task queue"
       cancel: "Cancel task"
       watch: "Watch chats (UserBot)"
+      copy: "Copy history messages to a target chat (UserBot)"
       unwatch: "Stop watching chats (UserBot)"
       lswatch: "List watched chats (UserBot)"
       lschannel: "List channels (UserBot)"
@@ -104,6 +106,23 @@ bot:
       /watch -1002229835658 -1003333444555
       /watch -1002229835658 -1003333444555:12345
       /watch -1002229835658 -1003333444555:12345 msgre:.*plana.*
+    copy_help_text: |
+      Use /copy to forward historical messages from a source chat to a target chat (forward only, no local storage). Requires UserBot. Use target:topicId for a forum topic. target=0 is not supported.
+
+      Syntax:
+      /copy <source_id> <target_id[:topicId]> [filter] [count]
+
+      Parameters:
+      - <source_id>: Source chat ID or username
+      - <target_id[:topicId]>: Target chat ID (required, cannot be 0); :topicId is forum topic ID (from /lstopic)
+      - [filter]: Optional, only msgre:<regexp> is supported
+      - [count]: Optional hit count, default 500
+
+      Examples:
+      /copy -1002229835658 -1003333444555
+      /copy -1002229835658 -1003333444555:12345 msgre:.*plana.*
+      /copy -1002229835658 -1003333444555 msgre:.*plana.* 100
+      /copy -1002229835658 -1003333444555 50
     common:
       cancel_button_text: "Cancel"
       error_invalid_regex: "Invalid regex: {{.Error}}"
@@ -177,6 +196,9 @@ bot:
       error_unwatch_invalid_id: "Invalid watch ID"
       error_unwatch_chat_failed: "Failed to unwatch: {{.Error}}"
       info_watch_route_stopped: "Stopped watching: [{{.ID}}]"
+    copy:
+      error_target_forbidden: "copy does not support local save; please specify a target chat"
+      error_already_running: "A copy task is already running; cancel it or wait until it finishes"
     lschannel:
       info_list_empty: "No channels to list"
       info_list_header: "Channels:\n"
@@ -439,6 +461,10 @@ bot:
       transfer_elapsed_time_prefix: "\nElapsed time: "
       transfer_avg_speed_prefix: "\nAverage speed: "
       transfer_failed_files_prefix: "\nFailed files: "
+      copy_scanning: "Scanning {{.Matched}}/{{.Count}} (msg#{{.At}})"
+      copy_forwarding: "Forwarding {{.Done}}/{{.Total}}"
+      copy_done: "Done: ok {{.OK}}, fail {{.Fail}}"
+      copy_canceled: "Copy task canceled"
     syncpeers:
       start: "Starting to sync peers..."
       done: "Peer sync completed, total {{.Count}} chats synced"

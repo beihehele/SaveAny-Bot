@@ -3,10 +3,11 @@ package copyfwd
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/charmbracelet/log"
 	"github.com/gotd/td/tg"
+	"github.com/krau/SaveAny-Bot/common/i18n"
+	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 )
 
@@ -31,14 +32,19 @@ func NewProgressTracker(messageID int, chatID int64, taskID string) ProgressTrac
 }
 
 func (p *Progress) OnScan(ctx context.Context, matched, count, atMsgID int) {
-	// Temporary format; Task 6 will wire i18n (progress.copy_scanning).
-	text := fmt.Sprintf("扫描中 %d/%d（msg#%d）\nScanning %d/%d (msg#%d)", matched, count, atMsgID, matched, count, atMsgID)
+	text := i18n.T(i18nk.BotMsgProgressCopyScanning, map[string]any{
+		"Matched": matched,
+		"Count":   count,
+		"At":      atMsgID,
+	})
 	p.edit(ctx, text, true)
 }
 
 func (p *Progress) OnForward(ctx context.Context, done, total int) {
-	// Temporary format; Task 6 will wire i18n (progress.copy_forwarding).
-	text := fmt.Sprintf("转发中 %d/%d\nForwarding %d/%d", done, total, done, total)
+	text := i18n.T(i18nk.BotMsgProgressCopyForwarding, map[string]any{
+		"Done":  done,
+		"Total": total,
+	})
 	p.edit(ctx, text, true)
 }
 
@@ -46,14 +52,15 @@ func (p *Progress) OnDone(ctx context.Context, forwarded, failed int, err error)
 	var text string
 	switch {
 	case err != nil && errors.Is(err, context.Canceled):
-		// Temporary; Task 6 will wire i18n (progress.copy_canceled).
-		text = "已取消 copy 任务\nCopy task canceled"
+		text = i18n.T(i18nk.BotMsgProgressCopyCanceled)
 	case err != nil:
-		text = fmt.Sprintf("copy 失败: %s\nCopy failed: %s", err.Error(), err.Error())
+		text = i18n.T(i18nk.BotMsgProgressTaskFailedWithError, map[string]any{"Error": err.Error()})
 		log.FromContext(ctx).Errorf("Copy task %s failed: %v", p.TaskID, err)
 	default:
-		// Temporary; Task 6 will wire i18n (progress.copy_done).
-		text = fmt.Sprintf("完成：成功 %d，失败 %d\nDone: ok %d, fail %d", forwarded, failed, forwarded, failed)
+		text = i18n.T(i18nk.BotMsgProgressCopyDone, map[string]any{
+			"OK":   forwarded,
+			"Fail": failed,
+		})
 	}
 	p.edit(ctx, text, false)
 }
