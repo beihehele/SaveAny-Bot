@@ -161,6 +161,7 @@ func (h *Handlers) GetTaskTypesHandler(w http.ResponseWriter, r *http.Request) {
 		tasktype.TaskTypeTgfiles,
 		tasktype.TaskTypeTphpics,
 		tasktype.TaskTypeTransfer,
+		tasktype.TaskTypeCopy,
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
