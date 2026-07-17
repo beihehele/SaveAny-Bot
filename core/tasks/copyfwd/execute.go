@@ -76,7 +76,35 @@ func (t *Task) Execute(ctx context.Context) error {
 			t.Progress.OnScan(ctx, matched, t.Count, lo)
 		}
 
-		if matched >= t.Count || lo == 1 {
+		if matched >= t.Count {
+			// One more older window so albums/continuations that straddle
+			// the stop boundary are still attached before we halt.
+			if lo > 1 {
+				if err := ctx.Err(); err != nil {
+					execErr = err
+					return execErr
+				}
+				extraLo := max(1, lo-windowSize)
+				extraHi := lo - 1
+				extra, err := tgutil.GetMessagesRange(uctx, t.SourceID, extraLo, extraHi)
+				if err != nil {
+					execErr = fmt.Errorf("get messages range [%d,%d]: %w", extraLo, extraHi, err)
+					return execErr
+				}
+				for _, m := range extra {
+					if m == nil {
+						continue
+					}
+					all = append(all, scanMsgFromTG(m))
+				}
+				ids, matched = CollectForwardIDs(all, t.Filter, t.Count, maxContinue)
+				if t.Progress != nil {
+					t.Progress.OnScan(ctx, matched, t.Count, extraLo)
+				}
+			}
+			break
+		}
+		if lo == 1 {
 			break
 		}
 		hi = lo - 1
