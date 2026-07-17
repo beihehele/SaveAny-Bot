@@ -1,7 +1,6 @@
 package copyfwd
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/krau/SaveAny-Bot/core"
@@ -30,8 +29,6 @@ func (t *Task) TaskID() string { return t.ID }
 func (t *Task) Title() string {
 	return fmt.Sprintf("[copy] %d -> %d (n=%d)", t.SourceID, t.TargetID, t.Count)
 }
-
-func (t *Task) Execute(ctx context.Context) error { return nil }
 
 func NewTask(
 	id string,
