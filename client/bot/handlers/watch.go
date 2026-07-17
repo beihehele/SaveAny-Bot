@@ -331,12 +331,19 @@ func applyWatchFilename(ctx context.Context, user *database.User, file tfile.TGF
 		return
 	}
 	namingMsg := *msg
+	usedAlbumCaption := false
 	if strings.TrimSpace(namingMsg.GetMessage()) == "" && albumCaption != "" {
 		namingMsg.Message = albumCaption
+		usedAlbumCaption = true
 	}
 	switch user.FilenameStrategy {
 	case fnamest.Message.String():
-		file.SetName(tgutil.GenFileNameFromMessage(namingMsg))
+		name := tgutil.GenFileNameFromMessage(namingMsg)
+		// Plain-text captions omit msg id; album siblings would collide without it.
+		if usedAlbumCaption {
+			name = uniqueAlbumFileName(name, namingMsg.GetID())
+		}
+		file.SetName(name)
 	case fnamest.Template.String():
 		if user.FilenameTemplate == "" {
 			log.FromContext(ctx).Warnf("Empty filename template for user %d, using default filename", user.ChatID)
@@ -353,8 +360,31 @@ func applyWatchFilename(ctx context.Context, user *database.User, file tfile.TGF
 			log.FromContext(ctx).Errorf("failed to execute filename template: %s", err)
 			return
 		}
-		file.SetName(sb.String())
+		name := sb.String()
+		if usedAlbumCaption {
+			name = uniqueAlbumFileName(name, namingMsg.GetID())
+		}
+		file.SetName(name)
+	default:
+		// Default keeps document filenames; for captionless album parts still prefer
+		// shared caption naming over opaque originals when a caption exists.
+		if usedAlbumCaption {
+			file.SetName(uniqueAlbumFileName(tgutil.GenFileNameFromMessage(namingMsg), namingMsg.GetID()))
+		}
 	}
+}
+
+func uniqueAlbumFileName(name string, msgID int) string {
+	if msgID <= 0 || name == "" {
+		return name
+	}
+	ext := path.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	idSuffix := fmt.Sprintf("_%d", msgID)
+	if strings.HasSuffix(base, idSuffix) {
+		return name
+	}
+	return base + idSuffix + ext
 }
 
 func resolveWatchLocalStorage(ctx context.Context, userID uint) (*database.User, storage.Storage, string, error) {
@@ -454,7 +484,13 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 			continue
 		}
 		msgText := event.File.Message().GetMessage()
+		// Watch media events are debounced per-message; album parts can arrive on the
+		// channel staggered by that debounce window. Keep the album buffer open at least
+		// that long so caption-bearing parts are not flushed alone.
 		timeout := time.Duration(max(config.C().Telegram.MediaGroupTimeout, 1)) * time.Second
+		if d := userclient.MediaMessageDebounce(); d > timeout {
+			timeout = d
+		}
 		for _, chat := range chats {
 			filterMatched := watchFilterMatches(chat.Filter, msgText)
 			groupID, isGroup := file.Message().GetGroupedID()
@@ -465,16 +501,20 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 					// Albums often only have caption on one message; defer filter to album flush.
 					watchForwardAlbumBuf.add(event.ChatID, chat.TargetID, chat.TargetTopicID, groupID, event.MessageID, filterMatched, timeout)
 				} else if filterMatched {
-					if err := userclient.ForwardMessagesDropAuthor(event.Ctx, event.ChatID, chat.TargetID, []int{event.MessageID}, chat.TargetTopicID); err != nil {
-						logger.Errorf("forward failed source=%d target=%d topic=%d msg=%d: %v", event.ChatID, chat.TargetID, chat.TargetTopicID, event.MessageID, err)
-					}
+					sourceID, targetID, topicID, msgID := event.ChatID, chat.TargetID, chat.TargetTopicID, event.MessageID
+					go func() {
+						if err := userclient.ForwardMessagesDropAuthor(event.Ctx, sourceID, targetID, []int{msgID}, topicID); err != nil {
+							logger.Errorf("forward failed source=%d target=%d topic=%d msg=%d: %v", sourceID, targetID, topicID, msgID, err)
+						}
+					}()
 				}
 				continue
 			}
 
 			if isAlbum {
-				watchMediaGroupMgr.addFile(event.ChatID, chat.UserID, groupID, file, filterMatched, timeout, func(files []tfile.TGFileMessage) {
-					processWatchLocalAlbum(ctx, chat.UserID, files)
+				uid := chat.UserID
+				watchMediaGroupMgr.addFile(event.ChatID, uid, groupID, file, filterMatched, timeout, func(files []tfile.TGFileMessage) {
+					go processWatchLocalAlbum(ctx, uid, files)
 				})
 				continue
 			}

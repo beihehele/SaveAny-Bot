@@ -6,6 +6,7 @@ import (
 
 	"github.com/celestix/gotgproto/dispatcher"
 	"github.com/celestix/gotgproto/ext"
+	"github.com/charmbracelet/log"
 	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
@@ -43,27 +44,36 @@ func GetMediaMessageCh() chan MediaMessageEvent {
 	return mediaMessageCh
 }
 
+func MediaMessageDebounce() time.Duration {
+	return mediaMessageHandler.debounce
+}
+
 func sendMediaMessageEvent(event MediaMessageEvent) {
 	key := messageKey{ChatID: event.ChatID, MessageID: event.MessageID}
 
 	mediaMessageHandler.mu.Lock()
-	defer mediaMessageHandler.mu.Unlock()
-
 	if timer, exists := mediaMessageHandler.timers[key]; exists {
 		timer.Stop()
-	} else {
-		mediaMessageHandler.events[key] = event
 	}
-
+	// Always refresh the payload so caption edits after the first update are kept.
+	mediaMessageHandler.events[key] = event
 	mediaMessageHandler.timers[key] = time.AfterFunc(mediaMessageHandler.debounce, func() {
 		mediaMessageHandler.mu.Lock()
-		event := mediaMessageHandler.events[key]
+		ev, ok := mediaMessageHandler.events[key]
 		delete(mediaMessageHandler.events, key)
 		delete(mediaMessageHandler.timers, key)
 		mediaMessageHandler.mu.Unlock()
-
-		mediaMessageCh <- event
+		if !ok {
+			return
+		}
+		// Never block the timer/update path on a full channel.
+		select {
+		case mediaMessageCh <- ev:
+		default:
+			log.Warnf("media message channel full, dropping chat=%d msg=%d", ev.ChatID, ev.MessageID)
+		}
 	})
+	mediaMessageHandler.mu.Unlock()
 }
 
 func handleMediaMessage(ctx *ext.Context, update *ext.Update) error {

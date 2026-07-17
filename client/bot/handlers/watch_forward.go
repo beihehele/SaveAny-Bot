@@ -72,7 +72,9 @@ var watchForwardAlbumBuf = newForwardAlbumBuffer(func(sourceID, targetID int64, 
 		return
 	}
 	logger := log.FromContext(uctx)
-	if err := userclient.ForwardMessagesDropAuthor(uctx, sourceID, targetID, ids, targetTopicID); err != nil {
-		logger.Errorf("forward album failed source=%d target=%d topic=%d ids=%v: %v", sourceID, targetID, targetTopicID, ids, err)
-	}
+	go func() {
+		if err := userclient.ForwardMessagesDropAuthor(uctx, sourceID, targetID, ids, targetTopicID); err != nil {
+			logger.Errorf("forward album failed source=%d target=%d topic=%d ids=%v: %v", sourceID, targetID, targetTopicID, ids, err)
+		}
+	}()
 })
