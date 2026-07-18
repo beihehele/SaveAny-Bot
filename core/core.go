@@ -83,6 +83,15 @@ func CancelTask(ctx context.Context, id string) error {
 	return err
 }
 
+// IsTaskExecuting reports whether the task has been checked out by a worker
+// (running or cancelled-but-not-yet-Done).
+func IsTaskExecuting(id string) bool {
+	if queueInstance == nil {
+		return false
+	}
+	return queueInstance.IsExecuting(id)
+}
+
 func GetLength(ctx context.Context) int {
 	return queueInstance.ActiveLength()
 }

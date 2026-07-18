@@ -22,10 +22,11 @@ type ProgressTracker interface {
 }
 
 type Progress struct {
-	MessageID int
-	ChatID    int64
-	TaskID    string
-	lastEdit  atomic.Int64 // unix nano of last edit
+	MessageID       int
+	ChatID          int64
+	TaskID          string
+	lastEdit        atomic.Int64 // unix nano of last edit
+	forwardAnnounce atomic.Bool  // one-shot first forward update
 }
 
 func NewProgressTracker(messageID int, chatID int64, taskID string) ProgressTracker {
@@ -51,8 +52,8 @@ func (p *Progress) OnForward(ctx context.Context, done, total int) {
 		"Done":  done,
 		"Total": total,
 	})
-	// Always show first forward update and completion of forward phase.
-	force := done == total || done <= forwardBatch
+	// Force only the first forward update and the final batch; otherwise throttle.
+	force := done == total || !p.forwardAnnounce.Swap(true)
 	p.edit(ctx, text, true, force)
 }
 

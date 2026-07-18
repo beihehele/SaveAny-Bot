@@ -59,6 +59,33 @@ func TestCancelAndActiveLength(t *testing.T) {
 	}
 }
 
+func TestIsExecuting(t *testing.T) {
+	q := queue.NewTaskQueue[int]()
+	if err := q.Add(newTask("run")); err != nil {
+		t.Fatal(err)
+	}
+	if q.IsExecuting("run") {
+		t.Fatal("queued task should not be executing")
+	}
+	got, err := q.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !q.IsExecuting(got.ID) {
+		t.Fatal("checked-out task should be executing")
+	}
+	if err := q.CancelTask(got.ID); err != nil {
+		t.Fatal(err)
+	}
+	if !q.IsExecuting(got.ID) {
+		t.Fatal("cancelled-but-not-Done task should still be executing")
+	}
+	q.Done(got.ID)
+	if q.IsExecuting(got.ID) {
+		t.Fatal("after Done, task should not be executing")
+	}
+}
+
 func TestCloseBehavior(t *testing.T) {
 	q := queue.NewTaskQueue[int]()
 	done := make(chan struct{})

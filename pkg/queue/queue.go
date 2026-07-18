@@ -154,6 +154,16 @@ func (tq *TaskQueue[T]) QueuedTasks() []TaskInfo {
 	return tasks
 }
 
+// IsExecuting reports whether taskID is currently checked out for execution
+// (present in runningTaskMap), including tasks that have been cancelled but
+// have not yet finished and called Done.
+func (tq *TaskQueue[T]) IsExecuting(taskID string) bool {
+	tq.mu.RLock()
+	defer tq.mu.RUnlock()
+	_, ok := tq.runningTaskMap[taskID]
+	return ok
+}
+
 // CancelTask cancels a task by its ID.
 // It looks for the task in both queued and running tasks.
 // [NOTE] Cancelled tasks will not be removed from the queue, but marked as cancelled. Use Done to remove them.

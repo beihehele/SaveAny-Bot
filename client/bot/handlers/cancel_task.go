@@ -23,8 +23,7 @@ func handleCancelCallback(ctx *ext.Context, update *ext.Update) error {
 		})))
 		return dispatcher.EndGroups
 	}
-	// Queued copy tasks never reach Execute; release per-user slot here.
-	copyfwd.EndByTaskID(taskid)
+	endCopySlotAfterCancel(taskid)
 
 	ctx.EditMessage(update.CallbackQuery.GetUserID(), &tg.MessagesEditMessageRequest{
 		ID:      update.CallbackQuery.GetMsgID(),
@@ -49,9 +48,19 @@ func handleCancelCmd(ctx *ext.Context, update *ext.Update) error {
 		})), nil)
 		return dispatcher.EndGroups
 	}
-	copyfwd.EndByTaskID(taskID)
+	endCopySlotAfterCancel(taskID)
 	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCancelInfoCancelRequested, map[string]any{
 		"TaskID": taskID,
 	})), nil)
 	return dispatcher.EndGroups
+}
+
+// endCopySlotAfterCancel releases the per-user /copy slot only when the task
+// never entered Execute (still queued). Running tasks keep the slot until
+// Execute's defer End, so a second /copy cannot overlap in-flight work.
+func endCopySlotAfterCancel(taskID string) {
+	if core.IsTaskExecuting(taskID) {
+		return
+	}
+	copyfwd.EndByTaskID(taskID)
 }
