@@ -30,6 +30,10 @@ func handleCopyCmd(ctx *ext.Context, update *ext.Update) error {
 		switch {
 		case errors.Is(err, errCopyTargetLocalForbidden):
 			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCopyErrorTargetForbidden)), nil)
+		case errors.Is(err, errCopyCountTooLarge):
+			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCopyErrorCountTooLarge, map[string]any{
+				"Max": maxCopyCount,
+			})), nil)
 		default:
 			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCopyHelpText)), nil)
 		}

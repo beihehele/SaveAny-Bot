@@ -22,7 +22,7 @@ Scan historical messages from a source channel/group, filter them, and forward w
 | `source_id` | Source chat ID or username (required) |
 | `target_id[:topicId]` | Target chat (required); `0` is not allowed; `:topicId` is a forum topic ID (see `/lstopic`) |
 | `filter` | Optional; only `msgre:<regexp>` is supported; omit to match almost every message |
-| `count` | Optional hit count, default 500; collected newest-first until enough matches |
+| `count` | Optional hit count, default 500, max 5000; collected newest-first until enough matches |
 
 Examples:
 

@@ -116,7 +116,7 @@ bot:
       - <source_id>: Source chat ID or username
       - <target_id[:topicId]>: Target chat ID (required, cannot be 0); :topicId is forum topic ID (from /lstopic)
       - [filter]: Optional, only msgre:<regexp> is supported
-      - [count]: Optional hit count, default 500
+      - [count]: Optional hit count, default 500, max 5000
 
       Examples:
       /copy -1002229835658 -1003333444555
@@ -199,6 +199,7 @@ bot:
     copy:
       error_target_forbidden: "copy does not support local save; please specify a target chat"
       error_already_running: "A copy task is already running; cancel it or wait until it finishes"
+      error_count_too_large: "count is too large; maximum is {{.Max}}"
     lschannel:
       info_list_empty: "No channels to list"
       info_list_header: "Channels:\n"

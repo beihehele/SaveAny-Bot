@@ -22,6 +22,11 @@ func TestParseCopyArgs(t *testing.T) {
 		{name: "empty", args: nil, wantErr: true},
 		{name: "bad trailing", args: []string{"-1001", "-1002", "nope"}, wantErr: true},
 		{name: "count zero", args: []string{"-1001", "-1002", "0"}, wantErr: true},
+		{name: "count too large", args: []string{"-1001", "-1002", "5001"}, wantErr: true},
+		{name: "count max ok", args: []string{"-1001", "-1002", "5000"}, wantSource: "-1001", wantTarget: "-1002", wantCount: 5000},
+		{name: "count then filter", args: []string{"-1001", "-1002", "50", "msgre:.*x.*"}, wantSource: "-1001", wantTarget: "-1002", wantFilter: "msgre:.*x.*", wantCount: 50},
+		{name: "duplicate count", args: []string{"-1001", "-1002", "50", "100"}, wantErr: true},
+		{name: "target zero topic", args: []string{"-1001", "0:1"}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

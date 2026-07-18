@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	windowSize   = 100
-	maxContinue  = 5
-	forwardBatch = 100
+	windowSize      = 100
+	maxContinue     = 5
+	forwardBatch    = 100
+	maxScanWindows  = 200 // soft cap: ~20k message IDs scanned
 )
 
 // Execute scans source history in windows, then forwards matched messages in batches.
@@ -47,9 +48,11 @@ func (t *Task) Execute(ctx context.Context) error {
 	}
 
 	var all []ScanMsg
+	meta := make(map[int]ScanMsg)
 	hi := maxID
 	var ids []int
 	var matched int
+	windows := 0
 
 	for hi >= 1 {
 		if err := ctx.Err(); err != nil {
@@ -68,8 +71,11 @@ func (t *Task) Execute(ctx context.Context) error {
 			if m == nil {
 				continue
 			}
-			all = append(all, scanMsgFromTG(m))
+			sm := scanMsgFromTG(m)
+			all = append(all, sm)
+			meta[sm.ID] = sm
 		}
+		windows++
 
 		ids, matched = CollectForwardIDs(all, t.Filter, t.Count, maxContinue)
 		if t.Progress != nil {
@@ -95,7 +101,9 @@ func (t *Task) Execute(ctx context.Context) error {
 					if m == nil {
 						continue
 					}
-					all = append(all, scanMsgFromTG(m))
+					sm := scanMsgFromTG(m)
+					all = append(all, sm)
+					meta[sm.ID] = sm
 				}
 				ids, matched = CollectForwardIDs(all, t.Filter, t.Count, maxContinue)
 				if t.Progress != nil {
@@ -104,31 +112,32 @@ func (t *Task) Execute(ctx context.Context) error {
 			}
 			break
 		}
-		if lo == 1 {
+		if lo == 1 || windows >= maxScanWindows {
 			break
 		}
 		hi = lo - 1
 	}
 
-	logger.Infof("Scan done: matched=%d forwardIDs=%d", matched, len(ids))
+	logger.Infof("Scan done: matched=%d forwardIDs=%d windows=%d", matched, len(ids), windows)
 
+	batches := packForwardBatches(ids, meta, forwardBatch)
 	total := len(ids)
-	for i := 0; i < total; i += forwardBatch {
+	done := 0
+	for _, batch := range batches {
 		if err := ctx.Err(); err != nil {
 			execErr = err
 			return execErr
 		}
 
-		end := min(i+forwardBatch, total)
-		batch := ids[i:end]
 		if err := user.ForwardMessagesDropAuthor(uctx, t.SourceID, t.TargetID, batch, t.TargetTopicID); err != nil {
-			logger.Errorf("Forward batch [%d:%d] failed: %v", i, end, err)
+			logger.Errorf("Forward batch ids=%v failed: %v", batch, err)
 			failed += len(batch)
 		} else {
 			forwarded += len(batch)
 		}
+		done += len(batch)
 		if t.Progress != nil {
-			t.Progress.OnForward(ctx, forwarded+failed, total)
+			t.Progress.OnForward(ctx, done, total)
 		}
 	}
 

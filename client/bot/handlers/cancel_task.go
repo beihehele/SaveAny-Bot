@@ -11,6 +11,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/core"
+	"github.com/krau/SaveAny-Bot/core/tasks/copyfwd"
 )
 
 func handleCancelCallback(ctx *ext.Context, update *ext.Update) error {
@@ -22,6 +23,8 @@ func handleCancelCallback(ctx *ext.Context, update *ext.Update) error {
 		})))
 		return dispatcher.EndGroups
 	}
+	// Queued copy tasks never reach Execute; release per-user slot here.
+	copyfwd.EndByTaskID(taskid)
 
 	ctx.EditMessage(update.CallbackQuery.GetUserID(), &tg.MessagesEditMessageRequest{
 		ID:      update.CallbackQuery.GetMsgID(),
@@ -46,6 +49,7 @@ func handleCancelCmd(ctx *ext.Context, update *ext.Update) error {
 		})), nil)
 		return dispatcher.EndGroups
 	}
+	copyfwd.EndByTaskID(taskID)
 	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCancelInfoCancelRequested, map[string]any{
 		"TaskID": taskID,
 	})), nil)

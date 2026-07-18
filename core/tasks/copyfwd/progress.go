@@ -3,6 +3,8 @@ package copyfwd
 import (
 	"context"
 	"errors"
+	"sync/atomic"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/gotd/td/tg"
@@ -10,6 +12,8 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 )
+
+const progressMinInterval = 2 * time.Second
 
 type ProgressTracker interface {
 	OnScan(ctx context.Context, matched, count, atMsgID int)
@@ -21,6 +25,7 @@ type Progress struct {
 	MessageID int
 	ChatID    int64
 	TaskID    string
+	lastEdit  atomic.Int64 // unix nano of last edit
 }
 
 func NewProgressTracker(messageID int, chatID int64, taskID string) ProgressTracker {
@@ -37,7 +42,8 @@ func (p *Progress) OnScan(ctx context.Context, matched, count, atMsgID int) {
 		"Count":   count,
 		"At":      atMsgID,
 	})
-	p.edit(ctx, text, true)
+	// Always show when scan target reached so the last matched count is visible.
+	p.edit(ctx, text, true, matched >= count && count > 0)
 }
 
 func (p *Progress) OnForward(ctx context.Context, done, total int) {
@@ -45,7 +51,9 @@ func (p *Progress) OnForward(ctx context.Context, done, total int) {
 		"Done":  done,
 		"Total": total,
 	})
-	p.edit(ctx, text, true)
+	// Always show first forward update and completion of forward phase.
+	force := done == total || done <= forwardBatch
+	p.edit(ctx, text, true, force)
 }
 
 func (p *Progress) OnDone(ctx context.Context, forwarded, failed int, err error) {
@@ -62,13 +70,21 @@ func (p *Progress) OnDone(ctx context.Context, forwarded, failed int, err error)
 			"Fail": failed,
 		})
 	}
-	p.edit(ctx, text, false)
+	p.edit(ctx, text, false, true)
 }
 
-func (p *Progress) edit(ctx context.Context, text string, withCancel bool) {
+func (p *Progress) edit(ctx context.Context, text string, withCancel bool, force bool) {
 	if p.MessageID == 0 || p.ChatID == 0 {
 		return
 	}
+	if !force {
+		last := p.lastEdit.Load()
+		if last > 0 && time.Since(time.Unix(0, last)) < progressMinInterval {
+			return
+		}
+	}
+	p.lastEdit.Store(time.Now().UnixNano())
+
 	req := &tg.MessagesEditMessageRequest{
 		ID: p.MessageID,
 	}
@@ -83,6 +99,9 @@ func (p *Progress) edit(ctx context.Context, text string, withCancel bool) {
 				},
 			},
 		})
+	} else {
+		// Clear cancel button on terminal states.
+		req.SetReplyMarkup(&tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{}})
 	}
 	ext := tgutil.ExtFromContext(ctx)
 	if ext == nil {

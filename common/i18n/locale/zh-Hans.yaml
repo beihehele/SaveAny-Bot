@@ -117,7 +117,7 @@ bot:
       - <source_id>: 源聊天 ID 或用户名
       - <target_id[:topicId]>: 目标聊天 ID（必填，不可为 0）；:topicId 为论坛话题 ID（见 /lstopic）
       - [filter]: 可选，仅支持 msgre:<正则>
-      - [count]: 可选，命中条数，默认 500
+      - [count]: 可选，命中条数，默认 500，最大 5000
 
       命令示例:
       /copy -1002229835658 -1003333444555
@@ -200,6 +200,7 @@ bot:
     copy:
       error_target_forbidden: "copy 不支持本地保存，请指定目标聊天"
       error_already_running: "已有进行中的 copy 任务，请先取消或等待完成"
+      error_count_too_large: "count 过大，最大允许 {{.Max}}"
     lschannel:
       info_list_empty: "当前没有可列出的频道"
       info_list_header: "频道列表:\n"

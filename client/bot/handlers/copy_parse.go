@@ -6,12 +6,16 @@ import (
 	"strings"
 )
 
-const defaultCopyCount = 500
+const (
+	defaultCopyCount = 500
+	maxCopyCount     = 5000
+)
 
 var (
 	errCopyArgsInvalid          = errors.New("copy args invalid")
 	errCopyTargetRequired       = errors.New("copy target required")
 	errCopyTargetLocalForbidden = errors.New("copy target 0 forbidden")
+	errCopyCountTooLarge        = errors.New("copy count too large")
 )
 
 type copyArgs struct {
@@ -50,6 +54,9 @@ func parseCopyArgs(args []string) (copyArgs, error) {
 			n, err := strconv.Atoi(a)
 			if err != nil || n <= 0 {
 				return copyArgs{}, errCopyArgsInvalid
+			}
+			if n > maxCopyCount {
+				return copyArgs{}, errCopyCountTooLarge
 			}
 			countSet = true
 			out.Count = n

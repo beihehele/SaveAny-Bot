@@ -105,6 +105,7 @@ const (
 	BotMsgConfigPromptSelectFilenameStrategy              Key = "bot.msg.config.prompt_select_filename_strategy"
 	BotMsgConfigPromptSelectOption                        Key = "bot.msg.config.prompt_select_option"
 	BotMsgCopyErrorAlreadyRunning                         Key = "bot.msg.copy.error_already_running"
+	BotMsgCopyErrorCountTooLarge                          Key = "bot.msg.copy.error_count_too_large"
 	BotMsgCopyErrorTargetForbidden                        Key = "bot.msg.copy.error_target_forbidden"
 	BotMsgCopyHelpText                                    Key = "bot.msg.copy_help_text"
 	BotMsgDirButtonDefault                                Key = "bot.msg.dir.button_default"

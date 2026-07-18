@@ -11,6 +11,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/core"
+	"github.com/krau/SaveAny-Bot/core/tasks/copyfwd"
 )
 
 func handleTaskCmd(ctx *ext.Context, update *ext.Update) error {
@@ -37,6 +38,7 @@ func handleTaskCmd(ctx *ext.Context, update *ext.Update) error {
 			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgTasksCancelFailed, map[string]any{"Error": err.Error()})), nil)
 			return dispatcher.EndGroups
 		}
+		copyfwd.EndByTaskID(taskID)
 		ctx.Reply(update, ext.ReplyTextStyledTextArray([]styling.StyledTextOption{
 			styling.Plain(i18n.T(i18nk.BotMsgTasksCancelRequestedPrefix)),
 			styling.Code(taskID),
