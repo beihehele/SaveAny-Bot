@@ -56,32 +56,36 @@ func (tq *TaskQueue[T]) Get() (*Task[T], error) {
 	tq.mu.Lock()
 	defer tq.mu.Unlock()
 
-	for tq.tasks.Len() == 0 && !tq.closed {
-		tq.cond.Wait()
-	}
+	for {
+		for tq.tasks.Len() == 0 && !tq.closed {
+			tq.cond.Wait()
+		}
 
-	if tq.closed && tq.tasks.Len() == 0 {
-		return nil, fmt.Errorf("queue is closed and empty")
-	}
+		if tq.closed && tq.tasks.Len() == 0 {
+			return nil, fmt.Errorf("queue is closed and empty")
+		}
 
-	for tq.tasks.Len() > 0 {
-		element := tq.tasks.Front()
-		task := element.Value.(*Task[T])
+		for tq.tasks.Len() > 0 {
+			element := tq.tasks.Front()
+			task := element.Value.(*Task[T])
 
-		tq.tasks.Remove(element)
-		task.element = nil
+			tq.tasks.Remove(element)
+			task.element = nil
 
-		if !task.Cancelled() {
+			if task.Cancelled() {
+				// Drop cancelled tasks that never ran; do not recurse while holding mu.
+				delete(tq.taskMap, task.ID)
+				continue
+			}
 			tq.runningTaskMap[task.ID] = task
 			return task, nil
 		}
-	}
 
-	if !tq.closed {
-		return tq.Get()
+		// Drained only cancelled entries; wait for a new Add unless closed.
+		if tq.closed {
+			return nil, fmt.Errorf("queue is closed and empty")
+		}
 	}
-
-	return nil, fmt.Errorf("queue is closed and empty")
 }
 
 // Done stops(cancels) and removes the task from the running tasks.
