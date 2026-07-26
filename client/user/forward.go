@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
@@ -22,9 +23,13 @@ const attributionLabel = "[转]"
 
 // ForwardMessagesDropAuthor copies messages with DropAuthor (independent of source deletion),
 // then prepends a clickable [转] link on the caption/text message pointing to sourceLinkMsgID.
-func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, messageIDs []int, topMsgID, sourceLinkMsgID int) error {
-	if ctx == nil {
+// rpcCtx is used for Telegram RPCs so callers (e.g. /copy) can cancel FLOOD_WAIT sleeps.
+func ForwardMessagesDropAuthor(rpcCtx context.Context, ectx *ext.Context, fromChatID, toChatID int64, messageIDs []int, topMsgID, sourceLinkMsgID int) error {
+	if ectx == nil {
 		return fmt.Errorf("user context is nil")
+	}
+	if rpcCtx == nil {
+		rpcCtx = ectx
 	}
 	if len(messageIDs) == 0 {
 		return fmt.Errorf("empty message ids")
@@ -35,11 +40,11 @@ func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, mes
 		sourceLinkMsgID = ids[0]
 	}
 
-	fromPeer, err := resolveInputPeer(ctx, fromChatID)
+	fromPeer, err := resolveInputPeer(ectx, fromChatID)
 	if err != nil {
 		return fmt.Errorf("cannot resolve source peer %d: %w", fromChatID, err)
 	}
-	toPeer, err := resolveInputPeer(ctx, toChatID)
+	toPeer, err := resolveInputPeer(ectx, toChatID)
 	if err != nil {
 		return fmt.Errorf("cannot resolve target peer %d: %w", toChatID, err)
 	}
@@ -60,33 +65,39 @@ func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, mes
 		req.SetTopMsgID(topMsgID)
 	}
 
-	updates, err := ctx.Raw.MessagesForwardMessages(ctx, req)
+	updates, err := ectx.Raw.MessagesForwardMessages(rpcCtx, req)
 	if err != nil {
 		return fmt.Errorf("forward messages: %w", err)
 	}
 
-	link, err := tgutil.BuildMessageLink(ctx, fromChatID, sourceLinkMsgID)
+	link, err := tgutil.BuildMessageLink(ectx, fromChatID, sourceLinkMsgID)
 	if err != nil {
-		log.FromContext(ctx).Warnf("build source link for attribution: %v", err)
+		log.FromContext(rpcCtx).Warnf("build source link for attribution: %v", err)
 		return nil
 	}
-	if err := appendAttributionToForwarded(ctx, toPeer, updates, link); err != nil {
+	if err := appendAttributionToForwarded(rpcCtx, ectx, toPeer, updates, link); err != nil {
 		// Content already copied independently; attribution is best-effort.
-		log.FromContext(ctx).Warnf("prepend [转] after forward: %v", err)
+		log.FromContext(rpcCtx).Warnf("prepend [转] after forward: %v", err)
 	}
 	return nil
 }
 
 // ForwardMessage copies one message (or its whole album) with DropAuthor and [转] link.
-func ForwardMessage(ctx *ext.Context, fromChatID, toChatID int64, msgID, topMsgID int) error {
-	msg, err := tgutil.GetMessageByID(ctx, fromChatID, msgID)
+func ForwardMessage(rpcCtx context.Context, ectx *ext.Context, fromChatID, toChatID int64, msgID, topMsgID int) error {
+	if ectx == nil {
+		return fmt.Errorf("user context is nil")
+	}
+	if rpcCtx == nil {
+		rpcCtx = ectx
+	}
+	msg, err := tgutil.GetMessageByID(ectx, fromChatID, msgID)
 	if err != nil {
 		return fmt.Errorf("get source message: %w", err)
 	}
 	ids := []int{msgID}
 	linkID := msgID
 	if gid, ok := msg.GetGroupedID(); ok && gid != 0 {
-		group, err := tgutil.GetGroupedMessages(ctx, fromChatID, msg)
+		group, err := tgutil.GetGroupedMessages(ectx, fromChatID, msg)
 		if err == nil && len(group) > 0 {
 			ids = make([]int, 0, len(group))
 			for _, m := range group {
@@ -98,10 +109,10 @@ func ForwardMessage(ctx *ext.Context, fromChatID, toChatID int64, msgID, topMsgI
 			sort.Ints(ids)
 		}
 	}
-	return ForwardMessagesDropAuthor(ctx, fromChatID, toChatID, ids, topMsgID, linkID)
+	return ForwardMessagesDropAuthor(rpcCtx, ectx, fromChatID, toChatID, ids, topMsgID, linkID)
 }
 
-func appendAttributionToForwarded(ctx *ext.Context, toPeer tg.InputPeerClass, updates tg.UpdatesClass, link string) error {
+func appendAttributionToForwarded(rpcCtx context.Context, ectx *ext.Context, toPeer tg.InputPeerClass, updates tg.UpdatesClass, link string) error {
 	msgs := messagesFromUpdates(updates)
 	if len(msgs) == 0 {
 		return fmt.Errorf("no messages in forward updates")
@@ -122,7 +133,7 @@ func appendAttributionToForwarded(ctx *ext.Context, toPeer tg.InputPeerClass, up
 	if len(entities) > 0 {
 		edit.SetEntities(entities)
 	}
-	if _, err := ctx.Raw.MessagesEditMessage(ctx, edit); err != nil {
+	if _, err := ectx.Raw.MessagesEditMessage(rpcCtx, edit); err != nil {
 		return fmt.Errorf("edit message %d: %w", target.GetID(), err)
 	}
 	return nil

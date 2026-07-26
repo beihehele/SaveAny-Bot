@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/gotd/td/tg"
+	"github.com/gotd/td/tgerr"
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
@@ -17,6 +18,7 @@ const progressMinInterval = 2 * time.Second
 
 type ProgressTracker interface {
 	OnScan(ctx context.Context, matched, count, atMsgID int)
+	OnScanDone(ctx context.Context, matched, count, atMsgID int)
 	OnForward(ctx context.Context, done, total int)
 	OnDone(ctx context.Context, forwarded, failed int, err error)
 }
@@ -47,13 +49,22 @@ func (p *Progress) OnScan(ctx context.Context, matched, count, atMsgID int) {
 	p.edit(ctx, text, true, matched >= count && count > 0)
 }
 
+func (p *Progress) OnScanDone(ctx context.Context, matched, count, atMsgID int) {
+	text := i18n.T(i18nk.BotMsgProgressCopyScanning, map[string]any{
+		"Matched": matched,
+		"Count":   count,
+		"At":      atMsgID,
+	})
+	p.edit(ctx, text, true, true)
+}
+
 func (p *Progress) OnForward(ctx context.Context, done, total int) {
 	text := i18n.T(i18nk.BotMsgProgressCopyForwarding, map[string]any{
 		"Done":  done,
 		"Total": total,
 	})
-	// Force only the first forward update and the final batch; otherwise throttle.
-	force := done == total || !p.forwardAnnounce.Swap(true)
+	// Force phase switch (done=0), first real progress, and the final batch.
+	force := done == 0 || done == total || !p.forwardAnnounce.Swap(true)
 	p.edit(ctx, text, true, force)
 }
 
@@ -109,6 +120,9 @@ func (p *Progress) edit(ctx context.Context, text string, withCancel bool, force
 		return
 	}
 	if _, err := ext.EditMessage(p.ChatID, req); err != nil {
+		if tgerr.Is(err, "MESSAGE_NOT_MODIFIED") {
+			return
+		}
 		log.FromContext(ctx).Debugf("edit copy progress message: %v", err)
 	}
 }

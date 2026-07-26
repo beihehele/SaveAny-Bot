@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/gotd/contrib/middleware/floodwait"
 	"github.com/gotd/td/telegram"
 	"github.com/krau/SaveAny-Bot/client/middleware/recovery"
 	"github.com/krau/SaveAny-Bot/client/middleware/retry"
@@ -17,7 +16,8 @@ func NewDefaultMiddlewares(ctx context.Context, timeout time.Duration) []telegra
 	return []telegram.Middleware{
 		recovery.New(ctx, func() backoff.BackOff { return newBackoff(timeout) }),
 		retry.New(config.C().Telegram.RpcRetry),
-		floodwait.NewSimpleWaiter(),
+		// Log FLOOD_WAIT and honor ctx cancel (same wait semantics as SimpleWaiter).
+		NewLoggingFloodWait(),
 	}
 }
 

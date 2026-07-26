@@ -284,7 +284,7 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 						if uctx == nil {
 							return
 						}
-						if err := userclient.ForwardMessage(uctx, sourceID, targetID, msgID, topicID); err != nil {
+						if err := userclient.ForwardMessage(uctx, uctx, sourceID, targetID, msgID, topicID); err != nil {
 							logger.Errorf("forward failed source=%d target=%d topic=%d msg=%d: %v", sourceID, targetID, topicID, msgID, err)
 						}
 					}()
