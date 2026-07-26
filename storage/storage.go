@@ -31,6 +31,19 @@ type StorageCannotStream interface {
 	CannotStream() string
 }
 
+// StorageCannotDetectExistence marks storages where Exists() is not meaningful
+// (e.g. Telegram re-upload paths). Conflict strategies ask/skip cannot work there.
+type StorageCannotDetectExistence interface {
+	Storage
+	CannotDetectExistence() string
+}
+
+// CanDetectExistence reports whether Exists() can be trusted for conflict checks.
+func CanDetectExistence(s Storage) bool {
+	_, ok := s.(StorageCannotDetectExistence)
+	return !ok
+}
+
 // StorageListable 表示支持列举目录内容的存储
 type StorageListable interface {
 	Storage

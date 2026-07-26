@@ -99,7 +99,7 @@ Aria2 is a powerful download manager that supports HTTP/HTTPS, FTP, BitTorrent, 
 - `enable`: Whether to enable Aria2 support, default is `false`
 - `url`: Aria2 RPC address, typically `http://localhost:6800/jsonrpc`
 - `secret`: Aria2 RPC secret, if you configured `rpc-secret` in Aria2, you need to fill it in here
-- `remove_after_transfer`: Whether to remove local files downloaded by Aria2 after transfer, default is `true`
+- `keep_file`: Whether to keep Aria2 local files after transfer, default is `false` (delete after transfer)
 
 {{< hint info >}}
 Aria2 needs to be installed and running separately. You can refer to the [Aria2 official documentation](https://aria2.github.io/) to learn how to install and configure Aria2.
@@ -110,7 +110,7 @@ Aria2 needs to be installed and running separately. You can refer to the [Aria2 
 enable = true
 url = "http://localhost:6800/jsonrpc"
 secret = "your-rpc-secret"
-remove_after_transfer = true
+keep_file = false
 ```
 
 ### yt-dlp Configuration

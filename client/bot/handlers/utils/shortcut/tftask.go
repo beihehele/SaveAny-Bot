@@ -66,19 +66,23 @@ func CreateAndAddTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor storage
 startCreateTask:
 	storagePath := path.Join(dirPath, file.Name())
 	if strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip {
-		exists := stor.Exists(ctx, storagePath)
-		if exists && strategy == tcbdata.ConflictStrategyAsk {
-			return promptTGFileConflictStrategy(ctx, userID, stor.Name(), dirPath, []tfile.TGFileMessage{file}, false, []string{conflictutil.FormatPath(stor.Name(), storagePath)}, trackMsgID)
-		}
-		if exists {
-			ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
-				ID: trackMsgID,
-				Message: i18n.T(i18nk.BotMsgCommonInfoAllConflictFilesSkipped, map[string]any{
-					"Skipped": file.Name(),
-				}),
-				ReplyMarkup: nil,
-			})
-			return dispatcher.EndGroups
+		if !storage.CanDetectExistence(stor) {
+			logger.Warnf("storage %s cannot detect existence; ask/skip conflict strategy ignored", stor.Name())
+		} else {
+			exists := stor.Exists(ctx, storagePath)
+			if exists && strategy == tcbdata.ConflictStrategyAsk {
+				return promptTGFileConflictStrategy(ctx, userID, stor.Name(), dirPath, []tfile.TGFileMessage{file}, false, []string{conflictutil.FormatPath(stor.Name(), storagePath)}, trackMsgID)
+			}
+			if exists {
+				ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
+					ID: trackMsgID,
+					Message: i18n.T(i18nk.BotMsgCommonInfoAllConflictFilesSkipped, map[string]any{
+						"Skipped": file.Name(),
+					}),
+					ReplyMarkup: nil,
+				})
+				return dispatcher.EndGroups
+			}
 		}
 	}
 	injectCtx := tgutil.ExtWithContext(ctx.Context, ctx)
@@ -181,7 +185,7 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 		}
 		if !matchedDirPath.NeedNewForAlbum() {
 			storPath := path.Join(matchedDirPath.String(), file.Name())
-			if strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip {
+			if (strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip) && storage.CanDetectExistence(fileStor) {
 				exists := fileStor.Exists(ctx, storPath)
 				if exists && strategy == tcbdata.ConflictStrategyAsk {
 					conflicts = append(conflicts, conflictutil.FormatPath(fileStor.Name(), storPath))
@@ -234,7 +238,7 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 		albumStor := afiles[0].storage
 		for _, af := range afiles {
 			afstorPath := path.Join(af.dirPath, albumDir, af.file.Name())
-			if strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip {
+			if (strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip) && storage.CanDetectExistence(albumStor) {
 				exists := albumStor.Exists(ctx, afstorPath)
 				if exists && strategy == tcbdata.ConflictStrategyAsk {
 					conflicts = append(conflicts, conflictutil.FormatPath(albumStor.Name(), afstorPath))

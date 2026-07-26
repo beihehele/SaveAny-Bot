@@ -47,34 +47,28 @@ func (a *Alist) Init(ctx context.Context, cfg config.StorageConfig) error {
 		defer cancel()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.baseURL+"/api/me", nil)
 		if err != nil {
-			a.logger.Fatalf("Failed to create request: %v", err)
-			return err
+			return fmt.Errorf("failed to create request: %w", err)
 		}
 		req.Header.Set("Authorization", a.token)
 
 		resp, err := a.client.Do(req)
 		if err != nil {
-			a.logger.Fatalf("Failed to send request: %v", err)
-			return err
+			return fmt.Errorf("failed to send request: %w", err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			a.logger.Fatalf("Failed to get alist user info: %s", resp.Status)
-			return err
+			return fmt.Errorf("failed to get alist user info: %s", resp.Status)
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			a.logger.Fatalf("Failed to read response body: %v", err)
-			return err
+			return fmt.Errorf("failed to read response body: %w", err)
 		}
 		var meResp meResponse
 		if err := json.Unmarshal(body, &meResp); err != nil {
-			a.logger.Fatalf("Failed to unmarshal me response: %v", err)
-			return err
+			return fmt.Errorf("failed to unmarshal me response: %w", err)
 		}
 		if meResp.Code != http.StatusOK {
-			a.logger.Fatalf("Failed to get alist user info: %s", meResp.Message)
-			return err
+			return fmt.Errorf("failed to get alist user info: %s", meResp.Message)
 		}
 		a.logger.Debugf("Logged in Alist as %s", meResp.Data.Username)
 		return nil
@@ -85,8 +79,7 @@ func (a *Alist) Init(ctx context.Context, cfg config.StorageConfig) error {
 	}
 
 	if err := a.getToken(ctx); err != nil {
-		a.logger.Fatalf("Failed to login to Alist: %v", err)
-		return err
+		return fmt.Errorf("failed to login to Alist: %w", err)
 	}
 	a.logger.Debug("Logged in to Alist")
 

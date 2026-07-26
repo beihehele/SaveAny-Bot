@@ -99,7 +99,7 @@ Aria2 是一个强大的下载管理器，支持 HTTP/HTTPS、FTP、BitTorrent �
 - `enable`: 是否启用 Aria2 支持，默认为 `false`
 - `url`: Aria2 RPC 地址，通常为 `http://localhost:6800/jsonrpc`
 - `secret`: Aria2 RPC 密钥，如果你在 Aria2 中配置了 `rpc-secret`，需要在此填写
-- `remove_after_transfer`: 转存完成后是否删除 Aria2 下载的本地文件，默认为 `true`
+- `keep_file`: 转存完成后是否保留 Aria2 下载的本地文件，默认为 `false`（即转存后删除）
 
 {{< hint info >}}
 Aria2 需要单独安装和运行。你可以参考 [Aria2 官方文档](https://aria2.github.io/) 了解如何安装和配置 Aria2。
@@ -110,7 +110,7 @@ Aria2 需要单独安装和运行。你可以参考 [Aria2 官方文档](https:/
 enable = true
 url = "http://localhost:6800/jsonrpc"
 secret = "your-rpc-secret"
-remove_after_transfer = true
+keep_file = false
 ```
 
 ### yt-dlp 配置

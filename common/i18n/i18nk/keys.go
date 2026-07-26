@@ -22,7 +22,6 @@ const (
 	BotMsgCmdDl                                           Key = "bot.msg.cmd.dl"
 	BotMsgCmdFnametmpl                                    Key = "bot.msg.cmd.fnametmpl"
 	BotMsgCmdHelp                                         Key = "bot.msg.cmd.help"
-	BotMsgCmdImport                                       Key = "bot.msg.cmd.import"
 	BotMsgCmdLschannel                                    Key = "bot.msg.cmd.lschannel"
 	BotMsgCmdLsgroup                                      Key = "bot.msg.cmd.lsgroup"
 	BotMsgCmdLstopic                                      Key = "bot.msg.cmd.lstopic"

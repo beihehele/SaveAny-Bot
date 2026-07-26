@@ -32,6 +32,10 @@ You can also override these settings with environment variables (prefix `SAVEANY
 If `token` is empty, the API server will be accessible **without any authentication**, which is a security risk.
 {{< /hint >}}
 
+{{< hint warning >}}
+API-created tasks are kept in **process memory only**: after a restart the task list and progress are cleared, and in-flight tasks are interrupted. Do not rely on the API for cross-restart orchestration.
+{{< /hint >}}
+
 ## Authentication
 
 When `token` is configured, all API requests must include a Bearer token in the HTTP header:

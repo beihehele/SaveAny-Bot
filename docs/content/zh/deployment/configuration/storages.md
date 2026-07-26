@@ -73,7 +73,9 @@ https://s3.example.com/your_bucket_name/path/to/s3/your_file
 
 `type=telegram`
 
-不支持 Stream 模式.
+不支持 Stream 模式。
+
+**限制**：无法检测「路径是否已存在」（`Exists` 恒为 false），因此重名策略中的 `ask` / `skip` 对该存储**无效**，实际会始终上传新消息。
 
 ```toml
 # Telegram 聊天 ID, Bot 将把文件发送到这个聊天

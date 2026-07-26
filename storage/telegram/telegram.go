@@ -70,6 +70,10 @@ func (t *Telegram) Exists(ctx context.Context, storagePath string) bool {
 	return false
 }
 
+func (t *Telegram) CannotDetectExistence() string {
+	return "Telegram storage cannot detect whether a path already exists"
+}
+
 func (t *Telegram) Save(ctx context.Context, r io.Reader, storagePath string) error {
 	storagePath = path.Clean(storagePath)
 	tctx := tgutil.ExtFromContext(ctx)

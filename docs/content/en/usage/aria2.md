@@ -37,5 +37,5 @@ Add to `config.toml`:
 enable = true
 url = "http://localhost:6800/jsonrpc"
 secret = "your-rpc-secret"  # If rpc-secret is configured
-remove_after_transfer = true  # Remove local files after transfer
+keep_file = false  # false = remove local files after transfer
 ```

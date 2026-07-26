@@ -37,5 +37,5 @@ weight: 6
 enable = true
 url = "http://localhost:6800/jsonrpc"
 secret = "your-rpc-secret"  # 如果配置了 rpc-secret
-remove_after_transfer = true  # 转存完成后删除本地文件
+keep_file = false  # false = 转存完成后删除本地文件
 ```

@@ -37,7 +37,7 @@ type Task struct {
 	StorPath string
 	Progress ProgressTracker
 
-	client          *http.Client // [TODO] parallel download
+	client          *http.Client // downloads run in parallel via errgroup (Workers limit)
 	stream          bool
 	totalBytes      int64            // total bytes to download
 	downloadedBytes atomic.Int64     // downloaded bytes
@@ -45,7 +45,7 @@ type Task struct {
 	downloaded      atomic.Int64     // downloaded files count
 	processing      map[string]*File // {"url": File}
 	processingMu    sync.RWMutex
-	failed          map[string]error // [TODO] errors for each file
+	failed          map[string]error
 }
 
 // Title implements core.Exectable.

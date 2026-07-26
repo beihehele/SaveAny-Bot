@@ -124,49 +124,70 @@ func handleBatchSave(ctx *ext.Context, update *ext.Update, args []string) error 
 		return dispatcher.EndGroups
 	}
 
-	// [TODO]: generator istead of get all messages
-	msgs, err := tgutil.GetMessagesRange(tctx, chatID, int(startID), int(endID))
-	if err != nil {
-		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorGetMessagesFailed, map[string]any{"Error": err.Error()})), nil)
-		return dispatcher.EndGroups
-	}
-	if len(msgs) == 0 {
-		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorNoMessagesInRange)), nil)
-		return dispatcher.EndGroups
-	}
-	files := make([]tfile.TGFileMessage, 0, len(msgs))
+	// Fetch in ID windows to avoid allocating the full range at once.
+	const saveWindow = 100
+	files := make([]tfile.TGFileMessage, 0)
 	sb := strings.Builder{}
-	for _, msg := range msgs {
-		if msg == nil {
-			continue
+	sawAnyMessage := false
+	for lo := int(startID); lo <= int(endID); lo += saveWindow {
+		if err := ctx.Context.Err(); err != nil {
+			ctx.EditMessage(update.EffectiveChat().GetID(), &tg.MessagesEditMessageRequest{
+				ID:      replied.ID,
+				Message: i18n.T(i18nk.BotMsgCommonErrorGetMessagesFailed, map[string]any{"Error": err.Error()}),
+			})
+			return dispatcher.EndGroups
 		}
-		media, ok := msg.GetMedia()
-		if !ok {
-			continue
+		hi := lo + saveWindow - 1
+		if hi > int(endID) {
+			hi = int(endID)
 		}
-		supported := mediautil.IsSupported(media)
-		if !supported {
-			continue
-		}
-		file, err := tfile.FromMediaMessage(media, tctx.Raw, msg, tfile.WithNameIfEmpty(tgutil.GenFileNameFromMessage(*msg)))
+		msgs, err := tgutil.GetMessagesRange(tctx, chatID, lo, hi)
 		if err != nil {
-			log.FromContext(ctx).Errorf("Failed to get file from message: %s", err)
-			continue
+			ctx.EditMessage(update.EffectiveChat().GetID(), &tg.MessagesEditMessageRequest{
+				ID:      replied.ID,
+				Message: i18n.T(i18nk.BotMsgCommonErrorGetMessagesFailed, map[string]any{"Error": err.Error()}),
+			})
+			return dispatcher.EndGroups
 		}
-		if filter != nil {
-			sb.Reset()
-			sb.WriteString(msg.GetMessage())
-			sb.WriteString(" ")
-			fn, _ := tgutil.GetMediaFileName(media)
-			sb.WriteString(fn)
-			if !filter.MatchString(sb.String()) {
+		for _, msg := range msgs {
+			if msg == nil {
 				continue
 			}
+			sawAnyMessage = true
+			media, ok := msg.GetMedia()
+			if !ok {
+				continue
+			}
+			if !mediautil.IsSupported(media) {
+				continue
+			}
+			file, err := tfile.FromMediaMessage(media, tctx.Raw, msg, tfile.WithNameIfEmpty(tgutil.GenFileNameFromMessage(*msg)))
+			if err != nil {
+				log.FromContext(ctx).Errorf("Failed to get file from message: %s", err)
+				continue
+			}
+			if filter != nil {
+				sb.Reset()
+				sb.WriteString(msg.GetMessage())
+				sb.WriteString(" ")
+				fn, _ := tgutil.GetMediaFileName(media)
+				sb.WriteString(fn)
+				if !filter.MatchString(sb.String()) {
+					continue
+				}
+			}
+			files = append(files, file)
 		}
-		files = append(files, file)
 	}
 	if len(files) == 0 {
-		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorNoSavableMessagesInRange)), nil)
+		msg := i18n.T(i18nk.BotMsgCommonErrorNoSavableMessagesInRange)
+		if !sawAnyMessage {
+			msg = i18n.T(i18nk.BotMsgCommonErrorNoMessagesInRange)
+		}
+		ctx.EditMessage(update.EffectiveChat().GetID(), &tg.MessagesEditMessageRequest{
+			ID:      replied.ID,
+			Message: msg,
+		})
 		return dispatcher.EndGroups
 	}
 	stor := storage.FromContext(ctx)

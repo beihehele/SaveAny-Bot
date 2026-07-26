@@ -41,6 +41,7 @@ func worker(ctx context.Context, qe *queue.TaskQueue[Executable], semaphore chan
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				logger.Infof("Task %s was canceled", exe.TaskID())
+				// Use worker ctx: taskCtx is already canceled and would skip the hook command.
 				if err := ExecCommandString(ctx, execHooks.TaskCancel); err != nil {
 					logger.Errorf("Failed to execute cancel hook for task %s: %v", exe.TaskID(), err)
 				}

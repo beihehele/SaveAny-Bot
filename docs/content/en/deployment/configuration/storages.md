@@ -73,7 +73,9 @@ If you are using a third-party S3-compatible service, it usually uses path-style
 
 `type=telegram`
 
-Stream mode is not supported.
+Does not support Stream mode.
+
+**Limitation**: existence checks are unavailable (`Exists` always returns false), so conflict strategies `ask` / `skip` do **not** apply; uploads always create a new message.
 
 ```toml
 chat_id = "123456789" # Telegram chat ID, the bot will send files to this chat

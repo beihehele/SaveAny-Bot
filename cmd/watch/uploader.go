@@ -207,7 +207,7 @@ func (u *Uploader) upload(ctx context.Context, job uploadJob) error {
 	uploadCtx := context.WithValue(ctx, ctxkey.ContentLength, info.Size())
 	if u.overwrite {
 		uploadCtx = storage.WithOverwrite(uploadCtx)
-	} else if u.stor.Exists(uploadCtx, storagePath) {
+	} else if storage.CanDetectExistence(u.stor) && u.stor.Exists(uploadCtx, storagePath) {
 		u.logger.Infof("skip existing file: %s", storagePath)
 		return nil
 	}

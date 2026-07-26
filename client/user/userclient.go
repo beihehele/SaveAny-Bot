@@ -75,14 +75,12 @@ func Login(ctx context.Context) (*gotgproto.Client, error) {
 				client *gotgproto.Client
 				err    error
 			}{nil, err}
+			return
 		}
 		res <- struct {
 			client *gotgproto.Client
 			err    error
-		}(struct {
-			client *gotgproto.Client
-			err    error
-		}{tclient, nil})
+		}{tclient, nil}
 	}()
 
 	select {

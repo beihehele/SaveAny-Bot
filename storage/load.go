@@ -76,6 +76,13 @@ func LoadStorages(ctx context.Context) {
 		}
 	}
 	logger.Infof("successfully loaded %d storages", len(Storages))
+	if config.C().Stream {
+		for name, s := range Storages {
+			if cs, ok := s.(StorageCannotStream); ok {
+				logger.Warnf("stream=true but storage %q cannot stream: %s (will fall back to temp file)", name, cs.CannotStream())
+			}
+		}
+	}
 	for user := range config.C().GetUsersID() {
 		UserStorages[int64(user)] = GetUserStorages(ctx, int64(user))
 	}

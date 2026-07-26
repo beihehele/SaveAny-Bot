@@ -171,7 +171,9 @@ func (tq *TaskQueue[T]) IsExecuting(taskID string) bool {
 // CancelTask cancels a task by its ID.
 // It looks for the task in both queued and running tasks.
 // [NOTE] Cancelled tasks will not be removed from the queue, but marked as cancelled. Use Done to remove them.
-// [WARN] Cancelling a running task relies on the task's implementation to respect the cancellation. If the task does not check for cancellation, it may continue running.
+// [WARN] Cancel invokes the task context's cancel func. Running tasks MUST poll ctx.Err()
+// (or select on ctx.Done()) in download/upload loops; otherwise cancellation is delayed until
+// the next blocking call returns or the task finishes.
 func (tq *TaskQueue[T]) CancelTask(taskID string) error {
 	tq.mu.RLock()
 	task, exists := tq.taskMap[taskID]

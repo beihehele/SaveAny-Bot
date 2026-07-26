@@ -32,6 +32,10 @@ token  = "your-token" # 鉴权 Token，强烈建议设置
 若 `token` 为空，API 服务将**不进行任何鉴权**即可访问，存在安全风险。
 {{< /hint >}}
 
+{{< hint warning >}}
+API 创建的任务仅保存在**进程内存**中：进程重启后任务列表与进度会清空，正在执行的任务也会中断。不要依赖 API 任务做跨重启编排。
+{{< /hint >}}
+
 ## 鉴权
 
 当配置了 `token` 时，所有 API 请求均需在 HTTP 请求头中携带 Bearer Token：
