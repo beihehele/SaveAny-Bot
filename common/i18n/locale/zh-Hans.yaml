@@ -86,7 +86,7 @@ bot:
       示例:
       /save @acherkrau 114-514
     watch_help_text: |
-      使用 /watch 监听聊天。target=0（或省略）时保存到默认存储；target 为频道/群 ID 时由 UserBot 无来源复制（DropAuthor）并附带可点击的 [转自] 链接；源消息删除不影响副本。目标可为 target:topicId 指定论坛话题。
+      使用 /watch 监听聊天。target=0（或省略）时保存到默认存储；target 为频道/群 ID 时由 UserBot 无来源复制（DropAuthor）并在开头附带可点击的 [转] 链接；源消息删除不影响副本。目标可为 target:topicId 指定论坛话题。
 
       命令语法:
       /watch <source_id> [target_id[:topicId]] [filter]
@@ -108,7 +108,7 @@ bot:
       /watch -1002229835658 -1003333444555:12345
       /watch -1002229835658 -1003333444555:12345 msgre:plana&(planb|planc)
     copy_help_text: |
-      使用 /copy 将源聊天历史消息无来源复制到目标聊天（DropAuthor，并附带可点击的 [转自] 链接；源删除不影响副本；不落本地存储）。需开启 UserBot。目标可为 target:topicId 指定论坛话题。不支持 target=0。
+      使用 /copy 将源聊天历史消息无来源复制到目标聊天（DropAuthor，并在开头附带可点击的 [转] 链接；源删除不影响副本；不落本地存储）。需开启 UserBot。目标可为 target:topicId 指定论坛话题。不支持 target=0。
 
       命令语法:
       /copy <source_id> <target_id[:topicId]> [filter] [count]

@@ -9,7 +9,7 @@ weight: 4
 This feature requires enabling UserBot integration.
 {{< /hint >}}
 
-Watch media messages from a source chat. When `target=0` (or omitted), messages are saved to default storage. When `target` is another channel/group ID, UserBot copies them with `DropAuthor` and appends a clickable `[转自]` link. Deleting the source does not affect the copy.
+Watch media messages from a source chat. When `target=0` (or omitted), messages are saved to default storage. When `target` is another channel/group ID, UserBot copies them with `DropAuthor` and prepends a clickable `[转]` link. Deleting the source does not affect the copy.
 
 ## Watch a chat
 
@@ -90,6 +90,6 @@ After `msgre:` use a keyword boolean expression (`&` AND, `|` OR, `!` NOT, `()` 
 ## Forward notes
 
 - Performed by the **UserBot account** via `forwardMessages` (`DropAuthor`); the Bot only handles management commands
-- After copy, a `[转自]` hyperlink is appended by edit; original formatting is preserved
+- After copy, a `[转]` hyperlink is prepended by edit; original formatting is preserved
 - Album hits are forwarded as a whole media group
 - The source chat must be readable; the target chat must allow sending messages

@@ -496,7 +496,7 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 
 			if chat.TargetID != 0 {
 				if isAlbum {
-					// Defer filter to album flush; forward whole group with DropAuthor + [转自].
+					// Defer filter to album flush; forward whole group with DropAuthor + [转].
 					watchForwardAlbumBuf.add(event.ChatID, chat.TargetID, chat.TargetTopicID, groupID, event.MessageID, filterMatched, timeout)
 				} else if filterMatched {
 					sourceID, targetID, topicID, msgID := event.ChatID, chat.TargetID, chat.TargetTopicID, event.MessageID

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"unicode/utf16"
@@ -17,10 +18,10 @@ import (
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 )
 
-const attributionLabel = "[转自]"
+const attributionLabel = "[转]"
 
 // ForwardMessagesDropAuthor copies messages with DropAuthor (independent of source deletion),
-// then appends a clickable [转自] link on the caption/text message pointing to sourceLinkMsgID.
+// then prepends a clickable [转] link on the caption/text message pointing to sourceLinkMsgID.
 func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, messageIDs []int, topMsgID, sourceLinkMsgID int) error {
 	if ctx == nil {
 		return fmt.Errorf("user context is nil")
@@ -71,12 +72,12 @@ func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, mes
 	}
 	if err := appendAttributionToForwarded(ctx, toPeer, updates, link); err != nil {
 		// Content already copied independently; attribution is best-effort.
-		log.FromContext(ctx).Warnf("append [转自] after forward: %v", err)
+		log.FromContext(ctx).Warnf("prepend [转] after forward: %v", err)
 	}
 	return nil
 }
 
-// ForwardMessage copies one message (or its whole album) with DropAuthor and [转自] link.
+// ForwardMessage copies one message (or its whole album) with DropAuthor and [转] link.
 func ForwardMessage(ctx *ext.Context, fromChatID, toChatID int64, msgID, topMsgID int) error {
 	msg, err := tgutil.GetMessageByID(ctx, fromChatID, msgID)
 	if err != nil {
@@ -109,7 +110,7 @@ func appendAttributionToForwarded(ctx *ext.Context, toPeer tg.InputPeerClass, up
 	if target == nil {
 		return fmt.Errorf("no editable message in forward result")
 	}
-	newText, entities, err := AppendAttributionLink(target.GetMessage(), target.Entities, link)
+	newText, entities, err := PrependAttributionLink(target.GetMessage(), target.Entities, link)
 	if err != nil {
 		return err
 	}
@@ -180,22 +181,56 @@ func messagesFromUpdates(u tg.UpdatesClass) []*tg.Message {
 	return out
 }
 
-// AppendAttributionLink appends a clickable [转自] to text, preserving existing entities.
-func AppendAttributionLink(text string, entities []tg.MessageEntityClass, link string) (string, []tg.MessageEntityClass, error) {
+// PrependAttributionLink prepends a clickable [转] and a space before text, preserving existing entities.
+func PrependAttributionLink(text string, entities []tg.MessageEntityClass, link string) (string, []tg.MessageEntityClass, error) {
 	if text == "" {
 		return buildAttributionOnly(link)
 	}
-	newText := text + "\n" + attributionLabel
+	prefix := attributionLabel + " "
+	prefixLen := utf16Len(prefix)
+	newText := prefix + text
 	out := make([]tg.MessageEntityClass, 0, len(entities)+1)
-	out = append(out, entities...)
-	offset := utf16Len(text + "\n")
-	length := utf16Len(attributionLabel)
 	out = append(out, &tg.MessageEntityTextURL{
-		Offset: offset,
-		Length: length,
+		Offset: 0,
+		Length: utf16Len(attributionLabel),
 		URL:    link,
 	})
+	out = append(out, shiftEntityOffsets(entities, prefixLen)...)
 	return newText, out, nil
+}
+
+func shiftEntityOffsets(entities []tg.MessageEntityClass, delta int) []tg.MessageEntityClass {
+	if delta == 0 || len(entities) == 0 {
+		return entities
+	}
+	out := make([]tg.MessageEntityClass, 0, len(entities))
+	for _, e := range entities {
+		if e == nil {
+			continue
+		}
+		shifted, ok := cloneEntityWithOffset(e, e.GetOffset()+delta)
+		if !ok {
+			continue
+		}
+		out = append(out, shifted)
+	}
+	return out
+}
+
+func cloneEntityWithOffset(e tg.MessageEntityClass, newOffset int) (tg.MessageEntityClass, bool) {
+	v := reflect.ValueOf(e)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return nil, false
+	}
+	cp := reflect.New(v.Elem().Type())
+	cp.Elem().Set(v.Elem())
+	f := cp.Elem().FieldByName("Offset")
+	if !f.IsValid() || !f.CanSet() {
+		return nil, false
+	}
+	f.SetInt(int64(newOffset))
+	shifted, ok := cp.Interface().(tg.MessageEntityClass)
+	return shifted, ok
 }
 
 func buildAttributionOnly(link string) (string, []tg.MessageEntityClass, error) {

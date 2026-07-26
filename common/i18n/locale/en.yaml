@@ -85,7 +85,7 @@ bot:
       Example:
       /save @acherkrau 114-514
     watch_help_text: |
-      Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target is copied via UserBot DropAuthor with a clickable [转自] link (source deletion does not affect the copy). Use target:topicId for a forum topic.
+      Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target is copied via UserBot DropAuthor with a clickable [转] link at the start (source deletion does not affect the copy). Use target:topicId for a forum topic.
 
       Syntax:
       /watch <source_id> [target_id[:topicId]] [filter]
@@ -107,7 +107,7 @@ bot:
       /watch -1002229835658 -1003333444555:12345
       /watch -1002229835658 -1003333444555:12345 msgre:plana&(planb|planc)
     copy_help_text: |
-      Use /copy to copy historical messages to a target chat via UserBot DropAuthor with a clickable [转自] link (source deletion does not affect the copy; no local storage). Requires UserBot. Use target:topicId for a forum topic. target=0 is not supported.
+      Use /copy to copy historical messages to a target chat via UserBot DropAuthor with a clickable [转] link at the start (source deletion does not affect the copy; no local storage). Requires UserBot. Use target:topicId for a forum topic. target=0 is not supported.
 
       Syntax:
       /copy <source_id> <target_id[:topicId]> [filter] [count]

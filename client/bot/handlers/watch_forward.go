@@ -72,8 +72,8 @@ var watchForwardAlbumBuf = newForwardAlbumBuffer(func(sourceID, targetID int64, 
 	}
 	logger := log.FromContext(uctx)
 	go func() {
-		// DropAuthor copy; [转自] appended by edit after forward (link defaults to ids[0]).
-		if err := userclient.ForwardMessagesDropAuthor(uctx, sourceID, targetID, ids, targetTopicID, 0); err != nil {
+		// Same as /copy: ForwardMessage expands grouped_id and links [转] to a caption-bearing part.
+		if err := userclient.ForwardMessage(uctx, sourceID, targetID, ids[0], targetTopicID); err != nil {
 			logger.Errorf("forward album failed source=%d target=%d topic=%d ids=%v: %v", sourceID, targetID, targetTopicID, ids, err)
 		}
 	}()

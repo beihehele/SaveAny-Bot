@@ -8,7 +8,7 @@ import (
 	"github.com/krau/SaveAny-Bot/client/user"
 )
 
-// Execute searches source history, then forwards matched messages (DropAuthor) with [转自] link.
+// Execute searches source history, then forwards matched messages (DropAuthor) with [转] link.
 // Album hits are already deduped in collect (one id per grouped_id); ForwardMessage expands the group.
 func (t *Task) Execute(ctx context.Context) error {
 	defer End(t.UserChatID, t.ID)

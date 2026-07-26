@@ -9,7 +9,7 @@ weight: 5
 This feature requires enabling UserBot integration.
 {{< /hint >}}
 
-Scan historical messages from a source channel/group, filter them, and copy them to a target chat via UserBot `forwardMessages` with `DropAuthor` (optionally into a forum topic). A clickable `[转自]` link is appended afterward. Deleting the source does not affect the copy. No download, no local storage.
+Scan historical messages from a source channel/group, filter them, and copy them to a target chat via UserBot `forwardMessages` with `DropAuthor` (optionally into a forum topic). A clickable `[转]` link is prepended afterward. Deleting the source does not affect the copy. No download, no local storage.
 
 ## Usage
 
@@ -57,7 +57,7 @@ Examples:
 - With keywords: Telegram server search (`messages.search`); without filter: history pagination
 - Two-phase progress: scanning → sending; cancel via the button or `/cancel`
 - Only one running `/copy` task per user at a time
-- Matched messages are forwarded with `DropAuthor`; albums stay as one group; `[转自]` is appended by editing the caption
+- Matched messages are forwarded with `DropAuthor`; albums stay as one group; `[转]` is prepended by editing the caption
 - `count` is per hit (an album counts as one hit)
 - Performed by the **UserBot account**; original text formatting is preserved by forward
 
