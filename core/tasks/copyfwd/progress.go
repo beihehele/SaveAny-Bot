@@ -112,8 +112,8 @@ func (p *Progress) edit(ctx context.Context, text string, withCancel bool, force
 			},
 		})
 	} else {
-		// Clear cancel button on terminal states.
-		req.SetReplyMarkup(&tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{}})
+		// Empty inline keyboard clears the cancel button (nil Rows, not Rows: []).
+		req.SetReplyMarkup(&tg.ReplyInlineMarkup{})
 	}
 	ext := tgutil.ExtFromContext(ctx)
 	if ext == nil {
@@ -121,6 +121,15 @@ func (p *Progress) edit(ctx context.Context, text string, withCancel bool, force
 	}
 	if _, err := ext.EditMessage(p.ChatID, req); err != nil {
 		if tgerr.Is(err, "MESSAGE_NOT_MODIFIED") {
+			return
+		}
+		// Some clients reject empty markup; still apply the terminal text.
+		if !withCancel && tgerr.Is(err, "REPLY_MARKUP_INVALID") {
+			retry := &tg.MessagesEditMessageRequest{ID: p.MessageID}
+			retry.SetMessage(text)
+			if _, err2 := ext.EditMessage(p.ChatID, retry); err2 != nil && !tgerr.Is(err2, "MESSAGE_NOT_MODIFIED") {
+				log.FromContext(ctx).Debugf("edit copy progress message: %v", err2)
+			}
 			return
 		}
 		log.FromContext(ctx).Debugf("edit copy progress message: %v", err)
