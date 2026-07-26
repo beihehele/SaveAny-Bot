@@ -17,12 +17,12 @@ func TestParseWatchArgs(t *testing.T) {
 		omitTarget     bool
 	}{
 		{name: "source only", args: []string{"-1001"}, wantSource: "-1001", omitTarget: true},
-		{name: "source+filter", args: []string{"-1001", "msgre:.*a.*"}, wantSource: "-1001", wantFilter: "msgre:.*a.*", targetIsFilter: true, omitTarget: true},
+		{name: "source+filter", args: []string{"-1001", "msgre:a|b"}, wantSource: "-1001", wantFilter: "msgre:a|b", targetIsFilter: true, omitTarget: true},
 		{name: "source+target", args: []string{"-1001", "-1002"}, wantSource: "-1001", wantTarget: "-1002"},
 		{name: "source+target+topic", args: []string{"-1001", "-1002:12345"}, wantSource: "-1001", wantTarget: "-1002:12345"},
-		{name: "source+target+topic+filter", args: []string{"-1001", "-1002:12345", "msgre:.*a.*"}, wantSource: "-1001", wantTarget: "-1002:12345", wantFilter: "msgre:.*a.*"},
-		{name: "source+zero+filter", args: []string{"-1001", "0", "msgre:.*a.*"}, wantSource: "-1001", wantTarget: "0", wantFilter: "msgre:.*a.*"},
-		{name: "source+target+filter", args: []string{"-1001", "-1002", "msgre:.*a.*"}, wantSource: "-1001", wantTarget: "-1002", wantFilter: "msgre:.*a.*"},
+		{name: "source+target+topic+filter", args: []string{"-1001", "-1002:12345", "msgre:a|b"}, wantSource: "-1001", wantTarget: "-1002:12345", wantFilter: "msgre:a|b"},
+		{name: "source+zero+filter", args: []string{"-1001", "0", "msgre:a|b"}, wantSource: "-1001", wantTarget: "0", wantFilter: "msgre:a|b"},
+		{name: "source+target+filter", args: []string{"-1001", "-1002", "msgre:a|b"}, wantSource: "-1001", wantTarget: "-1002", wantFilter: "msgre:a|b"},
 		{name: "empty", args: nil, wantErr: true},
 	}
 	for _, tt := range tests {
@@ -104,7 +104,7 @@ func TestWatchFilterMatches(t *testing.T) {
 		t.Fatal("expected match")
 	}
 	if watchFilterMatches("msgre:hello", "") {
-		t.Fatal("empty caption should not match unless pattern allows")
+		t.Fatal("empty text should not match hello")
 	}
 	if watchFilterMatches("msgre:hello", "world") {
 		t.Fatal("expected no match")
@@ -112,8 +112,8 @@ func TestWatchFilterMatches(t *testing.T) {
 }
 
 func TestFormatWatchListLine(t *testing.T) {
-	got := formatWatchListLine(3, "源频道", "目标群#VIP", "msgre:.*plana.*")
-	want := "[3] 源频道 -> 目标群#VIP msgre:.*plana.*"
+	got := formatWatchListLine(3, "源频道", "目标群#VIP", "msgre:plana|planb")
+	want := "[3] 源频道 -> 目标群#VIP msgre:plana|planb"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}

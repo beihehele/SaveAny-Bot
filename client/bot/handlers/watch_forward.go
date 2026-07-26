@@ -35,8 +35,7 @@ func newForwardAlbumBuffer(onFlush func(sourceID, targetID int64, targetTopicID 
 	}
 }
 
-// add buffers one album part. filterMatched marks whether this part (or no filter) matched;
-// the album is forwarded only if any part matched.
+// add buffers one album part. The album is forwarded only if any part matched the filter.
 func (b *forwardAlbumBuffer) add(sourceID, targetID int64, targetTopicID int, groupedID int64, messageID int, filterMatched bool, timeout time.Duration) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -73,7 +72,8 @@ var watchForwardAlbumBuf = newForwardAlbumBuffer(func(sourceID, targetID int64, 
 	}
 	logger := log.FromContext(uctx)
 	go func() {
-		if err := userclient.ForwardMessagesDropAuthor(uctx, sourceID, targetID, ids, targetTopicID); err != nil {
+		// DropAuthor copy; [转自] appended by edit after forward (link defaults to ids[0]).
+		if err := userclient.ForwardMessagesDropAuthor(uctx, sourceID, targetID, ids, targetTopicID, 0); err != nil {
 			logger.Errorf("forward album failed source=%d target=%d topic=%d ids=%v: %v", sourceID, targetID, targetTopicID, ids, err)
 		}
 	}()

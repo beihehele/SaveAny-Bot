@@ -85,7 +85,7 @@ bot:
       Example:
       /save @acherkrau 114-514
     watch_help_text: |
-      Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target forwards via UserBot (no download). Use target:topicId to forward into a forum topic.
+      Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target is copied via UserBot DropAuthor with a clickable [转自] link (source deletion does not affect the copy). Use target:topicId for a forum topic.
 
       Syntax:
       /watch <source_id> [target_id[:topicId]] [filter]
@@ -98,16 +98,16 @@ bot:
       Parameters:
       - <source_id>: Source chat ID or username
       - [target_id[:topicId]]: Target chat ID; 0 means save to default storage; :topicId is forum topic ID (from /lstopic)
-      - [filter]: Optional, format is filter_type:expression
+      - [filter]: Optional msgre:<boolean expression> (& | ! () keywords, case-insensitive)
 
       Examples:
       /watch -1002229835658
-      /watch -1002229835658 0 msgre:.*plana.*
+      /watch -1002229835658 0 msgre:plana|planb
       /watch -1002229835658 -1003333444555
       /watch -1002229835658 -1003333444555:12345
-      /watch -1002229835658 -1003333444555:12345 msgre:.*plana.*
+      /watch -1002229835658 -1003333444555:12345 msgre:plana&(planb|planc)
     copy_help_text: |
-      Use /copy to forward historical messages from a source chat to a target chat (forward only, no local storage). Requires UserBot. Use target:topicId for a forum topic. target=0 is not supported.
+      Use /copy to copy historical messages to a target chat via UserBot DropAuthor with a clickable [转自] link (source deletion does not affect the copy; no local storage). Requires UserBot. Use target:topicId for a forum topic. target=0 is not supported.
 
       Syntax:
       /copy <source_id> <target_id[:topicId]> [filter] [count]
@@ -115,17 +115,17 @@ bot:
       Parameters:
       - <source_id>: Source chat ID or username
       - <target_id[:topicId]>: Target chat ID (required, cannot be 0); :topicId is forum topic ID (from /lstopic)
-      - [filter]: Optional, only msgre:<regexp> is supported
+      - [filter]: Optional msgre:<boolean expression> (& | ! () keywords, case-insensitive)
       - [count]: Optional hit count, default 500, max 5000
 
       Examples:
       /copy -1002229835658 -1003333444555
-      /copy -1002229835658 -1003333444555:12345 msgre:.*plana.*
-      /copy -1002229835658 -1003333444555 msgre:.*plana.* 100
+      /copy -1002229835658 -1003333444555:12345 msgre:plana|planb
+      /copy -1002229835658 -1003333444555 msgre:plana&(planb|planc) 100
       /copy -1002229835658 -1003333444555 50
     common:
       cancel_button_text: "Cancel"
-      error_invalid_regex: "Invalid regex: {{.Error}}"
+      error_invalid_regex: "Invalid filter expression: {{.Error}}"
       error_invalid_msg_id_range: "Invalid message ID range: {{.Error}}"
       error_invalid_id_or_username: "Invalid ID or username: {{.Error}}"
       error_get_messages_failed: "Failed to get messages: {{.Error}}"
@@ -463,7 +463,7 @@ bot:
       transfer_avg_speed_prefix: "\nAverage speed: "
       transfer_failed_files_prefix: "\nFailed files: "
       copy_scanning: "Scanning {{.Matched}}/{{.Count}} (msg#{{.At}})"
-      copy_forwarding: "Forwarding {{.Done}}/{{.Total}}"
+      copy_forwarding: "Sending {{.Done}}/{{.Total}}"
       copy_done: "Done: ok {{.OK}}, fail {{.Fail}}"
       copy_canceled: "Copy task canceled"
     syncpeers:

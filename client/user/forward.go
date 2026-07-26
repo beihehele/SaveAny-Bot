@@ -5,13 +5,23 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
+	"strings"
+	"unicode/utf16"
 
 	"github.com/celestix/gotgproto/ext"
+	"github.com/charmbracelet/log"
 	"github.com/gotd/td/constant"
+	"github.com/gotd/td/telegram/message/entity"
+	"github.com/gotd/td/telegram/message/styling"
 	"github.com/gotd/td/tg"
+	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 )
 
-func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, messageIDs []int, topMsgID int) error {
+const attributionLabel = "[转自]"
+
+// ForwardMessagesDropAuthor copies messages with DropAuthor (independent of source deletion),
+// then appends a clickable [转自] link on the caption/text message pointing to sourceLinkMsgID.
+func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, messageIDs []int, topMsgID, sourceLinkMsgID int) error {
 	if ctx == nil {
 		return fmt.Errorf("user context is nil")
 	}
@@ -20,6 +30,9 @@ func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, mes
 	}
 	ids := append([]int(nil), messageIDs...)
 	sort.Ints(ids)
+	if sourceLinkMsgID == 0 {
+		sourceLinkMsgID = ids[0]
+	}
 
 	fromPeer, err := resolveInputPeer(ctx, fromChatID)
 	if err != nil {
@@ -32,11 +45,7 @@ func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, mes
 
 	randomIDs := make([]int64, len(ids))
 	for i := range randomIDs {
-		var b [8]byte
-		if _, err := rand.Read(b[:]); err != nil {
-			return fmt.Errorf("random id: %w", err)
-		}
-		randomIDs[i] = int64(binary.LittleEndian.Uint64(b[:]))
+		randomIDs[i] = randomID()
 	}
 
 	req := &tg.MessagesForwardMessagesRequest{
@@ -50,11 +59,156 @@ func ForwardMessagesDropAuthor(ctx *ext.Context, fromChatID, toChatID int64, mes
 		req.SetTopMsgID(topMsgID)
 	}
 
-	_, err = ctx.Raw.MessagesForwardMessages(ctx, req)
+	updates, err := ctx.Raw.MessagesForwardMessages(ctx, req)
 	if err != nil {
 		return fmt.Errorf("forward messages: %w", err)
 	}
+
+	link, err := tgutil.BuildMessageLink(ctx, fromChatID, sourceLinkMsgID)
+	if err != nil {
+		log.FromContext(ctx).Warnf("build source link for attribution: %v", err)
+		return nil
+	}
+	if err := appendAttributionToForwarded(ctx, toPeer, updates, link); err != nil {
+		// Content already copied independently; attribution is best-effort.
+		log.FromContext(ctx).Warnf("append [转自] after forward: %v", err)
+	}
 	return nil
+}
+
+// ForwardMessage copies one message (or its whole album) with DropAuthor and [转自] link.
+func ForwardMessage(ctx *ext.Context, fromChatID, toChatID int64, msgID, topMsgID int) error {
+	msg, err := tgutil.GetMessageByID(ctx, fromChatID, msgID)
+	if err != nil {
+		return fmt.Errorf("get source message: %w", err)
+	}
+	ids := []int{msgID}
+	linkID := msgID
+	if gid, ok := msg.GetGroupedID(); ok && gid != 0 {
+		group, err := tgutil.GetGroupedMessages(ctx, fromChatID, msg)
+		if err == nil && len(group) > 0 {
+			ids = make([]int, 0, len(group))
+			for _, m := range group {
+				ids = append(ids, m.GetID())
+				if strings.TrimSpace(m.GetMessage()) != "" {
+					linkID = m.GetID()
+				}
+			}
+			sort.Ints(ids)
+		}
+	}
+	return ForwardMessagesDropAuthor(ctx, fromChatID, toChatID, ids, topMsgID, linkID)
+}
+
+func appendAttributionToForwarded(ctx *ext.Context, toPeer tg.InputPeerClass, updates tg.UpdatesClass, link string) error {
+	msgs := messagesFromUpdates(updates)
+	if len(msgs) == 0 {
+		return fmt.Errorf("no messages in forward updates")
+	}
+	target := pickAttributionMessage(msgs)
+	if target == nil {
+		return fmt.Errorf("no editable message in forward result")
+	}
+	newText, entities, err := AppendAttributionLink(target.GetMessage(), target.Entities, link)
+	if err != nil {
+		return err
+	}
+	edit := &tg.MessagesEditMessageRequest{
+		Peer: toPeer,
+		ID:   target.GetID(),
+	}
+	edit.SetMessage(newText)
+	if len(entities) > 0 {
+		edit.SetEntities(entities)
+	}
+	if _, err := ctx.Raw.MessagesEditMessage(ctx, edit); err != nil {
+		return fmt.Errorf("edit message %d: %w", target.GetID(), err)
+	}
+	return nil
+}
+
+func pickAttributionMessage(msgs []*tg.Message) *tg.Message {
+	for _, m := range msgs {
+		if m != nil && strings.TrimSpace(m.GetMessage()) != "" {
+			return m
+		}
+	}
+	for _, m := range msgs {
+		if m != nil {
+			return m
+		}
+	}
+	return nil
+}
+
+func messagesFromUpdates(u tg.UpdatesClass) []*tg.Message {
+	var out []*tg.Message
+	add := func(mc tg.MessageClass) {
+		if m, ok := mc.(*tg.Message); ok && m != nil {
+			out = append(out, m)
+		}
+	}
+	switch v := u.(type) {
+	case *tg.Updates:
+		for _, up := range v.Updates {
+			switch x := up.(type) {
+			case *tg.UpdateNewMessage:
+				add(x.Message)
+			case *tg.UpdateNewChannelMessage:
+				add(x.Message)
+			}
+		}
+	case *tg.UpdatesCombined:
+		for _, up := range v.Updates {
+			switch x := up.(type) {
+			case *tg.UpdateNewMessage:
+				add(x.Message)
+			case *tg.UpdateNewChannelMessage:
+				add(x.Message)
+			}
+		}
+	case *tg.UpdateShortSentMessage:
+		// No full message body; skip attribution edit.
+	case *tg.UpdateShort:
+		switch x := v.Update.(type) {
+		case *tg.UpdateNewMessage:
+			add(x.Message)
+		case *tg.UpdateNewChannelMessage:
+			add(x.Message)
+		}
+	}
+	return out
+}
+
+// AppendAttributionLink appends a clickable [转自] to text, preserving existing entities.
+func AppendAttributionLink(text string, entities []tg.MessageEntityClass, link string) (string, []tg.MessageEntityClass, error) {
+	if text == "" {
+		return buildAttributionOnly(link)
+	}
+	newText := text + "\n" + attributionLabel
+	out := make([]tg.MessageEntityClass, 0, len(entities)+1)
+	out = append(out, entities...)
+	offset := utf16Len(text + "\n")
+	length := utf16Len(attributionLabel)
+	out = append(out, &tg.MessageEntityTextURL{
+		Offset: offset,
+		Length: length,
+		URL:    link,
+	})
+	return newText, out, nil
+}
+
+func buildAttributionOnly(link string) (string, []tg.MessageEntityClass, error) {
+	eb := entity.Builder{}
+	if err := styling.Perform(&eb, styling.TextURL(attributionLabel, link)); err != nil {
+		return "", nil, fmt.Errorf("build attribution: %w", err)
+	}
+	text, entities := eb.Complete()
+	return text, entities, nil
+}
+
+func utf16Len(s string) int {
+	return len(utf16.Encode([]rune(s)))
 }
 
 func resolveInputPeer(ctx *ext.Context, chatID int64) (tg.InputPeerClass, error) {
@@ -89,7 +243,15 @@ func lookupCachedInputPeer(ctx *ext.Context, chatID int64) tg.InputPeerClass {
 	if peer != nil && !peer.Zero() {
 		return peer
 	}
-	var user constant.TDLibPeerID
-	user.User(plain)
-	return ctx.PeerStorage.GetInputPeerById(int64(user))
+	var userID constant.TDLibPeerID
+	userID.User(plain)
+	return ctx.PeerStorage.GetInputPeerById(int64(userID))
+}
+
+func randomID() int64 {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 0
+	}
+	return int64(binary.LittleEndian.Uint64(b[:]))
 }

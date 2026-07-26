@@ -9,7 +9,7 @@ weight: 4
 This feature requires enabling UserBot integration.
 {{< /hint >}}
 
-Watch media messages from a source chat. When `target=0` (or omitted), messages are saved to default storage. When `target` is another channel/group ID, UserBot forwards them without downloading.
+Watch media messages from a source chat. When `target=0` (or omitted), messages are saved to default storage. When `target` is another channel/group ID, UserBot copies them with `DropAuthor` and appends a clickable `[转自]` link. Deleting the source does not affect the copy.
 
 ## Watch a chat
 
@@ -21,10 +21,10 @@ Examples:
 
 ```
 /watch -1002229835658
-/watch -1002229835658 0 msgre:.*hello.*
+/watch -1002229835658 0 msgre:hello|world
 /watch -1002229835658 -1003333444555
 /watch -1002229835658 -1003333444555:12345
-/watch -1002229835658 -1003333444555:12345 msgre:.*hello.*
+/watch -1002229835658 -1003333444555:12345 msgre:plana&(planb|planc)
 ```
 
 ## List watches
@@ -80,15 +80,16 @@ Output format:
 
 ### msgre
 
-Regex-match the message text. For example:
+After `msgre:` use a keyword boolean expression (`&` AND, `|` OR, `!` NOT, `()` grouping). Case-insensitive substring match. For example:
 
 ```
-/watch -1002229835658 msgre:.*hello.*
+/watch -1002229835658 msgre:plana|planb
+/watch -1002229835658 msgre:plana&(planb|planc)&(!spam)
 ```
 
-## Forwarding notes
+## Forward notes
 
-- Forwarding is performed by the **UserBot account**; the Bot only handles management commands
-- Uses copy mode (`DropAuthor`) so forwarded content is independent of the source
-- Albums/media groups are forwarded in one batch to avoid splitting
+- Performed by the **UserBot account** via `forwardMessages` (`DropAuthor`); the Bot only handles management commands
+- After copy, a `[转自]` hyperlink is appended by edit; original formatting is preserved
+- Album hits are forwarded as a whole media group
 - The source chat must be readable; the target chat must allow sending messages

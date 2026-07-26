@@ -86,7 +86,7 @@ bot:
       示例:
       /save @acherkrau 114-514
     watch_help_text: |
-      使用 /watch 监听聊天。target=0（或省略）时保存到默认存储；target 为频道/群 ID 时由 UserBot 转发（不下载）。目标可为 target:topicId 指定论坛话题。
+      使用 /watch 监听聊天。target=0（或省略）时保存到默认存储；target 为频道/群 ID 时由 UserBot 无来源复制（DropAuthor）并附带可点击的 [转自] 链接；源消息删除不影响副本。目标可为 target:topicId 指定论坛话题。
 
       命令语法:
       /watch <source_id> [target_id[:topicId]] [filter]
@@ -99,16 +99,16 @@ bot:
       参数:
       - <source_id>: 源聊天 ID 或用户名
       - [target_id[:topicId]]: 目标聊天 ID，0 表示保存到默认存储；:topicId 为论坛话题 ID（见 /lstopic）
-      - [filter]: 可选，格式为 过滤器类型:表达式
+      - [filter]: 可选 msgre:<布尔表达式>（& | ! () 关键词，不区分大小写）
 
       命令示例:
       /watch -1002229835658
-      /watch -1002229835658 0 msgre:.*plana.*
+      /watch -1002229835658 0 msgre:plana|planb
       /watch -1002229835658 -1003333444555
       /watch -1002229835658 -1003333444555:12345
-      /watch -1002229835658 -1003333444555:12345 msgre:.*plana.*
+      /watch -1002229835658 -1003333444555:12345 msgre:plana&(planb|planc)
     copy_help_text: |
-      使用 /copy 将源聊天历史消息转发到目标聊天（仅转发，不落本地存储）。需开启 UserBot。目标可为 target:topicId 指定论坛话题。不支持 target=0。
+      使用 /copy 将源聊天历史消息无来源复制到目标聊天（DropAuthor，并附带可点击的 [转自] 链接；源删除不影响副本；不落本地存储）。需开启 UserBot。目标可为 target:topicId 指定论坛话题。不支持 target=0。
 
       命令语法:
       /copy <source_id> <target_id[:topicId]> [filter] [count]
@@ -116,17 +116,17 @@ bot:
       参数:
       - <source_id>: 源聊天 ID 或用户名
       - <target_id[:topicId]>: 目标聊天 ID（必填，不可为 0）；:topicId 为论坛话题 ID（见 /lstopic）
-      - [filter]: 可选，仅支持 msgre:<正则>
+      - [filter]: 可选 msgre:<布尔表达式>（& | ! () 关键词，不区分大小写）
       - [count]: 可选，命中条数，默认 500，最大 5000
 
       命令示例:
       /copy -1002229835658 -1003333444555
-      /copy -1002229835658 -1003333444555:12345 msgre:.*plana.*
-      /copy -1002229835658 -1003333444555 msgre:.*plana.* 100
+      /copy -1002229835658 -1003333444555:12345 msgre:plana|planb
+      /copy -1002229835658 -1003333444555 msgre:plana&(planb|planc) 100
       /copy -1002229835658 -1003333444555 50
     common:
       cancel_button_text: "取消任务"
-      error_invalid_regex: "无效的正则表达式: {{.Error}}"
+      error_invalid_regex: "无效的过滤器表达式: {{.Error}}"
       error_invalid_msg_id_range: "无效的消息ID范围: {{.Error}}"
       error_invalid_id_or_username: "无效的ID或用户名: {{.Error}}"
       error_get_messages_failed: "获取消息失败: {{.Error}}"
@@ -464,7 +464,7 @@ bot:
       transfer_avg_speed_prefix: "\n平均速度: "
       transfer_failed_files_prefix: "\n失败文件数: "
       copy_scanning: "扫描中 {{.Matched}}/{{.Count}}（msg#{{.At}}）"
-      copy_forwarding: "转发中 {{.Done}}/{{.Total}}"
+      copy_forwarding: "发送中 {{.Done}}/{{.Total}}"
       copy_done: "完成：成功 {{.OK}}，失败 {{.Fail}}"
       copy_canceled: "已取消 copy 任务"
     syncpeers:

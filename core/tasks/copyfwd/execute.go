@@ -5,19 +5,11 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/log"
-	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/client/user"
-	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 )
 
-const (
-	windowSize      = 100
-	maxContinue     = 5
-	forwardBatch    = 100
-	maxScanWindows  = 200 // soft cap: ~20k message IDs scanned
-)
-
-// Execute scans source history in windows, then forwards matched messages in batches.
+// Execute searches source history, then forwards matched messages (DropAuthor) with [转自] link.
+// Album hits are already deduped in collect (one id per grouped_id); ForwardMessage expands the group.
 func (t *Task) Execute(ctx context.Context) error {
 	defer End(t.UserChatID, t.ID)
 
@@ -25,13 +17,13 @@ func (t *Task) Execute(ctx context.Context) error {
 	logger.Info("Starting copy-forward task")
 
 	var (
-		execErr   error
-		forwarded int
-		failed    int
+		execErr error
+		copied  int
+		failed  int
 	)
 	defer func() {
 		if t.Progress != nil {
-			t.Progress.OnDone(ctx, forwarded, failed, execErr)
+			t.Progress.OnDone(ctx, copied, failed, execErr)
 		}
 	}()
 
@@ -41,118 +33,44 @@ func (t *Task) Execute(ctx context.Context) error {
 		return execErr
 	}
 
-	maxID, err := user.GetLatestMessageID(uctx, t.SourceID)
+	var onProgress scanProgressFn
+	if t.Progress != nil {
+		onProgress = func(matched, atMsgID int) {
+			t.Progress.OnScan(ctx, matched, t.Count, atMsgID)
+		}
+	}
+	ids, err := collectMatchedIDs(ctx, uctx, t.SourceID, t.Filter, t.Count, onProgress)
 	if err != nil {
-		execErr = fmt.Errorf("get latest message id: %w", err)
+		execErr = fmt.Errorf("collect messages: %w", err)
 		return execErr
 	}
-
-	var all []ScanMsg
-	meta := make(map[int]ScanMsg)
-	hi := maxID
-	var ids []int
-	var matched int
-	windows := 0
-
-	for hi >= 1 {
-		if err := ctx.Err(); err != nil {
-			execErr = err
-			return execErr
+	if t.Progress != nil {
+		at := 0
+		if len(ids) > 0 {
+			at = ids[0]
 		}
-
-		lo := max(1, hi-windowSize+1)
-		msgs, err := tgutil.GetMessagesRange(uctx, t.SourceID, lo, hi)
-		if err != nil {
-			execErr = fmt.Errorf("get messages range [%d,%d]: %w", lo, hi, err)
-			return execErr
-		}
-
-		for _, m := range msgs {
-			if m == nil {
-				continue
-			}
-			sm := scanMsgFromTG(m)
-			all = append(all, sm)
-			meta[sm.ID] = sm
-		}
-		windows++
-
-		ids, matched = CollectForwardIDs(all, t.Filter, t.Count, maxContinue)
-		if t.Progress != nil {
-			t.Progress.OnScan(ctx, matched, t.Count, lo)
-		}
-
-		if matched >= t.Count {
-			// One more older window so albums/continuations that straddle
-			// the stop boundary are still attached before we halt.
-			if lo > 1 {
-				if err := ctx.Err(); err != nil {
-					execErr = err
-					return execErr
-				}
-				extraLo := max(1, lo-windowSize)
-				extraHi := lo - 1
-				extra, err := tgutil.GetMessagesRange(uctx, t.SourceID, extraLo, extraHi)
-				if err != nil {
-					execErr = fmt.Errorf("get messages range [%d,%d]: %w", extraLo, extraHi, err)
-					return execErr
-				}
-				for _, m := range extra {
-					if m == nil {
-						continue
-					}
-					sm := scanMsgFromTG(m)
-					all = append(all, sm)
-					meta[sm.ID] = sm
-				}
-				ids, matched = CollectForwardIDs(all, t.Filter, t.Count, maxContinue)
-				if t.Progress != nil {
-					t.Progress.OnScan(ctx, matched, t.Count, extraLo)
-				}
-			}
-			break
-		}
-		if lo == 1 || windows >= maxScanWindows {
-			break
-		}
-		hi = lo - 1
+		t.Progress.OnScan(ctx, len(ids), t.Count, at)
 	}
 
-	logger.Infof("Scan done: matched=%d forwardIDs=%d windows=%d", matched, len(ids), windows)
+	logger.Infof("Scan done: matched=%d want=%d", len(ids), t.Count)
 
-	batches := packForwardBatches(ids, meta, forwardBatch)
 	total := len(ids)
-	done := 0
-	for _, batch := range batches {
+	for i, msgID := range ids {
 		if err := ctx.Err(); err != nil {
 			execErr = err
 			return execErr
 		}
-
-		if err := user.ForwardMessagesDropAuthor(uctx, t.SourceID, t.TargetID, batch, t.TargetTopicID); err != nil {
-			logger.Errorf("Forward batch ids=%v failed: %v", batch, err)
-			failed += len(batch)
+		if err := user.ForwardMessage(uctx, t.SourceID, t.TargetID, msgID, t.TargetTopicID); err != nil {
+			logger.Errorf("Forward msg %d failed: %v", msgID, err)
+			failed++
 		} else {
-			forwarded += len(batch)
+			copied++
 		}
-		done += len(batch)
 		if t.Progress != nil {
-			t.Progress.OnForward(ctx, done, total)
+			t.Progress.OnForward(ctx, i+1, total)
 		}
 	}
 
-	logger.Infof("Copy-forward done: ok=%d fail=%d", forwarded, failed)
+	logger.Infof("Copy-forward done: ok=%d fail=%d", copied, failed)
 	return nil
-}
-
-func scanMsgFromTG(m *tg.Message) ScanMsg {
-	sm := ScanMsg{
-		ID:   m.GetID(),
-		Text: m.GetMessage(),
-	}
-	if gid, ok := m.GetGroupedID(); ok {
-		sm.GroupedID = gid
-		sm.HasGroup = true
-	}
-	return sm
 }

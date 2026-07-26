@@ -484,9 +484,7 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 			continue
 		}
 		msgText := event.File.Message().GetMessage()
-		// Watch media events are debounced per-message; album parts can arrive on the
-		// channel staggered by that debounce window. Keep the album buffer open at least
-		// that long so caption-bearing parts are not flushed alone.
+		// Album parts can arrive staggered by media-group debounce; keep buffers open at least that long.
 		timeout := time.Duration(max(config.C().Telegram.MediaGroupTimeout, 1)) * time.Second
 		if d := userclient.MediaMessageDebounce(); d > timeout {
 			timeout = d
@@ -498,12 +496,16 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 
 			if chat.TargetID != 0 {
 				if isAlbum {
-					// Albums often only have caption on one message; defer filter to album flush.
+					// Defer filter to album flush; forward whole group with DropAuthor + [转自].
 					watchForwardAlbumBuf.add(event.ChatID, chat.TargetID, chat.TargetTopicID, groupID, event.MessageID, filterMatched, timeout)
 				} else if filterMatched {
 					sourceID, targetID, topicID, msgID := event.ChatID, chat.TargetID, chat.TargetTopicID, event.MessageID
 					go func() {
-						if err := userclient.ForwardMessagesDropAuthor(event.Ctx, sourceID, targetID, []int{msgID}, topicID); err != nil {
+						uctx := userclient.GetCtx()
+						if uctx == nil {
+							return
+						}
+						if err := userclient.ForwardMessage(uctx, sourceID, targetID, msgID, topicID); err != nil {
 							logger.Errorf("forward failed source=%d target=%d topic=%d msg=%d: %v", sourceID, targetID, topicID, msgID, err)
 						}
 					}()

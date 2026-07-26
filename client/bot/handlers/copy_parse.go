@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+
+	"github.com/krau/SaveAny-Bot/pkg/msgfilter"
 )
 
 const (
@@ -41,7 +43,7 @@ func parseCopyArgs(args []string) (copyArgs, error) {
 	filterSet := false
 	for _, a := range args[2:] {
 		switch {
-		case strings.HasPrefix(a, "msgre:"):
+		case strings.HasPrefix(a, msgfilter.Prefix):
 			if filterSet {
 				return copyArgs{}, errCopyArgsInvalid
 			}
