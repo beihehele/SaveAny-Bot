@@ -3,17 +3,19 @@
 package js
 
 import (
+	"context"
+
 	"github.com/charmbracelet/log"
 	"github.com/dop251/goja"
 )
 
-var jsPlaywright = func(vm *goja.Runtime, _ *log.Logger) *goja.Object {
+func jsPlaywright(vm *goja.Runtime, _ *log.Logger, _ func() context.Context) (*goja.Object, error) {
 	pwObj := vm.NewObject()
 	unsupported := vm.ToValue(map[string]any{
 		"error": "playwright is not supported in this build",
 	})
-	pwObj.Set("get", func(call goja.FunctionCall) goja.Value {
+	err := pwObj.Set("get", func(call goja.FunctionCall) goja.Value {
 		return unsupported
 	})
-	return pwObj
+	return pwObj, err
 }

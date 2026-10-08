@@ -15,11 +15,3 @@ type PluginMeta struct {
 	Description string `json:"description"`
 	Author      string `json:"author"`
 }
-
-type ParserMethod uint
-
-const (
-	_ ParserMethod = iota
-	ParserMethodCanHandle
-	ParserMethodParse
-)

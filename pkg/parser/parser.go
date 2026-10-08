@@ -4,11 +4,34 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"maps"
+	"slices"
 )
 
 type Parser interface {
 	CanHandle(url string) bool
 	Parse(ctx context.Context, url string) (*Item, error)
+}
+
+// ContextualParser optionally makes URL matching cancellable while preserving
+// the Parser interface implemented by existing native parsers and plugins.
+type ContextualParser interface {
+	Parser
+	CanHandleContext(ctx context.Context, url string) bool
+}
+
+// CanHandleWithContext uses cancellable matching when the parser supports it.
+func CanHandleWithContext(ctx context.Context, p Parser, url string) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	var matched bool
+	if contextual, ok := p.(ContextualParser); ok {
+		matched = contextual.CanHandleContext(ctx, url)
+	} else {
+		matched = p.CanHandle(url)
+	}
+	return matched && ctx.Err() == nil
 }
 
 type ConfigurableParser interface {
@@ -57,14 +80,14 @@ func (r *Resource) ID() string {
 	h.Write([]byte(r.Extension))
 	fmt.Fprintf(h, "%d", r.Size)
 
-	for k, v := range r.Hash {
+	for _, k := range slices.Sorted(maps.Keys(r.Hash)) {
 		h.Write([]byte(k))
-		h.Write([]byte(v))
+		h.Write([]byte(r.Hash[k]))
 	}
 
-	for k, v := range r.Headers {
+	for _, k := range slices.Sorted(maps.Keys(r.Headers)) {
 		h.Write([]byte(k))
-		h.Write([]byte(v))
+		h.Write([]byte(r.Headers[k]))
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil))

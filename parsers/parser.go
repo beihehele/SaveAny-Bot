@@ -20,12 +20,15 @@ var (
 )
 
 func ParseWithContext(ctx context.Context, url string) (*parser.Item, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	ch := make(chan *parser.Item, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
 		for _, pser := range parsers.Get() {
-			if !pser.CanHandle(url) {
+			if !parser.CanHandleWithContext(ctx, pser, url) {
 				continue
 			}
 			item, err := pser.Parse(ctx, url)
@@ -36,13 +39,23 @@ func ParseWithContext(ctx context.Context, url string) (*parser.Item, error) {
 			ch <- item
 			return
 		}
-		errCh <- ErrNoParserFound
+		if err := ctx.Err(); err != nil {
+			errCh <- err
+		} else {
+			errCh <- ErrNoParserFound
+		}
 	}()
 
 	select {
 	case item := <-ch:
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		return item, nil
 	case err := <-errCh:
+		if cancelled := ctx.Err(); cancelled != nil {
+			return nil, cancelled
+		}
 		return nil, err
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -51,8 +64,13 @@ func ParseWithContext(ctx context.Context, url string) (*parser.Item, error) {
 
 // CanHandle checks if any registered parser can handle the given URL and returns the parser if found.
 func CanHandle(url string) (bool, parser.Parser) {
+	return CanHandleWithContext(context.Background(), url)
+}
+
+// CanHandleWithContext selects a parser using request-scoped matching when available.
+func CanHandleWithContext(ctx context.Context, url string) (bool, parser.Parser) {
 	for _, pser := range parsers.Get() {
-		if pser.CanHandle(url) {
+		if parser.CanHandleWithContext(ctx, pser, url) {
 			return true, pser
 		}
 	}
