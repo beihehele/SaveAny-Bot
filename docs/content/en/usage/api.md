@@ -161,6 +161,7 @@ Authorization: Bearer <token>
 | `path` | string | No | Subdirectory path within the storage |
 | `webhook` | string | No | Callback URL invoked when the task reaches a terminal state |
 | `params` | object | Yes | Type-specific parameters — see below |
+| `result_policy` | string | No | Supported only by `transfer`; `legacy` keeps existing completion semantics and adds counts, `strict` requires every submitted file to succeed; omission preserves the original contract |
 
 **Response `201 Created`:**
 
@@ -345,6 +346,53 @@ For `transfer` tasks, the top-level `storage` field is still required for valida
 | `source_path` | string | Yes | Path within the source storage; must contain at least one file |
 | `target_storage` | string | Yes | Target storage name |
 | `target_path` | string | Yes | Destination path within the target storage |
+
+###### Transfer result policy
+
+`result_policy` is a top-level, per-request option. It does not change global configuration or other tasks. In `GET /api/v1/task-types`, the transfer capability advertises `result_policies` as `legacy` and `strict`. An unknown policy, or any nonempty policy for another type (including `tgfiles`), returns `400 Bad Request`. An empty string is treated as omission.
+
+| Choice | Terminal state and hooks | Queries and webhooks |
+| --- | --- | --- |
+| Omitted or empty string | Keeps existing semantics; when errors are ignored, partial file failures can still produce completed / TaskSuccess | No result fields added |
+| `legacy` | Keeps existing semantics | Creation echoes `result_policy`; queries and terminal webhooks can include counts |
+| `strict` | All submitted files must succeed for completed / TaskSuccess; partial or total failure produces failed / TaskFail | Creation echoes `result_policy`; queries and terminal webhooks can include counts |
+
+```json
+{
+  "type": "transfer",
+  "storage": "local",
+  "result_policy": "strict",
+  "params": {
+    "source_storage": "source",
+    "source_path": "photos",
+    "target_storage": "local",
+    "target_path": "backup"
+  }
+}
+```
+
+This policy changes completion interpretation after execution. It preserves file scheduling: ordinary file errors can still allow remaining files to run, while cancellation and deadline errors follow the existing execution path. Saved files are not automatically rolled back or retried. Existing execution errors are preserved; only for a successful return does `strict` first check parent cancellation/deadline and then validate counts. User cancellation remains cancelled / TaskCancel, and deadline expiration remains failed / TaskFail. No terminal state is added. Telegram Bot and media-group flows do not use this option.
+
+With `legacy` or `strict`, a task that entered and finished execution includes `result_policy` and `result_summary` in queries and terminal webhooks, for example:
+
+```json
+{
+  "result_policy": "strict",
+  "result_summary": {
+    "total": 2,
+    "pending": 0,
+    "running": 0,
+    "succeeded": 1,
+    "failed": 1,
+    "cancelled": 0,
+    "interrupted": 0
+  }
+}
+```
+
+Each submitted file belongs to one state; the six state counts sum to `total`. Counts exclude files removed during preprocessing and contain no names, per-file errors, or retry manifest. If an operation returns cancellation/deadline, it is recorded as `cancelled` when the parent context has ended, otherwise as `interrupted`. This describes the observed state rather than proving a unique cause among concurrent events. Queued tasks and tasks cancelled before execution have no execution summary; absence does not mean every file succeeded.
+
+`DELETE` reports cancelled immediately. If execution has not yet exited, that cancellation webhook may lack counts. After execution exits, queries can gain final counts and a new `updated_at`, while the terminal status stays cancelled and no second notification is sent. Webhook receivers should still deduplicate by task ID and terminal status.
 
 ---
 

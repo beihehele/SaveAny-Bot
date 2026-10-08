@@ -25,14 +25,16 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/parser"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 	"github.com/krau/SaveAny-Bot/pkg/telegraph"
 	"github.com/krau/SaveAny-Bot/storage"
 )
 
 // TaskFactory 任务工厂
 type TaskFactory struct {
-	ctx        context.Context
-	prepareCtx context.Context
+	ctx          context.Context
+	prepareCtx   context.Context
+	resultPolicy taskresult.Policy
 }
 
 // CreateTaskWithContext limits preprocessing to the request. Enqueued tasks keep
@@ -57,6 +59,18 @@ func NewTaskFactory(ctx context.Context) *TaskFactory {
 
 // CreateTask 创建任务
 func (f *TaskFactory) CreateTask(req *CreateTaskRequest) (*CreateTaskResponse, error) {
+	if req == nil {
+		return nil, errors.New("task request is required")
+	}
+	if err := validateResultPolicy(req.Type, req.ResultPolicy); err != nil {
+		return nil, err
+	}
+	requestFactory := *f
+	requestFactory.resultPolicy = req.ResultPolicy
+	return requestFactory.createTask(req)
+}
+
+func (f *TaskFactory) createTask(req *CreateTaskRequest) (*CreateTaskResponse, error) {
 	// 验证存储
 	stor, ok := storage.GetStorage(req.Storage)
 	if !ok {
@@ -94,12 +108,16 @@ func (f *TaskFactory) registerAndEnqueueTask(task core.Executable, taskType task
 	info := RegisterTask(taskID, string(taskType), storageName, path, task.Title(), webhook)
 	info.mu.Lock()
 	info.webhookContext = f.ctx
+	info.ResultPolicy = f.resultPolicy
 	info.mu.Unlock()
 
 	// Inject the progress sink into the context so the task's Emit calls update
 	// the API store (and fire the webhook on terminal states) without the task
 	// knowing about the API.
 	taskCtx := taskevent.WithSink(f.ctx, info)
+	if f.resultPolicy != "" {
+		taskCtx = taskresult.WithPolicy(taskCtx, f.resultPolicy)
+	}
 
 	err := core.AddTask(taskCtx, task)
 	if err != nil {
@@ -408,9 +426,10 @@ func (f *TaskFactory) createTransferTask(taskID string, createdAt time.Time, req
 	}
 
 	return &CreateTaskResponse{
-		TaskID:    taskID,
-		Type:      tasktype.TaskTypeTransfer,
-		Status:    TaskStatusQueued,
-		CreatedAt: createdAt,
+		TaskID:       taskID,
+		Type:         tasktype.TaskTypeTransfer,
+		Status:       TaskStatusQueued,
+		CreatedAt:    createdAt,
+		ResultPolicy: f.resultPolicy,
 	}, nil
 }

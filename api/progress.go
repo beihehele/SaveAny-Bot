@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 // TaskProgressInfo stores the progress of an API-submitted task. All fields are
@@ -31,6 +32,8 @@ type TaskProgressInfo struct {
 	Webhook         string
 	webhookNotified bool
 	webhookContext  context.Context
+	ResultPolicy    taskresult.Policy
+	ResultSummary   *taskresult.Counts
 }
 
 // progressStore holds all API tasks. Entries are removed a fixed duration after
@@ -165,9 +168,26 @@ func (t *TaskProgressInfo) SetError(err string) {
 // snapshot returns a point-in-time copy of the fields needed to render a
 // response, so callers never touch the mutex directly.
 func (t *TaskProgressInfo) snapshot() (status TaskStatus, total, downloaded int64, totalFiles, downloadedFiles int, startedAt time.Time, err string, updatedAt time.Time) {
+	s := t.responseSnapshot()
+	return s.status, s.total, s.downloaded, s.totalFiles, s.downloadedFiles, s.startedAt, s.err, s.updatedAt
+}
+
+type taskProgressSnapshot struct {
+	status                      TaskStatus
+	total, downloaded           int64
+	totalFiles, downloadedFiles int
+	startedAt, updatedAt        time.Time
+	err                         string
+	resultPolicy                taskresult.Policy
+	resultSummary               *taskresult.Counts
+}
+
+func (t *TaskProgressInfo) responseSnapshot() taskProgressSnapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.Status, t.TotalBytes, t.DownloadedBytes, t.TotalFiles, t.DownloadedFiles, t.StartedAt, t.Error, t.UpdatedAt
+	return taskProgressSnapshot{status: t.Status, total: t.TotalBytes, downloaded: t.DownloadedBytes,
+		totalFiles: t.TotalFiles, downloadedFiles: t.DownloadedFiles, startedAt: t.StartedAt, err: t.Error,
+		updatedAt: t.UpdatedAt, resultPolicy: t.ResultPolicy, resultSummary: cloneResultSummary(t.ResultSummary)}
 }
 
 // Emit implements taskevent.Sink. It translates task lifecycle events into
@@ -175,6 +195,14 @@ func (t *TaskProgressInfo) snapshot() (status TaskStatus, total, downloaded int6
 func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 	t.mu.Lock()
 	if t.Status.terminal() {
+		// DELETE reports cancellation immediately, before Execute finishes. Allow
+		// its final counts to enrich GET without changing the terminal decision
+		// or sending a second webhook. Other late terminal events remain ignored.
+		if t.Status == TaskStatusCancelled && e.Phase == taskevent.PhaseDone && t.ResultSummary == nil {
+			if t.acceptResultSummaryLocked(e.ResultSummary) {
+				t.UpdatedAt = time.Now()
+			}
+		}
 		t.mu.Unlock()
 		return
 	}
@@ -200,6 +228,7 @@ func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 			t.DownloadedFiles = e.DownloadedFiles
 		}
 	case taskevent.PhaseDone:
+		t.acceptResultSummaryLocked(e.ResultSummary)
 		if errors.Is(e.Err, context.Canceled) {
 			t.Status = TaskStatusCancelled
 		} else if e.Err != nil {
@@ -214,6 +243,14 @@ func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 	ctx := t.webhookContext
 	t.mu.Unlock()
 	SendWebhook(ctx, payload)
+}
+
+func (t *TaskProgressInfo) acceptResultSummaryLocked(summary *taskresult.Counts) bool {
+	if t.ResultPolicy != "" && summary != nil && summary.Valid() {
+		t.ResultSummary = cloneResultSummary(summary)
+		return true
+	}
+	return false
 }
 
 func (s TaskStatus) terminal() bool {
@@ -231,5 +268,8 @@ func (t *TaskProgressInfo) notificationLocked() *WebhookPayload {
 	if t.Error != "" {
 		err = errors.New(t.Error)
 	}
-	return CreateWebhookPayload(t.TaskID, t.Type, t.Status, t.Storage, t.Path, err)
+	payload := CreateWebhookPayload(t.TaskID, t.Type, t.Status, t.Storage, t.Path, err)
+	payload.ResultPolicy = t.ResultPolicy
+	payload.ResultSummary = cloneResultSummary(t.ResultSummary)
+	return payload
 }

@@ -63,13 +63,28 @@ blacklist = true
 使用 Docker 运行 Save Any Bot:
 
 ```bash
-docker run -d --name saveany-bot \
+docker run -d --name saveany-bot --restart unless-stopped \
     -v ./config.toml:/app/config.toml \
+    -v ./data:/app/data \
+    -v ./cache:/app/cache \
     -v ./downloads:/app/downloads \
     ghcr.io/beihehele/saveany-bot:latest
 ```
 
-请 [**查看文档**](https://sabot.unv.app/) 以获取更多配置选项和使用方法.
+`data` 保存数据库和 Telegram 会话, 重建容器时必须保留; `cache` 仅用于临时文件. 稳定部署应固定到已验收的镜像版本或 digest.
+
+请查看本分支的[安装与更新说明](docs/content/zh/deployment/installation.md)和[配置说明](docs/content/zh/deployment/configuration/_index.md). [上游文档网站](https://sabot.unv.app/)可能对应不同版本.
+
+## 开发与测试
+
+视频集成测试需要 `ffmpeg` 和 `ffprobe` 在 `PATH` 中可用。测试会在临时目录生成视频和分卷样本并自动清理，不需要额外下载测试文件或提供生产 Bot 配置、会话。
+
+```bash
+go test ./...
+go vet ./...
+```
+
+真实 Telegram 媒体组联调使用独立 Bot、UserBot 会话和测试聊天，按[媒体组验收清单](docs/content/zh/usage/watch.md#媒体组验收清单)逐项检查。自动测试通过与真实联调通过应分别记录。
 
 ## 赞助
 

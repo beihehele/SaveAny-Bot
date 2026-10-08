@@ -6,7 +6,7 @@ This document provides essential information for AI coding agents working on the
 
 SaveAny-Bot is a Telegram bot written in Go that saves files/messages from Telegram and various websites to multiple storage backends (local, S3, MinIO, WebDAV, AList, Telegram). It features a plugin system for parsing web content and extensible storage backends.
 
-**Tech Stack**: Go 1.24.2, gotd/td (Telegram MTProto), Cobra (CLI), Viper (config), GORM (ORM), SQLite, Goja (JS runtime), Playwright (browser automation)
+**Tech Stack**: Go 1.25.0 minimum (see `go.mod`), gotd/td (Telegram MTProto), Cobra (CLI), Viper (config), GORM (ORM), SQLite, Goja (JS runtime), Playwright (browser automation)
 
 ## Build & Test Commands
 
@@ -16,7 +16,7 @@ SaveAny-Bot is a Telegram bot written in Go that saves files/messages from Teleg
 go build -o saveany-bot .
 
 # Run directly
-go run ./cmd
+go run .
 
 # Docker build (multi-stage, Alpine-based)
 docker build -t saveany-bot .
@@ -36,7 +36,7 @@ go test ./storage/telegram
 go test -v ./...
 
 # Run a single test
-go test -run TestQueueBasic ./pkg/queue
+go test -run TestAddAndLength ./pkg/queue
 
 # Run with coverage
 go test -cover ./...
@@ -186,7 +186,7 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 ### Application Structure
 - **Entry point**: `main.go` → `cmd.Execute(ctx)`
 - **CLI root**: `cmd/root.go` (Cobra), implementation in `cmd/run.go`
-- **Startup sequence**: Config → Cache → i18n → Database → Storage → Parsers → Userbot → Bot → Queue
+- **Current startup sequence**: Config → Cache → i18n → Database → Storage → Parsers → Prepare queue → Userbot → Bot → API → Queue workers
 - Follow this order when adding new initialization steps in `cmd/run.go::initAll`
 
 ### Configuration (Viper)
@@ -225,7 +225,7 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
   1. Add enum to `pkg/enums/storage`
   2. Create config struct in `config/storage/` with `Validate()` method
   3. Implement storage in `storage/<name>/`
-  4. Register in `storageFactories` mapping
+  4. Register the config in `config/storage/factory.go::storageFactories` and the backend in `storage/storage.go::storageConstructors`
   5. Update `config.example.toml` with example
 
 ### Parser Plugins (JavaScript)
@@ -248,14 +248,14 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 - Respect context cancellation in long-running operations
 - Store request-scoped data in context (e.g., `ctxkey.ContentLength`)
 
-## Special Rules from .github/copilot-instructions.md
+## Special Project Rules
 
 1. **Never modify `config.C()` return values** - it returns a copy. Modify config in `config.Init` or via Viper.
 2. **Handlers must update `CommandHandlers` slice** - ensures `/help` and bot commands stay in sync.
 3. **Task execution must preserve hooks** - don't remove `TaskBeforeStart`, `TaskSuccess`, `TaskFail`, `TaskCancel` hook calls.
 4. **User sync is automatic** - don't manually create/delete users in DB; use config-based sync.
 5. **Prefer context logger** - use `log.FromContext(ctx)` over global logger when context is available.
-6. **Storage factory pattern** - new storage types must register in `storageFactories` mapping.
+6. **Storage factory pattern** - new storage types must register in both `config/storage/factory.go::storageFactories` and `storage/storage.go::storageConstructors`.
 7. **Plugin API compatibility** - changes to `Item`/`Resource` structures require updating `plugins/README.md`.
 
 ## Common Patterns
@@ -277,7 +277,7 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 1. Define config struct in `config/storage/<name>.go` with `Validate()` method
 2. Implement storage interface in `storage/<name>/<name>.go`
 3. Add storage type enum to `pkg/enums/storage`
-4. Register factory in `config/storage/factory.go::storageFactories`
+4. Register the config factory in `config/storage/factory.go::storageFactories` and the backend constructor in `storage/storage.go::storageConstructors`
 5. Update `config.example.toml` with configuration example
 
 ## File References

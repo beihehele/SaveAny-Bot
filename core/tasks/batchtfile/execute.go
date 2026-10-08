@@ -22,14 +22,17 @@ import (
 func (t *Task) Execute(ctx context.Context) error {
 	logger := log.FromContext(ctx).WithPrefix(fmt.Sprintf("batch_file[%s]", t.ID))
 	logger.Info("Starting batch file task")
+	t.results.Reset(t.resultElements())
 	if t.Progress != nil {
 		t.Progress.OnStart(ctx, t)
 	}
 	workers := config.C().Workers
 	eg, gctx := errgroup.WithContext(ctx)
 	eg.SetLimit(workers)
-	for _, elem := range t.elems {
-		eg.Go(func() error {
+	for index, elem := range t.elems {
+		eg.Go(func() (err error) {
+			t.results.Start(index)
+			defer func() { t.results.Finish(index, err, ctx.Err()) }()
 			t.processingMu.Lock()
 			if t.processing[elem.ID] != nil {
 				t.processingMu.Unlock()
@@ -46,6 +49,10 @@ func (t *Task) Execute(ctx context.Context) error {
 		})
 	}
 	err := eg.Wait()
+	summary := t.ResultSummary()
+	logger.Info("Batch file outcomes", "total", summary.Total, "succeeded", summary.Succeeded,
+		"failed", summary.Failed, "cancelled", summary.Cancelled, "interrupted", summary.Interrupted,
+		"pending", summary.Pending, "running", summary.Running)
 	if err != nil {
 		logger.Errorf("Error during batch file processing: %v", err)
 	} else {

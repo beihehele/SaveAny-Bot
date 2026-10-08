@@ -14,6 +14,7 @@ import (
 	"github.com/krau/SaveAny-Bot/core"
 	"github.com/krau/SaveAny-Bot/parsers/parsers"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 	"github.com/krau/SaveAny-Bot/storage"
 	ytdlp "github.com/lrstanley/go-ytdlp"
 )
@@ -210,6 +211,9 @@ func taskCapabilities(ctx context.Context, types []tasktype.TaskType) []TaskCapa
 	capabilities := make([]TaskCapability, 0, len(types))
 	for _, typ := range types {
 		capability := TaskCapability{Type: typ, Available: true}
+		if typ == tasktype.TaskTypeTransfer {
+			capability.ResultPolicies = []taskresult.Policy{taskresult.Legacy, taskresult.Strict}
+		}
 		switch typ {
 		case tasktype.TaskTypeAria2:
 			if !config.C().Aria2.Enable || strings.TrimSpace(config.C().Aria2.Url) == "" {
@@ -255,18 +259,21 @@ func extractTaskIDFromPath(path string) string {
 // convertTaskProgressToResponse renders a task's current state, computing
 // percent and speed from the snapshot taken under the task's mutex.
 func convertTaskProgressToResponse(task *TaskProgressInfo) TaskInfoResponse {
-	status, total, downloaded, totalFiles, downloadedFiles, startedAt, errMsg, updatedAt := task.snapshot()
+	s := task.responseSnapshot()
+	status, total, downloaded, totalFiles, downloadedFiles, startedAt, errMsg, updatedAt := s.status, s.total, s.downloaded, s.totalFiles, s.downloadedFiles, s.startedAt, s.err, s.updatedAt
 
 	resp := TaskInfoResponse{
-		TaskID:    task.TaskID,
-		Type:      tasktype.TaskType(task.Type),
-		Status:    status,
-		Title:     task.Title,
-		Storage:   task.Storage,
-		Path:      task.Path,
-		Error:     errMsg,
-		CreatedAt: task.CreatedAt,
-		UpdatedAt: updatedAt,
+		TaskID:        task.TaskID,
+		Type:          tasktype.TaskType(task.Type),
+		Status:        status,
+		Title:         task.Title,
+		Storage:       task.Storage,
+		Path:          task.Path,
+		Error:         errMsg,
+		CreatedAt:     task.CreatedAt,
+		UpdatedAt:     updatedAt,
+		ResultPolicy:  s.resultPolicy,
+		ResultSummary: s.resultSummary,
 	}
 
 	var percent float64

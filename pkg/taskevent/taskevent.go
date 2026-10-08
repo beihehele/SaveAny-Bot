@@ -6,7 +6,11 @@
 // reporting for free and new observers can be added without touching tasks.
 package taskevent
 
-import "context"
+import (
+	"context"
+
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
+)
 
 // Phase marks a stage in a task's lifecycle.
 type Phase int
@@ -41,6 +45,7 @@ type Event struct {
 	TotalFiles      int
 	DownloadedFiles int
 	Err             error
+	ResultSummary   *taskresult.Counts
 }
 
 // Sink receives task events. Implementations must be safe for concurrent use.
@@ -83,6 +88,11 @@ func Emit(ctx context.Context, e Event) {
 		return
 	}
 	for _, s := range sinks {
-		s.Emit(e)
+		event := e
+		if e.ResultSummary != nil {
+			counts := *e.ResultSummary
+			event.ResultSummary = &counts
+		}
+		s.Emit(event)
 	}
 }

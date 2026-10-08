@@ -17,6 +17,7 @@ import (
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 func TestTaskTypesDescribeDisabledPrerequisites(t *testing.T) {
@@ -43,6 +44,13 @@ func TestTaskTypesDescribeDisabledPrerequisites(t *testing.T) {
 	for _, c := range response.Capabilities {
 		if c.Type == tasktype.TaskTypeAria2 && (c.Available || c.Reason == "") {
 			t.Fatalf("disabled aria2 advertised as ready: %+v", c)
+		}
+		if c.Type == tasktype.TaskTypeTransfer {
+			if len(c.ResultPolicies) != 2 || c.ResultPolicies[0] != taskresult.Legacy || c.ResultPolicies[1] != taskresult.Strict {
+				t.Fatalf("transfer result policies missing: %+v", c)
+			}
+		} else if len(c.ResultPolicies) != 0 {
+			t.Fatalf("unsupported result policies advertised: %+v", c)
 		}
 	}
 }

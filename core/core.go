@@ -11,6 +11,7 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/queue"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 var queueInstance *queue.TaskQueue[Executable]
@@ -54,14 +55,24 @@ func worker(ctx context.Context, qe *queue.TaskQueue[Executable]) {
 		logger.Infof("Processing task: %s", exe.TaskID())
 		taskevent.Emit(taskCtx, taskevent.Event{TaskID: exe.TaskID(), Phase: taskevent.PhaseStart})
 		err = taskCtx.Err()
+		executed := false
 		if err == nil {
 			if err := ExecCommandString(taskCtx, execHooks.TaskBeforeStart); err != nil {
 				logger.Errorf("Failed to execute before start hook for task %s: %v", exe.TaskID(), err)
 			}
 			err = taskCtx.Err()
 			if err == nil {
+				executed = true
 				err = exe.Execute(taskCtx)
 			}
+		}
+		var resultSummary *taskresult.Counts
+		if executed && taskresult.PolicyFromContext(taskCtx) != "" {
+			if provider, ok := exe.(taskresult.Provider); ok {
+				counts := provider.ResultSummary().Counts()
+				resultSummary = &counts
+			}
+			err = taskresult.CompletionError(taskCtx, err, resultSummary)
 		}
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -81,7 +92,7 @@ func worker(ctx context.Context, qe *queue.TaskQueue[Executable]) {
 				logger.Errorf("Failed to execute success hook for task %s: %v", exe.TaskID(), err)
 			}
 		}
-		taskevent.Emit(taskCtx, taskevent.Event{TaskID: exe.TaskID(), Phase: taskevent.PhaseDone, Err: err})
+		taskevent.Emit(taskCtx, taskevent.Event{TaskID: exe.TaskID(), Phase: taskevent.PhaseDone, Err: err, ResultSummary: resultSummary})
 		qe.Done(qtask.ID)
 	}
 }

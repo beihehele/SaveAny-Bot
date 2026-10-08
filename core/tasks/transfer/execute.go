@@ -21,6 +21,7 @@ import (
 func (t *Task) Execute(ctx context.Context) error {
 	logger := log.FromContext(ctx).WithPrefix(fmt.Sprintf("transfer[%s]", t.ID))
 	logger.Info("Starting transfer task")
+	t.results.Reset(t.resultElements())
 	if t.Progress != nil {
 		t.Progress.OnStart(ctx, t)
 	}
@@ -29,8 +30,16 @@ func (t *Task) Execute(ctx context.Context) error {
 	eg, gctx := errgroup.WithContext(ctx)
 	eg.SetLimit(workers)
 
-	for _, elem := range t.elems {
-		eg.Go(func() error {
+	for index, elem := range t.elems {
+		eg.Go(func() (runErr error) {
+			t.results.Start(index)
+			var outcomeErr error
+			defer func() {
+				if outcomeErr == nil {
+					outcomeErr = runErr
+				}
+				t.results.Finish(index, outcomeErr, ctx.Err())
+			}()
 			t.processingMu.Lock()
 			if t.processing[elem.ID] != nil {
 				t.processingMu.Unlock()
@@ -46,6 +55,7 @@ func (t *Task) Execute(ctx context.Context) error {
 			}()
 
 			err := t.processElement(gctx, elem)
+			outcomeErr = err
 			if err != nil && (!t.IgnoreErrors || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				return err
 			}
@@ -63,6 +73,10 @@ func (t *Task) Execute(ctx context.Context) error {
 	if err == nil {
 		err = ctx.Err()
 	}
+	summary := t.ResultSummary()
+	logger.Info("Transfer file outcomes", "total", summary.Total, "succeeded", summary.Succeeded,
+		"failed", summary.Failed, "cancelled", summary.Cancelled, "interrupted", summary.Interrupted,
+		"pending", summary.Pending, "running", summary.Running)
 	if err != nil {
 		logger.Errorf("Error during transfer processing: %v", err)
 	} else {

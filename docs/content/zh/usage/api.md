@@ -161,6 +161,7 @@ Authorization: Bearer <token>
 | `path` | string | 否 | 存储内的子目录路径 |
 | `webhook` | string | 否 | 任务完成、失败或取消时的回调地址 |
 | `params` | object | 是 | 各任务类型的专属参数，见下文 |
+| `result_policy` | string | 否 | 仅 `transfer` 支持；`legacy` 保留原终态并提供结果计数，`strict` 要求所有已提交文件成功；省略时沿用原接口行为 |
 
 **响应 `201 Created`：**
 
@@ -345,6 +346,53 @@ Authorization: Bearer <token>
 | `source_path` | string | 是 | 源存储中的路径，须包含至少一个文件 |
 | `target_storage` | string | 是 | 目标存储名 |
 | `target_path` | string | 是 | 目标存储中的路径 |
+
+###### transfer 的结果策略
+
+`result_policy` 是顶层字段，按请求选择，不修改全局配置或其他任务。`GET /api/v1/task-types` 的 `capabilities` 中，`transfer` 的 `result_policies` 列出 `legacy` 和 `strict`。其他类型（包括 `tgfiles`）选择非空策略，或任何类型填写未知策略，返回 `400 Bad Request`；空字符串按省略处理。
+
+| 选择 | 终态与 hooks | 查询及 Webhook |
+| --- | --- | --- |
+| 省略或空字符串 | 保留原行为；允许继续时，部分文件失败仍可能 completed / TaskSuccess | 不增加结果字段 |
+| `legacy` | 保留原行为 | 创建响应包含 `result_policy`；查询和终态 Webhook 可包含结果计数 |
+| `strict` | 全部已提交文件成功才 completed / TaskSuccess；部分失败或全部失败为 failed / TaskFail | 创建响应包含 `result_policy`；查询和终态 Webhook 可包含结果计数 |
+
+```json
+{
+  "type": "transfer",
+  "storage": "local",
+  "result_policy": "strict",
+  "params": {
+    "source_storage": "source",
+    "source_path": "photos",
+    "target_storage": "local",
+    "target_path": "backup"
+  }
+}
+```
+
+策略只调整执行结束后的结果判定，不改变文件调度：普通单文件错误仍可继续处理剩余文件；取消和期限错误保持原执行路径。已保存的文件不会自动回滚，也不会自动重试。原执行错误保持不变；仅当执行返回成功时，`strict` 先检查父 context 的取消/期限，再检查结果计数。用户取消仍为 cancelled / TaskCancel，deadline 仍为 failed / TaskFail，没有新增终态。Telegram Bot 和媒体组流程不使用这个选项。
+
+选择 `legacy` 或 `strict` 后，进入并完成执行的任务在查询及终态 Webhook 中附带 `result_policy` 与 `result_summary`，例如：
+
+```json
+{
+  "result_policy": "strict",
+  "result_summary": {
+    "total": 2,
+    "pending": 0,
+    "running": 0,
+    "succeeded": 1,
+    "failed": 1,
+    "cancelled": 0,
+    "interrupted": 0
+  }
+}
+```
+
+每个已提交文件计入一种状态，六种状态之和等于 `total`。计数不包含预处理时排除的文件，不提供文件名、逐项错误或重试清单。文件操作返回取消/期限错误时，按记录当刻父 context 是否已经结束归入 `cancelled` 或 `interrupted`；这描述观察状态，不证明并发事件的唯一原因。排队或执行前取消的任务没有执行摘要，字段缺失不能解释为全部成功。
+
+`DELETE` 会立即报告 cancelled；若当时执行尚未退出，该次取消 Webhook 可能没有摘要。执行退出后，查询可补充最终计数并更新 `updated_at`，保持取消终态，不再发送第二次通知。Webhook 接收端仍应按任务 ID 和终态去重。
 
 ---
 

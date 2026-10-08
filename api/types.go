@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 // TaskStatus 表示任务状态
@@ -21,19 +22,21 @@ const (
 
 // CreateTaskRequest 创建任务请求
 type CreateTaskRequest struct {
-	Type    tasktype.TaskType `json:"type"`
-	Storage string            `json:"storage"`
-	Path    string            `json:"path"`
-	Webhook string            `json:"webhook,omitempty"`
-	Params  json.RawMessage   `json:"params"`
+	Type         tasktype.TaskType `json:"type"`
+	Storage      string            `json:"storage"`
+	Path         string            `json:"path"`
+	Webhook      string            `json:"webhook,omitempty"`
+	Params       json.RawMessage   `json:"params"`
+	ResultPolicy taskresult.Policy `json:"result_policy,omitempty"`
 }
 
 // CreateTaskResponse 创建任务响应
 type CreateTaskResponse struct {
-	TaskID    string            `json:"task_id"`
-	Type      tasktype.TaskType `json:"type"`
-	Status    TaskStatus        `json:"status"`
-	CreatedAt time.Time         `json:"created_at"`
+	TaskID       string            `json:"task_id"`
+	Type         tasktype.TaskType `json:"type"`
+	Status       TaskStatus        `json:"status"`
+	CreatedAt    time.Time         `json:"created_at"`
+	ResultPolicy taskresult.Policy `json:"result_policy,omitempty"`
 }
 
 // TaskProgress 任务进度
@@ -48,16 +51,18 @@ type TaskProgress struct {
 
 // TaskInfoResponse 任务信息响应
 type TaskInfoResponse struct {
-	TaskID    string            `json:"task_id"`
-	Type      tasktype.TaskType `json:"type"`
-	Status    TaskStatus        `json:"status"`
-	Title     string            `json:"title"`
-	Progress  *TaskProgress     `json:"progress,omitempty"`
-	Storage   string            `json:"storage"`
-	Path      string            `json:"path"`
-	Error     string            `json:"error,omitempty"`
-	CreatedAt time.Time         `json:"created_at"`
-	UpdatedAt time.Time         `json:"updated_at"`
+	TaskID        string             `json:"task_id"`
+	Type          tasktype.TaskType  `json:"type"`
+	Status        TaskStatus         `json:"status"`
+	Title         string             `json:"title"`
+	Progress      *TaskProgress      `json:"progress,omitempty"`
+	Storage       string             `json:"storage"`
+	Path          string             `json:"path"`
+	Error         string             `json:"error,omitempty"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+	ResultPolicy  taskresult.Policy  `json:"result_policy,omitempty"`
+	ResultSummary *taskresult.Counts `json:"result_summary,omitempty"`
 }
 
 // TasksListResponse 任务列表响应
@@ -83,20 +88,23 @@ type StorageInfo struct {
 
 // TaskCapability describes local prerequisites, without probing external services.
 type TaskCapability struct {
-	Type      tasktype.TaskType `json:"type"`
-	Available bool              `json:"available"`
-	Reason    string            `json:"reason,omitempty"`
+	Type           tasktype.TaskType   `json:"type"`
+	Available      bool                `json:"available"`
+	Reason         string              `json:"reason,omitempty"`
+	ResultPolicies []taskresult.Policy `json:"result_policies,omitempty"`
 }
 
 // WebhookPayload Webhook 回调负载
 type WebhookPayload struct {
-	TaskID      string     `json:"task_id"`
-	Type        string     `json:"type"`
-	Status      TaskStatus `json:"status"`
-	Storage     string     `json:"storage"`
-	Path        string     `json:"path"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	Error       string     `json:"error,omitempty"`
+	TaskID        string             `json:"task_id"`
+	Type          string             `json:"type"`
+	Status        TaskStatus         `json:"status"`
+	Storage       string             `json:"storage"`
+	Path          string             `json:"path"`
+	CompletedAt   *time.Time         `json:"completed_at,omitempty"`
+	Error         string             `json:"error,omitempty"`
+	ResultPolicy  taskresult.Policy  `json:"result_policy,omitempty"`
+	ResultSummary *taskresult.Counts `json:"result_summary,omitempty"`
 }
 
 // ErrorResponse 错误响应

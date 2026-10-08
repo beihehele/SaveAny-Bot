@@ -66,13 +66,28 @@ blacklist = true
 Run Save Any Bot with Docker:
 
 ```bash
-docker run -d --name saveany-bot \
+docker run -d --name saveany-bot --restart unless-stopped \
     -v ./config.toml:/app/config.toml \
+    -v ./data:/app/data \
+    -v ./cache:/app/cache \
     -v ./downloads:/app/downloads \
     ghcr.io/beihehele/saveany-bot:latest
 ```
 
-Please [**read the docs**](https://sabot.unv.app/en/) for more configuration options and usage.
+The `data` directory contains the database and Telegram sessions. Keep it when recreating the container; use `cache` only for temporary files. Pin an image version or digest that you have verified for stable deployments.
+
+Read this fork's [installation and update guide](docs/content/en/deployment/installation.md) and [configuration guide](docs/content/en/deployment/configuration/_index.md). The [upstream documentation site](https://sabot.unv.app/en/) may describe a different revision.
+
+## Development and tests
+
+Video integration tests require `ffmpeg` and `ffprobe` on `PATH`. Tests generate video and split archive samples in temporary directories and clean them up automatically. No separately downloaded fixtures or production Bot configuration and sessions are needed.
+
+```bash
+go test ./...
+go vet ./...
+```
+
+Use a separate Bot, UserBot session, and test chats for live Telegram testing, following the [media group acceptance checklist](docs/content/en/usage/watch.md#media-group-acceptance-checklist). Record automated test results and live acceptance results separately.
 
 ## Sponsors
 
