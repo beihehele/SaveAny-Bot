@@ -104,6 +104,7 @@ func Login(ctx context.Context) (*gotgproto.Client, error) {
 			return dispatcher.ContinueGroups
 		}))
 		uc.Dispatcher.AddHandler(handlers.NewMessage(filters.Message.Media, handleMediaMessage))
+		go observeMediaMessages(ctx)
 		log.FromContext(ctx).Infof("User client logged in successfully: %s", uc.Self.FirstName+" "+uc.Self.LastName)
 		return uc, nil
 	}

@@ -6,7 +6,6 @@ import (
 
 	"github.com/celestix/gotgproto/dispatcher"
 	"github.com/celestix/gotgproto/ext"
-	"github.com/charmbracelet/log"
 	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
@@ -24,9 +23,13 @@ type messageKey struct {
 	MessageID int
 }
 
+// mediaMessageTimer has a fixed identity before AfterFunc starts its callback.
+// Its Timer field is assigned and read only while the handler mutex is held.
+type mediaMessageTimer struct{ *time.Timer }
+
 type MediaMessageHandler struct {
 	events   map[messageKey]MediaMessageEvent
-	timers   map[messageKey]*time.Timer
+	timers   map[messageKey]*mediaMessageTimer
 	mu       sync.Mutex
 	debounce time.Duration
 }
@@ -35,7 +38,7 @@ var (
 	mediaMessageCh      = make(chan MediaMessageEvent, 100)
 	mediaMessageHandler = &MediaMessageHandler{
 		events:   make(map[messageKey]MediaMessageEvent),
-		timers:   make(map[messageKey]*time.Timer),
+		timers:   make(map[messageKey]*mediaMessageTimer),
 		debounce: 5 * time.Second,
 	}
 )
@@ -49,31 +52,43 @@ func MediaMessageDebounce() time.Duration {
 }
 
 func sendMediaMessageEvent(event MediaMessageEvent) {
+	mediaMessageHandler.addEvent(event, func(ev MediaMessageEvent) {
+		mediaMessageDelivery.send(ev, mediaMessageCh)
+	})
+}
+
+func (m *MediaMessageHandler) addEvent(event MediaMessageEvent, onFlush func(MediaMessageEvent)) {
 	key := messageKey{ChatID: event.ChatID, MessageID: event.MessageID}
 
-	mediaMessageHandler.mu.Lock()
-	if timer, exists := mediaMessageHandler.timers[key]; exists {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if timer, exists := m.timers[key]; exists {
 		timer.Stop()
 	}
 	// Always refresh the payload so caption edits after the first update are kept.
-	mediaMessageHandler.events[key] = event
-	mediaMessageHandler.timers[key] = time.AfterFunc(mediaMessageHandler.debounce, func() {
-		mediaMessageHandler.mu.Lock()
-		ev, ok := mediaMessageHandler.events[key]
-		delete(mediaMessageHandler.events, key)
-		delete(mediaMessageHandler.timers, key)
-		mediaMessageHandler.mu.Unlock()
+	m.events[key] = event
+	timer := &mediaMessageTimer{}
+	timer.Timer = time.AfterFunc(m.debounce, func() {
+		ev, ok := m.takeEvent(key, timer)
 		if !ok {
 			return
 		}
-		// Never block the timer/update path on a full channel.
-		select {
-		case mediaMessageCh <- ev:
-		default:
-			log.Warnf("media message channel full, dropping chat=%d msg=%d", ev.ChatID, ev.MessageID)
-		}
+		onFlush(ev)
 	})
-	mediaMessageHandler.mu.Unlock()
+	m.timers[key] = timer
+}
+
+func (m *MediaMessageHandler) takeEvent(key messageKey, timer *mediaMessageTimer) (MediaMessageEvent, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Caption edits can reset a timer whose old callback has already started.
+	if m.timers[key] != timer {
+		return MediaMessageEvent{}, false
+	}
+	event, ok := m.events[key]
+	delete(m.events, key)
+	delete(m.timers, key)
+	return event, ok
 }
 
 func handleMediaMessage(ctx *ext.Context, update *ext.Update) error {

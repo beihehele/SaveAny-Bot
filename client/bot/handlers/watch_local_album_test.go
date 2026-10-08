@@ -11,7 +11,7 @@ import (
 func TestWatchLocalAlbumBufferSeparateGroupedIDs(t *testing.T) {
 	mgr := &watchMediaGroupHandler{
 		groups: make(map[watchLocalAlbumKey]*watchLocalAlbumGroup),
-		timers: make(map[watchLocalAlbumKey]*time.Timer),
+		timers: make(map[watchLocalAlbumKey]*mediaTimer),
 	}
 	var mu sync.Mutex
 	flushes := 0
@@ -46,7 +46,7 @@ func TestWatchLocalAlbumBufferSeparateGroupedIDs(t *testing.T) {
 func TestWatchLocalAlbumBufferDropsUnmatched(t *testing.T) {
 	mgr := &watchMediaGroupHandler{
 		groups: make(map[watchLocalAlbumKey]*watchLocalAlbumGroup),
-		timers: make(map[watchLocalAlbumKey]*time.Timer),
+		timers: make(map[watchLocalAlbumKey]*mediaTimer),
 	}
 	var mu sync.Mutex
 	flushes := 0
@@ -60,5 +60,36 @@ func TestWatchLocalAlbumBufferDropsUnmatched(t *testing.T) {
 	defer mu.Unlock()
 	if flushes != 0 {
 		t.Fatalf("flushes=%d want 0", flushes)
+	}
+}
+
+func TestWatchLocalObsoleteTimerPreservesAlbumAndFilterMatch(t *testing.T) {
+	mgr := &watchMediaGroupHandler{groups: make(map[watchLocalAlbumKey]*watchLocalAlbumGroup),
+		timers: make(map[watchLocalAlbumKey]*mediaTimer)}
+	key := watchLocalAlbumKey{ChatID: -1001, UserID: 1, GroupedID: 10}
+	onFlush := func([]tfile.TGFileMessage) { t.Error("unexpected timer callback") }
+	mgr.addFile(key.ChatID, key.UserID, key.GroupedID, nil, false, time.Hour, onFlush)
+	oldTimer := mgr.timers[key]
+	mgr.addFile(key.ChatID, key.UserID, key.GroupedID, nil, true, time.Hour, onFlush)
+	newTimer := mgr.timers[key]
+	defer newTimer.Stop()
+	if group := mgr.takeGroup(key, oldTimer); group != nil {
+		t.Fatal("obsolete callback took the reset album")
+	}
+	if mgr.timers[key] != newTimer {
+		t.Fatal("obsolete callback deleted current timer")
+	}
+	group := mgr.takeGroup(key, newTimer)
+	if group == nil || len(group.files) != 2 || !group.matched {
+		t.Fatalf("reset album or whole-album filter match lost: %+v", group)
+	}
+	mgr.addFile(key.ChatID, key.UserID, key.GroupedID, nil, false, time.Hour, onFlush)
+	reusedTimer := mgr.timers[key]
+	defer reusedTimer.Stop()
+	if mgr.takeGroup(key, newTimer) != nil {
+		t.Fatal("old callback took a new album with the same key")
+	}
+	if group := mgr.takeGroup(key, reusedTimer); group == nil || len(group.files) != 1 || group.matched {
+		t.Fatal("new album inherited old messages or filter match")
 	}
 }

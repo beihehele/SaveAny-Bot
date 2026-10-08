@@ -36,13 +36,13 @@ type watchLocalAlbumGroup struct {
 
 type watchMediaGroupHandler struct {
 	groups map[watchLocalAlbumKey]*watchLocalAlbumGroup
-	timers map[watchLocalAlbumKey]*time.Timer
+	timers map[watchLocalAlbumKey]*mediaTimer
 	mu     sync.Mutex
 }
 
 var watchMediaGroupMgr = &watchMediaGroupHandler{
 	groups: make(map[watchLocalAlbumKey]*watchLocalAlbumGroup),
-	timers: make(map[watchLocalAlbumKey]*time.Timer),
+	timers: make(map[watchLocalAlbumKey]*mediaTimer),
 }
 
 func (w *watchMediaGroupHandler) addFile(chatID int64, userID uint, groupedID int64, file tfile.TGFileMessage, filterMatched bool, timeout time.Duration, callback func([]tfile.TGFileMessage)) {
@@ -64,18 +64,28 @@ func (w *watchMediaGroupHandler) addFile(chatID int64, userID uint, groupedID in
 		g.matched = true
 	}
 
-	w.timers[key] = time.AfterFunc(timeout, func() {
-		w.mu.Lock()
-		g := w.groups[key]
-		delete(w.groups, key)
-		delete(w.timers, key)
-		w.mu.Unlock()
-
+	timer := &mediaTimer{}
+	timer.Timer = time.AfterFunc(timeout, func() {
+		g := w.takeGroup(key, timer)
 		if g == nil || len(g.files) == 0 || !g.matched {
 			return
 		}
 		callback(g.files)
 	})
+	w.timers[key] = timer
+}
+
+func (w *watchMediaGroupHandler) takeGroup(key watchLocalAlbumKey, timer *mediaTimer) *watchLocalAlbumGroup {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	// Check ownership together with removal; a stopped timer may still be running.
+	if w.timers[key] != timer {
+		return nil
+	}
+	g := w.groups[key]
+	delete(w.groups, key)
+	delete(w.timers, key)
+	return g
 }
 
 func albumCaptionText(files []tfile.TGFileMessage) string {

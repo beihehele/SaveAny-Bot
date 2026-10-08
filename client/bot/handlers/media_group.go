@@ -13,16 +13,27 @@ import (
 	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/shortcut"
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
-	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/config"
+	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/tcbdata"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
 	"github.com/krau/SaveAny-Bot/storage"
 )
 
+// mediaGroupKey isolates albums by chat, sender, and Telegram group ID.
+type mediaGroupKey struct {
+	chatID  int64
+	userID  int64
+	groupID int64
+}
+
+// mediaTimer has a fixed identity before AfterFunc starts its callback.
+// Its Timer field is assigned and read only while the handler mutex is held.
+type mediaTimer struct{ *time.Timer }
+
 type MediaGroupHandler struct {
-	groups    map[int64][]tfile.TGFileMessage
-	timers    map[int64]*time.Timer
+	groups    map[mediaGroupKey][]tfile.TGFileMessage
+	timers    map[mediaGroupKey]*mediaTimer
 	mu        sync.Mutex
 	timeout   time.Duration
 	setupOnce sync.Once
@@ -39,8 +50,8 @@ func (m *MediaGroupHandler) SetupTimeout(timeoutSec int) {
 
 var (
 	mediaGroupHandler = &MediaGroupHandler{
-		groups: make(map[int64][]tfile.TGFileMessage),
-		timers: make(map[int64]*time.Timer),
+		groups: make(map[mediaGroupKey][]tfile.TGFileMessage),
+		timers: make(map[mediaGroupKey]*mediaTimer),
 		mu:     sync.Mutex{},
 	}
 )
@@ -64,34 +75,54 @@ func handleGroupMediaMessage(ctx *ext.Context, update *ext.Update, message *tg.M
 		logger.Errorf("Failed to get file from media: %s", err)
 		return dispatcher.EndGroups
 	}
-	mediaGroupHandler.mu.Lock()
-	defer mediaGroupHandler.mu.Unlock()
-	if mediaGroupHandler.groups[groupID] == nil {
-		mediaGroupHandler.groups[groupID] = make([]tfile.TGFileMessage, 0)
+	key := mediaGroupKey{
+		chatID:  update.EffectiveChat().GetID(),
+		userID:  userId,
+		groupID: groupID,
 	}
-	mediaGroupHandler.groups[groupID] = append(mediaGroupHandler.groups[groupID], file)
-
-	if timer, exists := mediaGroupHandler.timers[groupID]; exists {
-		timer.Stop()
-	}
-	mediaGroupHandler.timers[groupID] = time.AfterFunc(mediaGroupHandler.timeout, func() {
-		processMediaGroup(ctx, update, groupID)
+	mediaGroupHandler.addFile(key, file, func(items []tfile.TGFileMessage) {
+		processMediaGroup(ctx, update, key, items)
 	})
 	return dispatcher.EndGroups
 }
 
-func processMediaGroup(ctx *ext.Context, update *ext.Update, groupID int64) {
+func (m *MediaGroupHandler) addFile(key mediaGroupKey, file tfile.TGFileMessage, onFlush func([]tfile.TGFileMessage)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.groups[key] = append(m.groups[key], file)
+	if timer, exists := m.timers[key]; exists {
+		timer.Stop()
+	}
+	timer := &mediaTimer{}
+	timer.Timer = time.AfterFunc(m.timeout, func() {
+		if items := m.takeGroup(key, timer); len(items) != 0 {
+			onFlush(items)
+		}
+	})
+	m.timers[key] = timer
+}
+
+func (m *MediaGroupHandler) takeGroup(key mediaGroupKey, timer *mediaTimer) []tfile.TGFileMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Stop cannot revoke a callback that has already started. Validate ownership
+	// while taking the messages, so an obsolete callback cannot consume a reset group.
+	if m.timers[key] != timer {
+		return nil
+	}
+	items := m.groups[key]
+	delete(m.groups, key)
+	delete(m.timers, key)
+	return items
+}
+
+func processMediaGroup(ctx *ext.Context, update *ext.Update, key mediaGroupKey, items []tfile.TGFileMessage) {
 	logger := log.FromContext(ctx)
-	mediaGroupHandler.mu.Lock()
-	items := mediaGroupHandler.groups[groupID]
-	delete(mediaGroupHandler.groups, groupID)
-	delete(mediaGroupHandler.timers, groupID)
-	mediaGroupHandler.mu.Unlock()
 	if len(items) == 0 {
-		logger.Warn("No media items to process for group", "groupID", groupID)
+		logger.Warn("No media items to process for group", "groupID", key.groupID)
 		return
 	}
-	logger.Debugf("Processing media group %d with %d items", groupID, len(items))
+	logger.Debugf("Processing media group %d with %d items", key.groupID, len(items))
 
 	userId := update.GetUserChat().GetID()
 	msg, err := ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgMediaGroupInfoSavingFiles, nil)), nil)
