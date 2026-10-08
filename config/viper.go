@@ -68,6 +68,7 @@ func (c Config) GetStorageByName(name string) storage.StorageConfig {
 }
 
 func Init(ctx context.Context, configFile ...string) error {
+	remoteConfig := false
 	viper.SetConfigType("toml")
 	viper.SetEnvPrefix("SAVEANY")
 	viper.AutomaticEnv()
@@ -80,7 +81,12 @@ func Init(ctx context.Context, configFile ...string) error {
 		cfg := configFile[0]
 		if strings.HasPrefix(cfg, "http://") || strings.HasPrefix(cfg, "https://") {
 			// 	使用远程配置文件
-			resp, err := http.Get(cfg)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg, nil)
+			if err != nil {
+				return fmt.Errorf("invalid remote config URL: %w", err)
+			}
+			client := &http.Client{Timeout: 30 * time.Second}
+			resp, err := client.Do(req)
 			if err != nil {
 				return fmt.Errorf("failed to fetch remote config file: %w", err)
 			}
@@ -91,6 +97,7 @@ func Init(ctx context.Context, configFile ...string) error {
 			if err := viper.ReadConfig(resp.Body); err != nil {
 				return fmt.Errorf("failed to read remote config file: %w", err)
 			}
+			remoteConfig = true
 		} else {
 			viper.SetConfigFile(cfg)
 		}
@@ -141,57 +148,65 @@ func Init(ctx context.Context, configFile ...string) error {
 		viper.SetDefault(key, value)
 	}
 
-	if err := viper.ReadInConfig(); err != nil {
-		fmt.Println("Error reading config file, ", err)
-		return err
+	if !remoteConfig {
+		if err := viper.ReadInConfig(); err != nil {
+			return fmt.Errorf("read config file: %w", err)
+		}
 	}
 
-	if err := viper.Unmarshal(cfg); err != nil {
-		fmt.Println("Error unmarshalling config file, ", err)
-		return err
+	next := &Config{}
+	if err := viper.Unmarshal(next); err != nil {
+		return fmt.Errorf("decode config: %w", err)
 	}
 
 	storagesConfig, err := storage.LoadStorageConfigs(viper.GetViper())
 	if err != nil {
 		return fmt.Errorf("error loading storage configs: %w", err)
 	}
-	cfg.Storages = storagesConfig
+	next.Storages = storagesConfig
 
 	storageNames := make(map[string]struct{})
-	for _, storage := range cfg.Storages {
+	for _, storage := range next.Storages {
 		if _, ok := storageNames[storage.GetName()]; ok {
 			return fmt.Errorf("duplicate storage name: %s", storage.GetName())
 		}
 		storageNames[storage.GetName()] = struct{}{}
 	}
 
-	if cfg.Workers < 1 {
-		cfg.Workers = 1
+	if next.Workers < 1 {
+		next.Workers = 1
 	}
-	if cfg.Threads < 1 {
-		cfg.Threads = 1
+	if next.Threads < 1 {
+		next.Threads = 1
 	}
-	if cfg.Retry < 1 {
-		cfg.Retry = 1
+	if next.Retry < 1 {
+		next.Retry = 1
 	}
 
-	for _, storage := range cfg.Storages {
-		storages = append(storages, storage.GetName())
+	var nextStorages []string
+	var nextUserIDs []int64
+	nextUserStorages := make(map[int64][]string)
+	for _, storage := range next.Storages {
+		nextStorages = append(nextStorages, storage.GetName())
 	}
-	for _, user := range cfg.Users {
-		userIDs = append(userIDs, user.ID)
+	for _, user := range next.Users {
+		nextUserIDs = append(nextUserIDs, user.ID)
 		if user.Blacklist {
-			userStorages[user.ID] = slice.Compact(slice.Difference(storages, user.Storages))
+			nextUserStorages[user.ID] = slice.Compact(slice.Difference(nextStorages, user.Storages))
 		} else {
-			userStorages[user.ID] = user.Storages
+			nextUserStorages[user.ID] = append([]string(nil), user.Storages...)
 		}
 	}
-	if cfg.Proxy != "" {
-		http.DefaultTransport, err = newProxyTransport(cfg.Proxy)
+	if next.Proxy != "" {
+		transport, err := newProxyTransport(next.Proxy)
 		if err != nil {
 			return fmt.Errorf("failed to create proxy transport: %w", err)
 		}
+		http.DefaultTransport = transport
 	}
+	// Initialization is a startup operation, not a concurrent hot reload. Publish
+	// the complete configuration and access lists only after validation succeeds.
+	cfg, storages, userIDs, userStorages = next, nextStorages, nextUserIDs, nextUserStorages
 	return nil
 }
 

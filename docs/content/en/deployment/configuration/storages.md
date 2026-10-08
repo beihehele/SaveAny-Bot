@@ -31,6 +31,10 @@ token = "your_token"
 base_path = "./downloads" # Base path for local storage, all files will be stored under this path
 ```
 
+Task paths such as `/photos/file.jpg` are relative to the storage root. Native drive paths, UNC paths, parent traversal outside the root and symlinks pointing outside it are rejected. Check existing rules that rely on such paths using an offline configuration copy before upgrading.
+
+Writes stage a file in the destination directory and publish only after success. Failure or cancellation does not truncate an existing file. Without overwrite, conflicts receive `_1`, `_2` and similar suffixes; overwrite retains existing file permissions. Filesystems without hard links use a process-local lock and rename fallback: other processes must use separate directories. Internal `.saveany-<ID>.tmp` files are omitted from listings; inspect and remove crash leftovers only while stopped.
+
 ## WebDAV
 `type=webdav`
 

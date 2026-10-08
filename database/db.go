@@ -35,10 +35,10 @@ func Init(ctx context.Context) {
 		logger.Fatal("Failed to open database: ", err)
 	}
 	logger.Debug("Database connected")
-	if err := db.AutoMigrate(&User{}, &Dir{}, &Rule{}, &WatchChat{}); err != nil {
-		logger.Fatal("Database migration failed; if upgrading from an old version, try deleting the database file and retrying", "error", err)
+	if err := db.WithContext(ctx).AutoMigrate(&User{}, &Dir{}, &Rule{}, &WatchChat{}); err != nil {
+		logger.Fatal("Database migration failed; preserve the original database, inspect a copy or restore a verified backup", "error", err)
 	}
-	if err := migrateWatchRouteIndex(db); err != nil {
+	if err := migrateWatchRouteIndex(db.WithContext(ctx)); err != nil {
 		logger.Fatal("Failed to migrate watch route index", "error", err)
 	}
 	if err := syncUsers(ctx); err != nil {

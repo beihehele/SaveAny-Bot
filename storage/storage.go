@@ -56,8 +56,6 @@ type StorageReadable interface {
 	OpenFile(ctx context.Context, filePath string) (io.ReadCloser, int64, error)
 }
 
-var Storages = make(map[string]Storage)
-
 type StorageConstructor func() Storage
 
 var storageConstructors = map[storenum.StorageType]StorageConstructor{

@@ -133,6 +133,8 @@ docker run -d --name saveany-bot \
 The published image is the default variant with all features and dependencies. You can also pull a specific release tag, for example: <code>ghcr.io/beihehele/saveany-bot:0.1.0</code>
 {{< /hint >}}
 
+When the container environment variable `CONFIG_URL` is set to an HTTP(S) URL, the application loads that configuration directly with a 30-second download timeout. HTTP errors, incomplete responses, or invalid configuration prevent startup. Remote configuration does not overwrite `/app/config.toml` or a host-mounted file and is not persisted locally; without this variable, the application continues to load local configuration.
+
 ## Updates
 
 If you deployed from pre-compiled binaries, use the following CLI command to update:
