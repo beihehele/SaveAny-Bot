@@ -37,4 +37,8 @@ Common parameters:
 - `--write-sub`: Download subtitles
 - `--write-thumbnail`: Download thumbnail
 
+Custom `-o` / `--output` and `-P` / `--paths` values must be relative paths. The bot roots them in the task's temporary directory, supporting subdirectories and type prefixes such as `subtitle:`. Absolute paths, paths escaping that directory, and stdout `-` are rejected. Files are still saved by filename directly in the selected storage directory. If files from different subdirectories would have the same storage filename, the task fails before uploading to prevent overwrites. This also applies to API `flags`.
+
+Format defaults remain unchanged: configuration applies when no custom flags are supplied; any custom flags give the caller control over format and filename restrictions.
+
 For more parameters, see [yt-dlp documentation](https://github.com/yt-dlp/yt-dlp#usage-and-options).

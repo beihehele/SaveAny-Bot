@@ -91,9 +91,14 @@ func (tq *TaskQueue[T]) Get() (*Task[T], error) {
 // Done stops(cancels) and removes the task from the running tasks.
 func (tq *TaskQueue[T]) Done(taskID string) {
 	tq.mu.Lock()
-	defer tq.mu.Unlock()
+	task := tq.runningTaskMap[taskID]
 	delete(tq.taskMap, taskID)
 	delete(tq.runningTaskMap, taskID)
+	tq.mu.Unlock()
+	// Release the child context from its long-lived parent after hooks/events.
+	if task != nil {
+		task.Cancel()
+	}
 }
 
 func (tq *TaskQueue[T]) Length() int {
@@ -195,5 +200,17 @@ func (tq *TaskQueue[T]) Close() {
 	defer tq.mu.Unlock()
 
 	tq.closed = true
+	tq.cond.Broadcast()
+}
+
+// CloseAndCancel stops submissions and cancels queued and running tasks. Unlike
+// Close, it aborts work instead of draining it, and wakes idle workers.
+func (tq *TaskQueue[T]) CloseAndCancel() {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+	tq.closed = true
+	for _, task := range tq.taskMap {
+		task.Cancel()
+	}
 	tq.cond.Broadcast()
 }

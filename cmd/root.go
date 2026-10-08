@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/krau/SaveAny-Bot/cmd/upload"
 	"github.com/krau/SaveAny-Bot/cmd/watch"
@@ -22,8 +21,6 @@ func init() {
 	watch.Register(rootCmd)
 }
 
-func Execute(ctx context.Context) {
-	if err := rootCmd.ExecuteContext(ctx); err != nil {
-		fmt.Println(err)
-	}
+func Execute(ctx context.Context) error {
+	return rootCmd.ExecuteContext(ctx)
 }

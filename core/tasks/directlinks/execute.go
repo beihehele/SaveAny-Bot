@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/charmbracelet/log"
@@ -31,7 +33,7 @@ func (t *Task) Execute(ctx context.Context) error {
 	fetchedTotalBytes := atomic.Int64{}
 	for _, file := range t.files {
 		eg.Go(func() error {
-			req, err := http.NewRequestWithContext(ctx, http.MethodHead, file.URL, nil)
+			req, err := http.NewRequestWithContext(gctx, http.MethodHead, file.URL, nil)
 			if err != nil {
 				return fmt.Errorf("failed to create HEAD request for %s: %w", file.URL, err)
 			}
@@ -39,12 +41,35 @@ func (t *Task) Execute(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to HEAD %s: %w", file.URL, err)
 			}
+			if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented {
+				resp.Body.Close()
+				req, err = http.NewRequestWithContext(gctx, http.MethodGet, file.URL, nil)
+				if err != nil {
+					return err
+				}
+				// A ranged probe avoids downloading the resource just to inspect headers.
+				req.Header.Set("Range", "bytes=0-0")
+				resp, err = t.client.Do(req)
+				if err != nil {
+					return fmt.Errorf("probe GET %s: %w", file.URL, err)
+				}
+			}
 			defer resp.Body.Close()
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				return fmt.Errorf("HEAD %s returned status %d", file.URL, resp.StatusCode)
+				return fmt.Errorf("metadata request %s returned status %d", file.URL, resp.StatusCode)
 			}
-			fetchedTotalBytes.Add(resp.ContentLength)
 			file.Size = resp.ContentLength
+			if resp.StatusCode == http.StatusPartialContent {
+				file.Size = -1
+				if _, total, ok := strings.Cut(resp.Header.Get("Content-Range"), "/"); ok {
+					if size, err := strconv.ParseInt(total, 10, 64); err == nil && size >= 0 {
+						file.Size = size
+					}
+				}
+			}
+			if file.Size > 0 {
+				fetchedTotalBytes.Add(file.Size)
+			}
 			if name := resp.Header.Get("Content-Disposition"); name != "" {
 				filename := parseFilename(name)
 				if filename != "" {
@@ -55,6 +80,7 @@ func (t *Task) Execute(ctx context.Context) error {
 			if file.Name == "" {
 				file.Name = parseFilenameFromURL(file.URL)
 			}
+			file.Name = fsutil.NormalizePathname(file.Name)
 			if file.Name == "" {
 				return fmt.Errorf("failed to determine filename for %s: Content-Disposition header is empty and URL does not contain a valid filename", file.URL)
 			}
@@ -76,12 +102,11 @@ func (t *Task) Execute(ctx context.Context) error {
 	eg.SetLimit(config.C().Workers)
 	for _, file := range t.files {
 		eg.Go(func() error {
-			t.processingMu.RLock()
+			t.processingMu.Lock()
 			if _, ok := t.processing[file.URL]; ok {
+				t.processingMu.Unlock()
 				return fmt.Errorf("file %s is already being processed", file.URL)
 			}
-			t.processingMu.RUnlock()
-			t.processingMu.Lock()
 			t.processing[file.URL] = file
 			t.processingMu.Unlock()
 			defer func() {
@@ -90,7 +115,6 @@ func (t *Task) Execute(ctx context.Context) error {
 				t.processingMu.Unlock()
 			}()
 			err := t.processLink(gctx, file)
-			t.downloaded.Add(1)
 			if errors.Is(err, context.Canceled) {
 				logger.Debug("Link processing canceled")
 				return err
@@ -99,6 +123,7 @@ func (t *Task) Execute(ctx context.Context) error {
 				logger.Errorf("Error processing link %s: %v", file.URL, err)
 				return fmt.Errorf("failed to process link %s: %w", file.URL, err)
 			}
+			t.downloaded.Add(1)
 			return nil
 		})
 	}
@@ -129,12 +154,15 @@ func (t *Task) processLink(ctx context.Context, file *File) error {
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return fmt.Errorf("GET %s returned status %d", file.URL, resp.StatusCode)
 		}
-		ctx = context.WithValue(ctx, ctxkey.ContentLength, file.Size)
+		size := resp.ContentLength
+		if size < 0 {
+			size = file.Size
+		}
+		ctx = context.WithValue(ctx, ctxkey.ContentLength, size)
 		if t.stream {
 			return t.Storage.Save(ctx, resp.Body, filepath.Join(t.StorPath, file.Name))
 		}
-		cacheFile, err := fsutil.CreateFile(filepath.Join(config.C().Temp.BasePath,
-			fmt.Sprintf("direct_%s_%s", t.ID, file.Name)))
+		cacheFile, err := fsutil.CreateTempFile(config.C().Temp.BasePath, "direct-*"+filepath.Ext(file.Name))
 		if err != nil {
 			return fmt.Errorf("failed to create temp file: %w", err)
 		}

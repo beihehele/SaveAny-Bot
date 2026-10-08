@@ -31,6 +31,7 @@ type Watcher struct {
 	pending map[string]*time.Timer
 	// lastSize is the last observed file size, used to detect a stable write.
 	lastSize map[string]int64
+	stopped  bool
 }
 
 type WatcherOptions struct {
@@ -77,13 +78,15 @@ func NewWatcher(ctx context.Context, opts WatcherOptions) (*Watcher, error) {
 
 // Run starts watching and blocks until ctx is cancelled.
 func (w *Watcher) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	if err := w.addDir(w.root); err != nil {
 		w.fsw.Close()
 		return fmt.Errorf("failed to watch root: %w", err)
 	}
 	w.logger.Infof("watching %s (recursive=%v, debounce=%s)", w.root, w.recursive, w.debounce)
 
-	defer w.cleanup()
+	defer func() { cancel(); w.cleanup() }()
 
 	for {
 		select {
@@ -139,6 +142,9 @@ func (w *Watcher) handleEvent(ctx context.Context, event fsnotify.Event) {
 func (w *Watcher) scheduleUpload(ctx context.Context, file string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.stopped || ctx.Err() != nil {
+		return
+	}
 
 	if t, ok := w.pending[file]; ok {
 		t.Stop()
@@ -166,6 +172,10 @@ func (w *Watcher) maybeUpload(ctx context.Context, file string) {
 	}
 
 	w.mu.Lock()
+	if w.stopped || ctx.Err() != nil {
+		w.mu.Unlock()
+		return
+	}
 	prevSize, seen := w.lastSize[file]
 	curSize := info.Size()
 	if !seen || prevSize != curSize {
@@ -259,6 +269,7 @@ func (w *Watcher) ScanExisting(ctx context.Context) {
 
 func (w *Watcher) cleanup() {
 	w.mu.Lock()
+	w.stopped = true
 	for _, t := range w.pending {
 		t.Stop()
 	}

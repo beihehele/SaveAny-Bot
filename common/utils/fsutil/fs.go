@@ -1,6 +1,7 @@
 package fsutil
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,21 +9,6 @@ import (
 
 	"github.com/gabriel-vasile/mimetype"
 )
-
-// 删除文件夹内的所有文件和子目录, 但不删除文件夹本身
-func RemoveAllInDir(dirPath string) error {
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		entryPath := filepath.Join(dirPath, entry.Name())
-		if err := os.RemoveAll(entryPath); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 func DetectFileExt(fp string) string {
 	mt, err := mimetype.DetectFile(fp)
@@ -41,10 +27,11 @@ func (f *File) Remove() error {
 }
 
 func (f *File) CloseAndRemove() error {
-	if err := f.Close(); err != nil {
-		return err
+	closeErr := f.Close()
+	if errors.Is(closeErr, os.ErrClosed) {
+		closeErr = nil
 	}
-	return f.Remove()
+	return errors.Join(closeErr, f.Remove())
 }
 
 func CreateFile(fp string) (*File, error) {
@@ -52,6 +39,19 @@ func CreateFile(fp string) (*File, error) {
 		return nil, err
 	}
 	file, err := os.Create(fp)
+	if err != nil {
+		return nil, err
+	}
+	return &File{File: file}, nil
+}
+
+// CreateTempFile creates an exclusively owned cache file. Call CloseAndRemove
+// when finished; resource filenames must not determine shared cache paths.
+func CreateTempFile(dir, pattern string) (*File, error) {
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return nil, err
+	}
+	file, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return nil, err
 	}

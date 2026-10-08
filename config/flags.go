@@ -6,7 +6,7 @@ import (
 )
 
 func RegisterFlags(cmd *cobra.Command) {
-	flags := cmd.Flags()
+	flags := cmd.PersistentFlags()
 
 	// 基础配置
 	flags.StringP("config", "c", "", "config file path")
@@ -15,7 +15,7 @@ func RegisterFlags(cmd *cobra.Command) {
 	flags.Int("retry", 0, "retry times")
 	flags.Int("threads", 0, "number of threads")
 	flags.Bool("stream", false, "enable stream mode")
-	flags.Bool("no-clean-cache", false, "do not clean cache on exit")
+	flags.Bool("no-clean-cache", false, "legacy option; cache directories are no longer cleared on exit")
 	flags.String("proxy", "", "proxy URL (http, https, socks5, socks5h)")
 	flags.String("log-level", "", "log level (trace/debug, info, warn, error, fatal)")
 
@@ -46,7 +46,7 @@ func RegisterFlags(cmd *cobra.Command) {
 }
 
 func bindFlags(cmd *cobra.Command) {
-	flags := cmd.Flags()
+	flags := cmd.PersistentFlags()
 
 	viper.BindPFlag("lang", flags.Lookup("lang"))
 	viper.BindPFlag("workers", flags.Lookup("workers"))
@@ -80,6 +80,8 @@ func bindFlags(cmd *cobra.Command) {
 }
 
 func GetConfigFile(cmd *cobra.Command) string {
-	configFile, _ := cmd.Flags().GetString("config")
-	return configFile
+	if flag := cmd.Flag("config"); flag != nil {
+		return flag.Value.String()
+	}
+	return ""
 }

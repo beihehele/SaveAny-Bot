@@ -2,6 +2,7 @@ package tfile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -16,8 +17,17 @@ func executeStream(ctx context.Context, task *Task) error {
 	pr, pw := io.Pipe()
 	defer pr.Close()
 	errg, uploadCtx := errgroup.WithContext(ctx)
+	// Cancellation alone cannot interrupt a blocked Pipe.Read or Pipe.Write.
+	stopClose := context.AfterFunc(uploadCtx, func() {
+		pr.CloseWithError(uploadCtx.Err())
+		pw.CloseWithError(uploadCtx.Err())
+	})
+	defer stopClose()
 	errg.Go(func() error {
-		return task.Storage.Save(uploadCtx, pr, task.Path)
+		err := task.Storage.Save(uploadCtx, pr, task.Path)
+		// Release the downloader even when storage stops reading early.
+		pr.CloseWithError(err)
+		return err
 	})
 	wr := newWriter(ctx, pw, task.Progress, task)
 	errg.Go(func() error {
@@ -37,6 +47,11 @@ func executeStream(ctx context.Context, task *Task) error {
 		}
 	}()
 	if err = errg.Wait(); err != nil {
+		// Closing both pipe ends can report ErrClosedPipe; keep cancellation
+		// recognizable so the queue runs TaskCancel rather than TaskFail.
+		if ctx.Err() != nil && errors.Is(err, io.ErrClosedPipe) {
+			err = ctx.Err()
+		}
 		return err
 	}
 	logger.Info("File downloaded successfully in stream mode")

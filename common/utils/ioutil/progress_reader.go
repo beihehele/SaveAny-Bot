@@ -17,7 +17,11 @@ type ProgressReadSeeker struct {
 
 // Seek implements io.ReadSeeker.
 func (pr *ProgressReadSeeker) Seek(offset int64, whence int) (int64, error) {
-	return pr.reader.Seek(offset, whence)
+	position, err := pr.reader.Seek(offset, whence)
+	if err == nil {
+		pr.read.Store(position)
+	}
+	return position, err
 }
 
 // NewProgressReader creates a new ProgressReader

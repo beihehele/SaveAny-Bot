@@ -2,12 +2,10 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
-
-	"slices"
 
 	"github.com/charmbracelet/log"
 	"github.com/krau/SaveAny-Bot/api"
@@ -15,7 +13,6 @@ import (
 	userclient "github.com/krau/SaveAny-Bot/client/user"
 	"github.com/krau/SaveAny-Bot/common/cache"
 	"github.com/krau/SaveAny-Bot/common/i18n"
-	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
 	"github.com/krau/SaveAny-Bot/database"
@@ -26,6 +23,7 @@ import (
 
 func Run(cmd *cobra.Command, _ []string) {
 	ctx, cancel := context.WithCancel(cmd.Context())
+	defer cancel()
 	logger := log.NewWithOptions(os.Stdout, log.Options{
 		Level:           log.InfoLevel,
 		ReportTimestamp: true,
@@ -37,6 +35,10 @@ func Run(cmd *cobra.Command, _ []string) {
 
 	configFile := config.GetConfigFile(cmd)
 	if err := config.Init(ctx, configFile); err != nil {
+		if ctx.Err() != nil {
+			logger.Info("Startup cancelled")
+			return
+		}
 		logger.Fatal("Init failed", "error", err)
 	}
 
@@ -49,19 +51,34 @@ func Run(cmd *cobra.Command, _ []string) {
 
 	exitChan, err := initAll(ctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			logger.Info("Startup cancelled")
+			return
+		}
 		logger.Fatal("Init failed", "error", err)
 	}
 	go func() {
-		<-exitChan
-		cancel()
+		select {
+		case <-exitChan:
+			cancel()
+		case <-ctx.Done():
+		}
 	}()
 
-	core.Run(ctx)
+	workersDone := core.Run(ctx)
 
 	<-ctx.Done()
 	logger.Info("Exiting...")
 	defer logger.Info("Exit complete")
-	cleanCache()
+	timer := time.NewTimer(8 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-workersDone:
+	case <-timer.C:
+		logger.Warn("Task shutdown deadline exceeded; temporary files are preserved")
+	}
+	// Tasks remove their own temporary files. Never recursively clear a configured
+	// directory here: it may contain unrelated files or tasks still shutting down.
 }
 
 func initAll(ctx context.Context) (<-chan struct{}, error) {
@@ -80,41 +97,19 @@ func initAll(ctx context.Context) (<-chan struct{}, error) {
 			}
 		}
 	}
+	core.Prepare()
 	if config.C().Telegram.Userbot.Enable {
 		_, err := userclient.Login(ctx)
 		if err != nil {
-			logger.Fatal("User login failed", "error", err)
+			return nil, fmt.Errorf("user login failed: %w", err)
 		}
+	}
+	exitChan := bot.Init(ctx)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 	if err := api.Start(ctx); err != nil {
 		logger.Error("Failed to start API server", "error", err)
 	}
-	return bot.Init(ctx), nil
-}
-
-func cleanCache() {
-	if config.C().NoCleanCache {
-		return
-	}
-	if config.C().Temp.BasePath != "" && !config.C().Stream {
-		if slices.Contains([]string{"/", ".", "\\", ".."}, filepath.Clean(config.C().Temp.BasePath)) {
-			log.Error("Invalid cache directory", "path", config.C().Temp.BasePath)
-			return
-		}
-		currentDir, err := os.Getwd()
-		if err != nil {
-			log.Error("Failed to get working directory", "error", err)
-			return
-		}
-		cachePath := filepath.Join(currentDir, config.C().Temp.BasePath)
-		cachePath, err = filepath.Abs(cachePath)
-		if err != nil {
-			log.Error("Failed to get absolute cache path", "error", err)
-			return
-		}
-		log.Info("Cleaning cache directory", "path", cachePath)
-		if err := fsutil.RemoveAllInDir(cachePath); err != nil {
-			log.Error("Failed to clean cache directory", "error", err)
-		}
-	}
+	return exitChan, nil
 }

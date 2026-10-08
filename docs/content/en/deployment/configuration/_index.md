@@ -139,7 +139,7 @@ When enabled, SaveAny-Bot exposes an HTTP API for creating/querying/canceling ta
 - `enable`: Whether to enable the HTTP API server, default is `false`.
 - `host`: Bind address, default `0.0.0.0`.
 - `port`: Listen port, default `8080`.
-- `token`: Authentication token. **Strongly recommended** — if empty, the API is exposed without any authentication.
+- `token`: Required authentication token. An enabled API refuses to start if it is empty; the Bot can still run, so check startup logs. All API requests, including `/health`, require authentication.
 
 ```toml
 [api]
@@ -259,7 +259,7 @@ The above settings only control JavaScript-based parser plugins. The bot also ha
 ### Miscellaneous
 
 ```toml
-no_clean_cache = false # Whether not to clear the cache folder when exiting
+no_clean_cache = false # Legacy option; exit no longer clears the whole cache directory. Tasks clean their own temporary files.
 # Temporary download folder configuration
 [temp]
 base_path = "./cache"

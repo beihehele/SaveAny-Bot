@@ -1,5 +1,7 @@
 package parsed
 
+import "maps"
+
 type TaskInfo interface {
 	TaskID() string
 	Site() string
@@ -42,7 +44,7 @@ func (t *Task) DownloadedBytes() int64 {
 func (t *Task) Processing() map[string]ResourceInfo {
 	t.processingMu.RLock()
 	defer t.processingMu.RUnlock()
-	return t.processing
+	return maps.Clone(t.processing)
 }
 
 type ResourceInfo interface {

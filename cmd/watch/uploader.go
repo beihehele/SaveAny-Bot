@@ -32,8 +32,12 @@ type Uploader struct {
 	retryDelay time.Duration
 	logger     *log.Logger
 
-	jobs chan uploadJob
-	wg   sync.WaitGroup
+	jobs      []uploadJob
+	wg        sync.WaitGroup
+	queueSize int
+	done      <-chan struct{}
+	changed   chan struct{}
+	closed    bool
 
 	mu sync.Mutex
 	// inflight maps in-progress (or queued) file paths. A true value means the
@@ -73,7 +77,9 @@ func NewUploader(ctx context.Context, opts UploaderOptions) *Uploader {
 		retry:      opts.Retry,
 		retryDelay: opts.RetryDelay,
 		logger:     log.FromContext(ctx).WithPrefix("uploader"),
-		jobs:       make(chan uploadJob, opts.QueueSize),
+		queueSize:  opts.QueueSize,
+		done:       ctx.Done(),
+		changed:    make(chan struct{}),
 		inflight:   make(map[string]bool),
 	}
 
@@ -89,40 +95,86 @@ func NewUploader(ctx context.Context, opts UploaderOptions) *Uploader {
 // marked for re-upload instead of being queued again. Returns false if ctx is
 // cancelled before the job can be enqueued.
 func (u *Uploader) Submit(ctx context.Context, job uploadJob) bool {
-	u.mu.Lock()
-	if _, ok := u.inflight[job.localPath]; ok {
-		u.inflight[job.localPath] = true
-		u.mu.Unlock()
-		u.logger.Debugf("file %s already in flight, marked for re-upload", job.localPath)
-		return true
-	}
-	u.inflight[job.localPath] = false
-	u.mu.Unlock()
-
-	select {
-	case u.jobs <- job:
-		return true
-	case <-ctx.Done():
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-u.done:
+			return false
+		default:
+		}
 		u.mu.Lock()
-		delete(u.inflight, job.localPath)
+		if u.closed {
+			u.mu.Unlock()
+			return false
+		}
+		if _, ok := u.inflight[job.localPath]; ok {
+			u.inflight[job.localPath] = true
+			u.mu.Unlock()
+			return true
+		}
+		if len(u.jobs) < u.queueSize {
+			u.inflight[job.localPath] = false
+			u.jobs = append(u.jobs, job)
+			u.signalLocked()
+			u.mu.Unlock()
+			return true
+		}
+		changed := u.changed
 		u.mu.Unlock()
-		return false
+		select {
+		case <-ctx.Done():
+			return false
+		case <-u.done:
+			return false
+		case <-changed:
+		}
 	}
 }
 
 func (u *Uploader) worker(ctx context.Context) {
 	defer u.wg.Done()
 	for {
+		job, ok := u.nextJob(ctx)
+		if !ok {
+			return
+		}
+		u.process(ctx, job)
+	}
+}
+
+func (u *Uploader) nextJob(ctx context.Context) (uploadJob, bool) {
+	for {
+		if ctx.Err() != nil {
+			return uploadJob{}, false
+		}
+		u.mu.Lock()
+		if len(u.jobs) > 0 {
+			job := u.jobs[0]
+			u.jobs[0] = uploadJob{}
+			u.jobs = u.jobs[1:]
+			u.signalLocked()
+			u.mu.Unlock()
+			return job, true
+		}
+		if u.closed {
+			u.mu.Unlock()
+			return uploadJob{}, false
+		}
+		changed := u.changed
+		u.mu.Unlock()
 		select {
 		case <-ctx.Done():
-			return
-		case job, ok := <-u.jobs:
-			if !ok {
-				return
-			}
-			u.process(ctx, job)
+			return uploadJob{}, false
+		case <-changed:
 		}
 	}
+}
+
+// signalLocked wakes waiting producers and consumers without closing a jobs channel.
+func (u *Uploader) signalLocked() {
+	close(u.changed)
+	u.changed = make(chan struct{})
 }
 
 func (u *Uploader) process(ctx context.Context, job uploadJob) {
@@ -134,24 +186,18 @@ func (u *Uploader) process(ctx context.Context, job uploadJob) {
 		u.logger.Errorf("failed to upload %s after %d attempt(s): %v", job.localPath, u.retry, err)
 	}
 
-	// Re-queue if the file changed again while it was being uploaded.
+	// Workers must never block waiting to send to their own full queue. Retries
+	// get a reserved slot: pending jobs remain bounded by QueueSize + Workers.
 	u.mu.Lock()
 	needReupload := u.inflight[job.localPath]
-	if needReupload {
+	if needReupload && ctx.Err() == nil {
 		u.inflight[job.localPath] = false
+		u.jobs = append(u.jobs, job)
+		u.signalLocked()
 	} else {
 		delete(u.inflight, job.localPath)
 	}
 	u.mu.Unlock()
-
-	if needReupload {
-		select {
-		case u.jobs <- job:
-			u.logger.Debugf("re-queued %s due to changes during upload", job.localPath)
-		case <-ctx.Done():
-			u.clearInflight(job.localPath)
-		}
-	}
 }
 
 func (u *Uploader) clearInflight(localPath string) {
@@ -222,6 +268,15 @@ func (u *Uploader) upload(ctx context.Context, job uploadJob) error {
 
 // Close stops accepting jobs and waits for in-flight uploads to finish.
 func (u *Uploader) Close() {
-	close(u.jobs)
+	u.mu.Lock()
+	if !u.closed {
+		u.closed = true
+		u.signalLocked()
+	}
+	u.mu.Unlock()
 	u.wg.Wait()
+	u.mu.Lock()
+	u.jobs = nil
+	clear(u.inflight)
+	u.mu.Unlock()
 }

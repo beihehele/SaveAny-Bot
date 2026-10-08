@@ -2,6 +2,7 @@ package batchtfile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -21,18 +22,19 @@ import (
 func (t *Task) Execute(ctx context.Context) error {
 	logger := log.FromContext(ctx).WithPrefix(fmt.Sprintf("batch_file[%s]", t.ID))
 	logger.Info("Starting batch file task")
-	t.Progress.OnStart(ctx, t)
+	if t.Progress != nil {
+		t.Progress.OnStart(ctx, t)
+	}
 	workers := config.C().Workers
 	eg, gctx := errgroup.WithContext(ctx)
 	eg.SetLimit(workers)
 	for _, elem := range t.elems {
 		eg.Go(func() error {
-			t.processingMu.RLock()
+			t.processingMu.Lock()
 			if t.processing[elem.ID] != nil {
+				t.processingMu.Unlock()
 				return fmt.Errorf("element with ID %s is already being processed", elem.ID)
 			}
-			t.processingMu.RUnlock()
-			t.processingMu.Lock()
 			t.processing[elem.ID] = &elem
 			t.processingMu.Unlock()
 			defer func() {
@@ -49,7 +51,9 @@ func (t *Task) Execute(ctx context.Context) error {
 	} else {
 		logger.Info("Batch file task completed successfully")
 	}
-	t.Progress.OnDone(ctx, t, err)
+	if t.Progress != nil {
+		t.Progress.OnDone(ctx, t, err)
+	}
 	return err
 }
 
@@ -59,12 +63,23 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 		pr, pw := io.Pipe()
 		defer pr.Close()
 		errg, uploadCtx := errgroup.WithContext(ctx)
+		// Cancellation alone cannot interrupt a blocked Pipe.Read or Pipe.Write.
+		stopClose := context.AfterFunc(uploadCtx, func() {
+			pr.CloseWithError(uploadCtx.Err())
+			pw.CloseWithError(uploadCtx.Err())
+		})
+		defer stopClose()
 		errg.Go(func() error {
-			return elem.Storage.Save(uploadCtx, pr, elem.Path)
+			err := elem.Storage.Save(uploadCtx, pr, elem.Path)
+			// Release the downloader even when storage stops reading early.
+			pr.CloseWithError(err)
+			return err
 		})
 		wr := ioutil.NewProgressWriter(pw, func(n int) {
 			downloaded := t.downloaded.Add(int64(n))
-			t.Progress.OnProgress(ctx, t)
+			if t.Progress != nil {
+				t.Progress.OnProgress(ctx, t)
+			}
 			taskevent.Emit(ctx, taskevent.Event{
 				TaskID:          t.ID,
 				Phase:           taskevent.PhaseProgress,
@@ -83,6 +98,11 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 			return err
 		})
 		if err := errg.Wait(); err != nil {
+			// Closing both pipe ends can report ErrClosedPipe; keep cancellation
+			// recognizable so the queue runs TaskCancel rather than TaskFail.
+			if ctx.Err() != nil && errors.Is(err, io.ErrClosedPipe) {
+				err = ctx.Err()
+			}
 			return fmt.Errorf("failed to download file in stream mode: %w", err)
 		}
 		logger.Info("File downloaded successfully in stream mode")
@@ -100,7 +120,9 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 	}()
 	wrAt := ioutil.NewProgressWriterAt(localFile, func(n int) {
 		downloaded := t.downloaded.Add(int64(n))
-		t.Progress.OnProgress(ctx, t)
+		if t.Progress != nil {
+			t.Progress.OnProgress(ctx, t)
+		}
 		taskevent.Emit(ctx, taskevent.Event{
 			TaskID:          t.ID,
 			Phase:           taskevent.PhaseProgress,

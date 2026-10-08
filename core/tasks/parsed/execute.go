@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"path"
-	"path/filepath"
 
 	"github.com/charmbracelet/log"
 	"github.com/duke-git/lancet/v2/retry"
@@ -30,21 +29,20 @@ func (t *Task) Execute(ctx context.Context) error {
 	eg.SetLimit(config.C().Workers)
 	for _, resource := range t.item.Resources {
 		eg.Go(func() error {
-			t.processingMu.RLock()
-			if t.processing[resource.ID()] != nil {
-				return fmt.Errorf("resource %s is already being processed", resource.ID())
-			}
-			t.processingMu.RUnlock()
+			resourceID := resource.ID()
 			t.processingMu.Lock()
-			t.processing[resource.ID()] = &resource
+			if t.processing[resourceID] != nil {
+				t.processingMu.Unlock()
+				return fmt.Errorf("resource %s is already being processed", resourceID)
+			}
+			t.processing[resourceID] = &resource
 			t.processingMu.Unlock()
 			defer func() {
 				t.processingMu.Lock()
-				delete(t.processing, resource.URL)
+				delete(t.processing, resourceID)
 				t.processingMu.Unlock()
 			}()
 			err := t.processResource(gctx, resource)
-			t.downloaded.Add(1)
 			if errors.Is(err, context.Canceled) {
 				logger.Debug("Resource processing canceled")
 				return err
@@ -53,6 +51,7 @@ func (t *Task) Execute(ctx context.Context) error {
 				logger.Errorf("Error processing resource %s: %v", resource.URL, err)
 				return fmt.Errorf("failed to process resource %s: %w", resource.URL, err)
 			}
+			t.downloaded.Add(1)
 			return nil
 		})
 	}
@@ -97,8 +96,7 @@ func (t *Task) processResource(ctx context.Context, resource parser.Resource) er
 		if t.stream {
 			return t.Stor.Save(ctx, resp.Body, path.Join(t.StorPath, resource.Filename))
 		}
-		cacheFile, err := fsutil.CreateFile(filepath.Join(config.C().Temp.BasePath,
-			fmt.Sprintf("resource_%s_%s", t.ID, resource.Filename)))
+		cacheFile, err := fsutil.CreateTempFile(config.C().Temp.BasePath, "resource-*.tmp")
 		if err != nil {
 			return fmt.Errorf("failed to create cache file for resource %s: %w", resource.URL, err)
 		}

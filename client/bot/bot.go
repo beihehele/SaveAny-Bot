@@ -29,8 +29,8 @@ func Init(ctx context.Context) <-chan struct{} {
 	resultChan := make(chan struct {
 		client *gotgproto.Client
 		err    error
-	})
-	shouldRestart := make(chan struct{})
+	}, 1)
+	shouldRestart := make(chan struct{}, 1)
 
 	go func() {
 		resolver, err := tgutil.NewConfigProxyResolver()
@@ -55,7 +55,10 @@ func Init(ctx context.Context) <-chan struct{} {
 				AutoFetchReply:   true,
 				ErrorHandler: func(ctx *ext.Context, u *ext.Update, s string) error {
 					if s == "SAVEANTBOT-RESTART" {
-						shouldRestart <- struct{}{}
+						select {
+						case shouldRestart <- struct{}{}:
+						default:
+						}
 						return dispatcher.EndGroups
 					}
 					log.FromContext(ctx).Errorf("unhandled error: %s", s)
@@ -89,8 +92,11 @@ func Init(ctx context.Context) <-chan struct{} {
 
 	select {
 	case <-ctx.Done():
-		log.FromContext(ctx).Errorf("Bot initialization cancelled: %s", ctx.Err())
+		log.FromContext(ctx).Info("Bot initialization cancelled")
 	case result := <-resultChan:
+		if ctx.Err() != nil {
+			return shouldRestart
+		}
 		if result.err != nil {
 			log.FromContext(ctx).Fatalf("Failed to initialize Bot: %s", result.err)
 		}

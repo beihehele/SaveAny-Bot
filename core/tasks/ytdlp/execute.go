@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
-	ytdlp "github.com/lrstanley/go-ytdlp"
 
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/ctxkey"
@@ -80,18 +79,10 @@ func (t *Task) Execute(ctx context.Context) error {
 func (t *Task) downloadFiles(ctx context.Context, tempDir string) ([]string, error) {
 	logger := log.FromContext(ctx)
 
-	// Configure yt-dlp command with essential settings
-	// Always set output path to ensure files go to temp directory
-	cmd := ytdlp.New().
-		Output(filepath.Join(tempDir, "%(title)s.%(ext)s"))
-
-	// Apply config-based format/quality defaults only when the user passes no
-	// custom flags. Any user flag means they take full control of yt-dlp.
-	if len(t.Flags) == 0 {
-		cmd = applyFormatConfig(cmd, config.C().Ytdlp)
+	cmd, flags, err := buildDownloadCommand(config.C().Ytdlp, tempDir, t.Flags)
+	if err != nil {
+		return nil, err
 	}
-	// Note: If custom flags are provided, users have full control over format/quality
-	// The output path is always set above to ensure downloads go to the correct directory
 
 	if t.Progress != nil {
 		t.Progress.OnProgress(ctx, t, "Downloading...")
@@ -102,7 +93,7 @@ func (t *Task) downloadFiles(ctx context.Context, tempDir string) ([]string, err
 
 	// Combine flags and URLs as arguments (flags first, then URLs)
 	// yt-dlp accepts: yt-dlp [OPTIONS] URL [URL...]
-	args := append(t.Flags, t.URLs...)
+	args := append(flags, t.URLs...)
 
 	// Run with context for cancellation support
 	result, err := cmd.Run(ctx, args...)
@@ -118,23 +109,7 @@ func (t *Task) downloadFiles(ctx context.Context, tempDir string) ([]string, err
 		return nil, fmt.Errorf("yt-dlp exited with code %d: %s", result.ExitCode, result.Stderr)
 	}
 
-	// List downloaded files
-	files, err := os.ReadDir(tempDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read temp directory: %w", err)
-	}
-
-	var downloadedFiles []string
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-		fullPath := filepath.Join(tempDir, file.Name())
-		downloadedFiles = append(downloadedFiles, fullPath)
-		logger.Debugf("Downloaded file: %s", file.Name())
-	}
-
-	return downloadedFiles, nil
+	return collectDownloadedFiles(ctx, tempDir)
 }
 
 // transferFile transfers a single file to storage

@@ -139,7 +139,7 @@ recode = "mp4"     # 留空则不转封装
 - `enable`: 是否启用 HTTP API 服务, 默认为 `false`.
 - `host`: 监听地址, 默认 `0.0.0.0`.
 - `port`: 监听端口, 默认 `8080`.
-- `token`: 鉴权 Token, **强烈建议设置** — 若为空, API 将在无任何鉴权的情况下暴露.
+- `token`: 必填的鉴权 Token；启用 API 时若为空，API 拒绝启动，Bot 仍可运行，请检查启动日志。含 `/health` 的 API 请求均需鉴权。
 
 ```toml
 [api]
@@ -259,7 +259,7 @@ plugin_dirs = ["./plugins"] # 插件目录, 可以是多个目录
 ### 杂项
 
 ```toml
-no_clean_cache = false # 是否在退出时不清空缓存文件夹
+no_clean_cache = false # 兼容旧配置；退出时已不再清空整个缓存目录，任务仍清理自身临时文件
 # 临时下载文件夹配置
 [temp]
 base_path = "./cache"
