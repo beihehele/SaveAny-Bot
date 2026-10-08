@@ -10,7 +10,10 @@ permissions:
   packages: write
 
 jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
   create-release:
+    needs: quality
     name: Create Release
     runs-on: ubuntu-latest
     steps:
@@ -32,6 +35,7 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
   build-matrix:
+    needs: [quality, create-release]
     name: Release Go Binary
     runs-on: ubuntu-latest
     strategy:
@@ -54,6 +58,7 @@ jobs:
       - name: Release Go Binary
         uses: wangyoucao577/go-release-action@v1
         with:
+          goversion: '1.26.8'
           pre_command: export CGO_ENABLED=0
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
@@ -67,5 +72,6 @@ jobs:
             -X "github.com/krau/SaveAny-Bot/config.BuildTime=${{ format(github.event.repository.updated_at, 'yyyy-MM-dd HH:mm:ss') }}"
             -X "github.com/krau/SaveAny-Bot/config.GitCommit=${{ github.sha }}"
           binary_name: saveany-bot
+          sha256sum: 'true'
         env:
           VERSION: ${{ env.VERSION }}

@@ -2,6 +2,8 @@ module github.com/krau/SaveAny-Bot
 
 go 1.25.0
 
+toolchain go1.26.8
+
 require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/celestix/gotgproto v1.0.0-beta22
@@ -14,7 +16,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/goccy/go-yaml v1.19.2
 	github.com/gotd/contrib v0.21.1
-	github.com/gotd/td v0.143.0
+	github.com/gotd/td v0.145.1
 	github.com/johannesboyne/gofakes3 v0.0.0-20250916175020-ebf3e50324d3
 	github.com/krau/ffmpeg-go v0.6.0
 	github.com/lrstanley/go-ytdlp v1.3.5
@@ -107,7 +109,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/mod v0.37.0 // indirect
-	golang.org/x/tools v0.46.0 // indirect
+	golang.org/x/tools v0.47.0 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	modernc.org/libc v1.73.4 // indirect
@@ -140,6 +142,6 @@ require (
 	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
 	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.39.0
 	gorm.io/gorm v1.31.2
 )
