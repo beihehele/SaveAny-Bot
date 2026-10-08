@@ -28,15 +28,15 @@ func SendWebhook(ctx context.Context, payload *WebhookPayload) {
 	}
 
 	webhookURL := info.Webhook
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// Async send with retries.
 	go func() {
-		var logger *log.Logger
-		if ctx != nil {
-			logger = log.FromContext(ctx).With("task_id", payload.TaskID)
-		} else {
-			logger = log.Default().With("task_id", payload.TaskID)
-		}
+		ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		defer cancel()
+		logger := log.FromContext(ctx).With("task_id", payload.TaskID)
 
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
@@ -46,7 +46,7 @@ func SendWebhook(ctx context.Context, payload *WebhookPayload) {
 
 		// 重试 3 次
 		for i := range 3 {
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, webhookURL, bytes.NewBuffer(payloadBytes))
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBuffer(payloadBytes))
 			if err != nil {
 				logger.Errorf("Failed to create webhook request: %v", err)
 				return
@@ -58,7 +58,9 @@ func SendWebhook(ctx context.Context, payload *WebhookPayload) {
 			resp, err := webhookClient.Do(req)
 			if err != nil {
 				logger.Warnf("Webhook request failed (attempt %d/3): %v", i+1, err)
-				time.Sleep(time.Second * time.Duration(i+1))
+				if i < 2 && !waitWebhookRetry(ctx, i) {
+					return
+				}
 				continue
 			}
 			resp.Body.Close()
@@ -69,7 +71,9 @@ func SendWebhook(ctx context.Context, payload *WebhookPayload) {
 			}
 
 			logger.Warnf("Webhook returned non-2xx status (attempt %d/3): %d", i+1, resp.StatusCode)
-			time.Sleep(time.Second * time.Duration(i+1))
+			if i < 2 && !waitWebhookRetry(ctx, i) {
+				return
+			}
 		}
 
 		logger.Errorf("Failed to send webhook after 3 attempts")
@@ -86,7 +90,7 @@ func CreateWebhookPayload(taskID string, taskType string, status TaskStatus, sto
 		Path:    path,
 	}
 
-	if status == TaskStatusCompleted || status == TaskStatusFailed {
+	if status.terminal() {
 		now := time.Now()
 		payload.CompletedAt = &now
 	}
@@ -96,4 +100,18 @@ func CreateWebhookPayload(taskID string, taskType string, status TaskStatus, sto
 	}
 
 	return payload
+}
+
+func waitWebhookRetry(ctx context.Context, attempt int) bool {
+	if attempt == 2 {
+		return false
+	}
+	timer := time.NewTimer(time.Second * time.Duration(attempt+1))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }

@@ -268,5 +268,15 @@ func ExtractFilesFromLinks(ctx context.Context, links []string) ([]tfile.TGFileM
 
 // isValidMessageLink 检查是否是有效的 Telegram 消息链接
 func isValidMessageLink(link string) bool {
-	return strings.HasPrefix(link, "https://t.me/") || strings.HasPrefix(link, "http://t.me/")
+	for _, prefix := range []string{
+		"https://t.me/",
+		"http://t.me/",
+		"https://telegram.me/",
+		"http://telegram.me/",
+	} {
+		if strings.HasPrefix(link, prefix) {
+			return true
+		}
+	}
+	return false
 }

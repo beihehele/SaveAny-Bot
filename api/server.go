@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -86,13 +87,21 @@ func NewServer(ctx context.Context) *Server {
 
 // Start 启动服务器
 func (s *Server) Start(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	logger := log.FromContext(ctx).With("module", "api")
 
 	logger.Infof("Starting API server on %s", s.httpServer.Addr)
 
-	// 在 goroutine 中启动服务器
+	// Bind before reporting success, so callers see port and address errors.
+	ln, err := net.Listen("tcp", s.httpServer.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", s.httpServer.Addr, err)
+	}
+
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
 			logger.Errorf("API server error: %v", err)
 		}
 	}()

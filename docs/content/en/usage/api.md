@@ -16,7 +16,7 @@ Add or modify the following section in `config.toml`:
 enable = true
 host   = "0.0.0.0"   # Bind address, default 0.0.0.0
 port   = 8080         # Listen port, default 8080
-token  = "your-token" # Auth token — strongly recommended
+token  = "your-token" # Required authentication token
 ```
 
 You can also override these settings with environment variables (prefix `SAVEANY_`):
@@ -29,7 +29,7 @@ You can also override these settings with environment variables (prefix `SAVEANY
 | `SAVEANY_API_TOKEN` | `api.token` |
 
 {{< hint warning >}}
-If `token` is empty, the API server will be accessible **without any authentication**, which is a security risk.
+An enabled API requires a nonempty `token`. With an empty token the API refuses to start; the Bot can still run, so check startup logs.
 {{< /hint >}}
 
 {{< hint warning >}}
@@ -38,7 +38,7 @@ API-created tasks are kept in **process memory only**: after a restart the task 
 
 ## Authentication
 
-When `token` is configured, all API requests must include a Bearer token in the HTTP header:
+All API requests, including `/health`, must include a Bearer token in the HTTP header:
 
 ```
 Authorization: Bearer <your-token>
@@ -68,6 +68,7 @@ Common error codes:
 | `unauthorized` | 401 | Authentication failed |
 | `method_not_allowed` | 405 | Wrong HTTP method |
 | `invalid_request` | 400 | Malformed request body or parameters |
+| `request_too_large` | 413 | Create-task request body exceeds 1 MiB |
 | `task_creation_failed` | 400 | Failed to create task |
 | `task_not_found` | 404 | Task ID does not exist |
 | `cancel_failed` | 500 | Failed to cancel task |
@@ -79,7 +80,7 @@ Common error codes:
 
 ### GET /health — Health Check
 
-No authentication required.
+Authentication is required. This checks HTTP liveness only; it does not certify Telegram, external commands or storage readiness.
 
 **Response `200 OK`:**
 
@@ -92,6 +93,8 @@ No authentication required.
 ### GET /api/v1/storages — List Storages
 
 Returns all currently loaded storage backends.
+
+Each entry also includes `readable`, `listable`, `stream` and `detect_existence` booleans describing reading, listing, streaming uploads and existence checks. These interface capabilities do not certify external service connectivity.
 
 **Response `200 OK`:**
 
@@ -107,6 +110,8 @@ Returns all currently loaded storage backends.
 ---
 
 ### GET /api/v1/task-types — List Supported Task Types
+
+`types` retains the implemented API task types. The additional `capabilities` array supplies `type`, `available` and an optional `reason` for each type. Checks cover local prerequisites such as Aria2 configuration, yt-dlp resolution, registered parsers and Telegram client initialization, without running downloads or probing remote services. Availability does not guarantee success for a particular URL, storage or credential.
 
 **Response `200 OK`:**
 
@@ -127,6 +132,8 @@ Returns all currently loaded storage backends.
 ---
 
 ### POST /api/v1/tasks — Create Task
+
+Bodies are limited to 1 MiB and must contain one JSON document. Preprocessing receives the request context with a 30-second deadline. JS plugin matching, pure JavaScript execution, and `ghttp` honor cancellation. Playwright checks cancellation while waiting for installation and between stages; browser launch and navigation use the shorter remaining deadline. Installation already in progress, driver startup, page operations, cleanup, and some underlying Telegram calls still lack full cancellation support, so this is not a hard deadline for every type. Enqueued tasks use the service context; disconnecting the HTTP client does not cancel them.
 
 **Request headers:**
 
@@ -343,7 +350,7 @@ For `transfer` tasks, the top-level `storage` field is still required for valida
 
 ### GET /api/v1/tasks — List All Tasks
 
-Returns all tasks created via the API. Task records are stored in memory only and are cleared on restart.
+Returns all tasks created via the API, ordered by `created_at` descending, then by `task_id` descending when timestamps match. Task records are stored in memory only and are cleared on restart.
 
 **Response `200 OK`:**
 
@@ -419,6 +426,8 @@ The `progress` field is only included when `total_bytes > 0`. The `error` field 
 ## Webhook Callbacks
 
 When a `webhook` URL is provided in the create request, SaveAny-Bot sends a `POST` request to that URL when the task reaches a terminal state (`completed`, `failed`, or `cancelled`).
+
+Terminal states cannot be overwritten by late progress or completion events. Cancelling a queued task also produces a notification. One notification is created per task, with at most three HTTP attempts and a 90-second overall limit; service shutdown cancels delivery and retry waits. Receivers should deduplicate by `task_id` and `status`. Notifications are not persisted and may be lost on shutdown or network failure. Cancellation requests that execution stop; already saved files are not necessarily removed.
 
 **Callback request headers:**
 

@@ -3,8 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/charmbracelet/log"
+	"github.com/rs/xid"
 
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
@@ -23,12 +27,27 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 	"github.com/krau/SaveAny-Bot/pkg/telegraph"
 	"github.com/krau/SaveAny-Bot/storage"
-	"github.com/rs/xid"
 )
 
 // TaskFactory 任务工厂
 type TaskFactory struct {
-	ctx context.Context
+	ctx        context.Context
+	prepareCtx context.Context
+}
+
+// CreateTaskWithContext limits preprocessing to the request. Enqueued tasks keep
+// the service context so disconnecting the HTTP client does not cancel uploads.
+func (f *TaskFactory) CreateTaskWithContext(ctx context.Context, req *CreateTaskRequest) (*CreateTaskResponse, error) {
+	requestFactory := *f
+	requestFactory.prepareCtx = ctx
+	return requestFactory.CreateTask(req)
+}
+
+func (f *TaskFactory) preprocessingContext() context.Context {
+	if f.prepareCtx != nil {
+		return f.prepareCtx
+	}
+	return f.ctx
 }
 
 // NewTaskFactory 创建任务工厂
@@ -68,8 +87,14 @@ func (f *TaskFactory) CreateTask(req *CreateTaskRequest) (*CreateTaskResponse, e
 }
 
 func (f *TaskFactory) registerAndEnqueueTask(task core.Executable, taskType tasktype.TaskType, storageName, path, webhook string) error {
+	if err := f.preprocessingContext().Err(); err != nil {
+		return err
+	}
 	taskID := task.TaskID()
 	info := RegisterTask(taskID, string(taskType), storageName, path, task.Title(), webhook)
+	info.mu.Lock()
+	info.webhookContext = f.ctx
+	info.mu.Unlock()
 
 	// Inject the progress sink into the context so the task's Emit calls update
 	// the API store (and fire the webhook on terminal states) without the task
@@ -160,7 +185,7 @@ func (f *TaskFactory) createAria2Task(taskID string, createdAt time.Time, req *C
 	}
 
 	// 添加下载任务到 Aria2
-	gid, err := aria2Client.AddURI(f.ctx, params.URLs, nil)
+	gid, err := aria2Client.AddURI(f.preprocessingContext(), params.URLs, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add aria2 task: %w", err)
 	}
@@ -169,6 +194,12 @@ func (f *TaskFactory) createAria2Task(taskID string, createdAt time.Time, req *C
 
 	err = f.registerAndEnqueueTask(task, tasktype.TaskTypeAria2, req.Storage, req.Path, req.Webhook)
 	if err != nil {
+		// The queue did not accept ownership of the already-created download.
+		if cleanupErr := cleanupUnqueuedAria2Download(f.ctx, aria2Client, gid); cleanupErr != nil {
+			// The HTTP client may already be gone, so retain recovery details in logs.
+			log.FromContext(f.ctx).Error("Failed to clean up unqueued aria2 download", "task_id", taskID, "gid", gid, "error", cleanupErr)
+			return nil, errors.Join(err, fmt.Errorf("failed to clean up unqueued aria2 download %s: %w", gid, cleanupErr))
+		}
 		return nil, err
 	}
 
@@ -194,18 +225,21 @@ func (f *TaskFactory) createParsedTask(taskID string, createdAt time.Time, req *
 	// 查找合适的解析器
 	var p parser.Parser
 	for _, parserItem := range parsers.Get() {
-		if parserItem.CanHandle(params.URL) {
+		if parser.CanHandleWithContext(f.preprocessingContext(), parserItem, params.URL) {
 			p = parserItem
 			break
 		}
 	}
 
 	if p == nil {
+		if err := f.preprocessingContext().Err(); err != nil {
+			return nil, err
+		}
 		return nil, fmt.Errorf("no parser found for URL: %s", params.URL)
 	}
 
 	// 解析 URL
-	item, err := p.Parse(f.ctx, params.URL)
+	item, err := p.Parse(f.preprocessingContext(), params.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
@@ -237,7 +271,7 @@ func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req 
 	}
 
 	// 提取文件
-	files, err := ExtractFilesFromLinks(f.ctx, params.MessageLinks)
+	files, err := ExtractFilesFromLinks(f.preprocessingContext(), params.MessageLinks)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract files: %w", err)
 	}
@@ -294,7 +328,7 @@ func (f *TaskFactory) createTPHPicsTask(taskID string, createdAt time.Time, req 
 	}
 
 	// 提取图片
-	pics, phPath, err := ExtractTelegraphImages(f.ctx, params.TelegraphURL)
+	pics, phPath, err := ExtractTelegraphImages(f.preprocessingContext(), params.TelegraphURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract telegraph images: %w", err)
 	}
@@ -350,7 +384,7 @@ func (f *TaskFactory) createTransferTask(taskID string, createdAt time.Time, req
 	}
 
 	// 列出源文件
-	files, err := sourceListable.ListFiles(f.ctx, params.SourcePath)
+	files, err := sourceListable.ListFiles(f.preprocessingContext(), params.SourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list source files: %w", err)
 	}

@@ -73,8 +73,19 @@ type StoragesResponse struct {
 
 // StorageInfo 存储信息
 type StorageInfo struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	Readable        bool   `json:"readable"`
+	Listable        bool   `json:"listable"`
+	Stream          bool   `json:"stream"`
+	DetectExistence bool   `json:"detect_existence"`
+}
+
+// TaskCapability describes local prerequisites, without probing external services.
+type TaskCapability struct {
+	Type      tasktype.TaskType `json:"type"`
+	Available bool              `json:"available"`
+	Reason    string            `json:"reason,omitempty"`
 }
 
 // WebhookPayload Webhook 回调负载

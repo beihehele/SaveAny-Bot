@@ -16,7 +16,7 @@ SaveAny-Bot 提供了一套 HTTP API，允许你通过程序化方式创建下�
 enable = true
 host   = "0.0.0.0"   # 监听地址，默认 0.0.0.0
 port   = 8080         # 监听端口，默认 8080
-token  = "your-token" # 鉴权 Token，强烈建议设置
+token  = "your-token" # 必填的鉴权 Token
 ```
 
 也可通过环境变量覆盖（前缀 `SAVEANY_`）：
@@ -29,7 +29,7 @@ token  = "your-token" # 鉴权 Token，强烈建议设置
 | `SAVEANY_API_TOKEN` | `api.token` |
 
 {{< hint warning >}}
-若 `token` 为空，API 服务将**不进行任何鉴权**即可访问，存在安全风险。
+启用 API 时必须设置非空 `token`；为空时 API 拒绝启动，Bot 仍可运行，请检查启动日志。
 {{< /hint >}}
 
 {{< hint warning >}}
@@ -38,7 +38,7 @@ API 创建的任务仅保存在**进程内存**中：进程重启后任务列表
 
 ## 鉴权
 
-当配置了 `token` 时，所有 API 请求均需在 HTTP 请求头中携带 Bearer Token：
+所有 API 请求（含 `/health`）均需在 HTTP 请求头中携带 Bearer Token：
 
 ```
 Authorization: Bearer <your-token>
@@ -68,6 +68,7 @@ Authorization: Bearer <your-token>
 | `unauthorized` | 401 | 鉴权失败 |
 | `method_not_allowed` | 405 | HTTP 方法不正确 |
 | `invalid_request` | 400 | 请求体/参数非法 |
+| `request_too_large` | 413 | 创建任务的请求体超过 1 MiB |
 | `task_creation_failed` | 400 | 任务创建失败 |
 | `task_not_found` | 404 | 任务 ID 不存在 |
 | `cancel_failed` | 500 | 取消任务失败 |
@@ -79,7 +80,7 @@ Authorization: Bearer <your-token>
 
 ### GET /health — 健康检查
 
-无需鉴权。
+需要鉴权。此接口只表示 HTTP 服务存活，不保证 Telegram、外部命令或存储可用。
 
 **响应 `200 OK`：**
 
@@ -92,6 +93,8 @@ Authorization: Bearer <your-token>
 ### GET /api/v1/storages — 列出存储
 
 返回当前所有已加载的存储后端。
+
+每项还返回 `readable`、`listable`、`stream` 和 `detect_existence` 布尔字段，分别表示接口支持读取、列举、流式上传及存在性检查。这些能力声明不代表外部服务已通过连通性验证。
 
 **响应 `200 OK`：**
 
@@ -107,6 +110,8 @@ Authorization: Bearer <your-token>
 ---
 
 ### GET /api/v1/task-types — 列出支持的任务类型
+
+`types` 保留所有已实现的 API 任务类型。新增的 `capabilities` 数组为每种类型提供 `type`、`available` 和可选的 `reason`：检查 Aria2 配置、yt-dlp 程序、解析器注册和 Telegram 客户端初始化等本地前置条件，不执行下载或远端探测。可用不代表任意 URL、存储或凭据都能成功。
 
 **响应 `200 OK`：**
 
@@ -127,6 +132,8 @@ Authorization: Bearer <your-token>
 ---
 
 ### POST /api/v1/tasks — 创建任务
+
+请求体上限为 1 MiB，只接受一个 JSON 文档。提交前的解析、列举等操作收到请求 context，并设置 30 秒期限；JS 插件的匹配、纯 JS 执行与 `ghttp` 已响应取消。Playwright 在等待安装及各阶段之间检查取消，浏览器启动和导航使用更短的剩余期限，但已经开始的安装、驱动启动、页面操作与关闭，以及部分 Telegram 底层调用尚未完整响应取消，因此期限并非所有类型的硬保证。成功入队后的任务使用服务 context，HTTP 客户端断开不会取消它。
 
 **请求头：**
 
@@ -152,7 +159,7 @@ Authorization: Bearer <token>
 | `type` | string | 是 | 任务类型，见下文 |
 | `storage` | string | 是 | 目标存储名，须与配置中的存储名一致 |
 | `path` | string | 否 | 存储内的子目录路径 |
-| `webhook` | string | 否 | 任务完成/失败时的回调地址 |
+| `webhook` | string | 否 | 任务完成、失败或取消时的回调地址 |
 | `params` | object | 是 | 各任务类型的专属参数，见下文 |
 
 **响应 `201 Created`：**
@@ -343,7 +350,7 @@ Authorization: Bearer <token>
 
 ### GET /api/v1/tasks — 列出所有任务
 
-返回所有 API 创建的任务（仅在内存中保留，重启后清空）。
+返回所有 API 创建的任务（仅在内存中保留，重启后清空），按 `created_at` 降序排列；创建时间相同时按 `task_id` 降序排列，保证返回顺序稳定。
 
 **响应 `200 OK`：**
 
@@ -419,6 +426,8 @@ Authorization: Bearer <token>
 ## Webhook 回调
 
 创建任务时可设置 `webhook` 字段。当任务进入终态（`completed`、`failed`、`cancelled`）时，Bot 会向该地址发送一个 `POST` 请求。
+
+终态不会被迟到的进度或结束事件改写；排队任务取消也会触发通知。每个任务只生成一次终态通知，HTTP 发送最多尝试三次、总时限 90 秒，服务退出会中止发送与等待。接收端按 `task_id` 和 `status` 去重；通知不持久化，退出或网络失败可能丢失。取消表示已请求停止执行，不保证所有已保存文件会被撤销。
 
 **回调请求头：**
 

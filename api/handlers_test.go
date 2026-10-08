@@ -7,14 +7,45 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 )
+
+func TestTaskTypesDescribeDisabledPrerequisites(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(p, []byte("workers = 1\n[aria2]\nenable = false\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Init(t.Context(), p); err != nil {
+		t.Fatal(err)
+	}
+	handlers, _ := setupTestServer(t)
+	rr := httptest.NewRecorder()
+	handlers.GetTaskTypesHandler(rr, httptest.NewRequest(http.MethodGet, "/api/v1/task-types", nil))
+	var response struct {
+		Types        []tasktype.TaskType `json:"types"`
+		Capabilities []TaskCapability    `json:"capabilities"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Types) != 7 || len(response.Capabilities) != 7 {
+		t.Fatalf("response=%+v", response)
+	}
+	for _, c := range response.Capabilities {
+		if c.Type == tasktype.TaskTypeAria2 && (c.Available || c.Reason == "") {
+			t.Fatalf("disabled aria2 advertised as ready: %+v", c)
+		}
+	}
+}
 
 // setupTestServer creates a test server with handlers
 func setupTestServer(t *testing.T) (*Handlers, *TaskFactory) {
@@ -170,6 +201,60 @@ func TestListTasksHandler(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestListTasksHandlerNewestFirst(t *testing.T) {
+	handlers, _ := setupTestServer(t)
+	base := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	prefix := t.Name() + "-"
+	for _, item := range []struct {
+		name   string
+		offset time.Duration
+	}{
+		{"oldest", 0},
+		{"newest", 2 * time.Minute},
+		{"same-a", time.Minute},
+		{"same-z", time.Minute},
+	} {
+		id := prefix + item.name
+		info := RegisterTask(id, "directlinks", "local", "downloads", item.name, "")
+		info.mu.Lock()
+		info.CreatedAt = base.Add(item.offset)
+		info.mu.Unlock()
+		t.Cleanup(func() { DeleteTask(id) })
+	}
+	want := []string{prefix + "newest", prefix + "same-z", prefix + "same-a", prefix + "oldest"}
+	// Repeated snapshots must use the same order, including timestamp ties.
+	for range 3 {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
+		rr := httptest.NewRecorder()
+		handlers.ListTasksHandler(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d want %d", rr.Code, http.StatusOK)
+		}
+		var response TasksListResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.Total != len(response.Tasks) {
+			t.Fatalf("total=%d tasks=%d", response.Total, len(response.Tasks))
+		}
+		var got []string
+		for i, task := range response.Tasks {
+			if strings.HasPrefix(task.TaskID, prefix) {
+				got = append(got, task.TaskID)
+			}
+			if i > 0 {
+				previous := response.Tasks[i-1]
+				if previous.CreatedAt.Before(task.CreatedAt) || (previous.CreatedAt.Equal(task.CreatedAt) && previous.TaskID < task.TaskID) {
+					t.Fatalf("task list is out of order: %s before %s", previous.TaskID, task.TaskID)
+				}
+			}
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("order=%v want %v", got, want)
+		}
 	}
 }
 
@@ -402,8 +487,8 @@ func TestConcurrentProgressStore(t *testing.T) {
 	}
 }
 
-// TestProgressTrackerConcurrentUpdates tests concurrent progress updates
-func TestProgressTrackerConcurrentUpdates(t *testing.T) {
+// TestTaskProgressConcurrentUpdates tests concurrent progress updates.
+func TestTaskProgressConcurrentUpdates(t *testing.T) {
 	info := RegisterTask("concurrent-progress", "directlinks", "local", "downloads", "Test", "")
 	info.Emit(taskevent.Event{TaskID: "concurrent-progress", Phase: taskevent.PhaseStart, TotalBytes: 10000})
 

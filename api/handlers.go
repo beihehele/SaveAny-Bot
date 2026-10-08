@@ -1,14 +1,21 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
+	"github.com/krau/SaveAny-Bot/parsers/parsers"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/storage"
+	ytdlp "github.com/lrstanley/go-ytdlp"
 )
 
 // Handlers 处理器结构体
@@ -29,7 +36,18 @@ func (h *Handlers) CreateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	const maxTaskRequestBytes = 1 << 20
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxTaskRequestBytes))
+	if err != nil {
+		var sizeErr *http.MaxBytesError
+		if errors.As(err, &sizeErr) {
+			WriteError(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body exceeds 1 MiB")
+		} else {
+			WriteError(w, http.StatusBadRequest, "invalid_request", "failed to read request body")
+		}
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid_request", "failed to decode request body: "+err.Error())
 		return
 	}
@@ -46,7 +64,9 @@ func (h *Handlers) CreateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 创建任务
-	resp, err := h.factory.CreateTask(&req)
+	prepareCtx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	resp, err := h.factory.CreateTaskWithContext(prepareCtx, &req)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "task_creation_failed", err.Error())
 		return
@@ -69,6 +89,14 @@ func (h *Handlers) ListTasksHandler(w http.ResponseWriter, r *http.Request) {
 		info := convertTaskProgressToResponse(task)
 		response = append(response, info)
 	}
+
+	// Map iteration is unordered. Task IDs keep timestamp ties deterministic.
+	sort.Slice(response, func(i, j int) bool {
+		if !response[i].CreatedAt.Equal(response[j].CreatedAt) {
+			return response[i].CreatedAt.After(response[j].CreatedAt)
+		}
+		return response[i].TaskID > response[j].TaskID
+	})
 
 	WriteJSON(w, http.StatusOK, TasksListResponse{
 		Tasks: response,
@@ -138,11 +166,19 @@ func (h *Handlers) ListStoragesHandler(w http.ResponseWriter, r *http.Request) {
 	available := storage.AllStorages()
 	storages := make([]StorageInfo, 0, len(available))
 	for name, stor := range available {
+		_, readable := stor.(storage.StorageReadable)
+		_, listable := stor.(storage.StorageListable)
+		_, cannotStream := stor.(storage.StorageCannotStream)
 		storages = append(storages, StorageInfo{
-			Name: name,
-			Type: string(stor.Type()),
+			Name:            name,
+			Type:            string(stor.Type()),
+			Readable:        readable,
+			Listable:        listable,
+			Stream:          !cannotStream,
+			DetectExistence: storage.CanDetectExistence(stor),
 		})
 	}
+	sort.Slice(storages, func(i, j int) bool { return storages[i].Name < storages[j].Name })
 
 	WriteJSON(w, http.StatusOK, StoragesResponse{Storages: storages})
 }
@@ -162,12 +198,41 @@ func (h *Handlers) GetTaskTypesHandler(w http.ResponseWriter, r *http.Request) {
 		tasktype.TaskTypeTgfiles,
 		tasktype.TaskTypeTphpics,
 		tasktype.TaskTypeTransfer,
-		tasktype.TaskTypeCopy,
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
-		"types": types,
+		"types":        types,
+		"capabilities": taskCapabilities(r.Context(), types),
 	})
+}
+
+func taskCapabilities(ctx context.Context, types []tasktype.TaskType) []TaskCapability {
+	capabilities := make([]TaskCapability, 0, len(types))
+	for _, typ := range types {
+		capability := TaskCapability{Type: typ, Available: true}
+		switch typ {
+		case tasktype.TaskTypeAria2:
+			if !config.C().Aria2.Enable || strings.TrimSpace(config.C().Aria2.Url) == "" {
+				capability.Available, capability.Reason = false, "aria2 is not configured"
+			}
+		case tasktype.TaskTypeYtdlp:
+			// Use the pinned wrapper's resolution rules, including its cache. This
+			// only builds a command; it never executes or downloads a binary.
+			if cmd := ytdlp.New().BuildCommand(ctx); cmd.Err != nil {
+				capability.Available, capability.Reason = false, "yt-dlp executable is unavailable"
+			}
+		case tasktype.TaskTypeParseditem:
+			if len(parsers.Get()) == 0 {
+				capability.Available, capability.Reason = false, "no parsers are registered"
+			}
+		case tasktype.TaskTypeTgfiles:
+			if _, err := getClientContext(); err != nil {
+				capability.Available, capability.Reason = false, "Telegram client is not initialized"
+			}
+		}
+		capabilities = append(capabilities, capability)
+	}
+	return capabilities
 }
 
 // HealthCheckHandler 健康检查处理器

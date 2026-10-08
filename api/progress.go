@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -11,23 +13,24 @@ import (
 // guarded by mu. It implements taskevent.Sink so the task layer can update it
 // without knowing about the API.
 type TaskProgressInfo struct {
-	mu               sync.Mutex
-	TaskID           string
-	Type             string
-	Status           TaskStatus
-	Title            string
-	TotalBytes       int64
-	DownloadedBytes  int64
-	TotalFiles       int
-	DownloadedFiles  int
-	Storage          string
-	Path             string
-	Error            string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	StartedAt        time.Time
-	Webhook          string
-	webhookNotified  bool
+	mu              sync.Mutex
+	TaskID          string
+	Type            string
+	Status          TaskStatus
+	Title           string
+	TotalBytes      int64
+	DownloadedBytes int64
+	TotalFiles      int
+	DownloadedFiles int
+	Storage         string
+	Path            string
+	Error           string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	StartedAt       time.Time
+	Webhook         string
+	webhookNotified bool
+	webhookContext  context.Context
 }
 
 // progressStore holds all API tasks. Entries are removed a fixed duration after
@@ -128,21 +131,35 @@ func StartCleanupLoop(ctx interface{ Done() <-chan struct{} }) {
 // UpdateStatus sets the task status.
 func (t *TaskProgressInfo) UpdateStatus(status TaskStatus) {
 	t.mu.Lock()
+	if t.Status.terminal() {
+		t.mu.Unlock()
+		return
+	}
 	t.Status = status
 	t.UpdatedAt = time.Now()
 	if status == TaskStatusRunning && t.StartedAt.IsZero() {
 		t.StartedAt = t.UpdatedAt
 	}
+	payload := t.notificationLocked()
+	ctx := t.webhookContext
 	t.mu.Unlock()
+	SendWebhook(ctx, payload)
 }
 
 // SetError marks the task failed with an error message.
 func (t *TaskProgressInfo) SetError(err string) {
 	t.mu.Lock()
+	if t.Status.terminal() {
+		t.mu.Unlock()
+		return
+	}
 	t.Error = err
 	t.Status = TaskStatusFailed
 	t.UpdatedAt = time.Now()
+	payload := t.notificationLocked()
+	ctx := t.webhookContext
 	t.mu.Unlock()
+	SendWebhook(ctx, payload)
 }
 
 // snapshot returns a point-in-time copy of the fields needed to render a
@@ -157,6 +174,10 @@ func (t *TaskProgressInfo) snapshot() (status TaskStatus, total, downloaded int6
 // status/progress updates and fires the webhook on terminal transitions.
 func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 	t.mu.Lock()
+	if t.Status.terminal() {
+		t.mu.Unlock()
+		return
+	}
 	switch e.Phase {
 	case taskevent.PhaseStart:
 		t.Status = TaskStatusRunning
@@ -179,7 +200,9 @@ func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 			t.DownloadedFiles = e.DownloadedFiles
 		}
 	case taskevent.PhaseDone:
-		if e.Err != nil {
+		if errors.Is(e.Err, context.Canceled) {
+			t.Status = TaskStatusCancelled
+		} else if e.Err != nil {
 			t.Status = TaskStatusFailed
 			t.Error = e.Err.Error()
 		} else {
@@ -187,30 +210,26 @@ func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 		}
 	}
 	t.UpdatedAt = time.Now()
-	notify := t.Webhook != "" && !t.webhookNotified && (t.Status == TaskStatusCompleted || t.Status == TaskStatusFailed)
-	if notify {
-		t.webhookNotified = true
-	}
+	payload := t.notificationLocked()
+	ctx := t.webhookContext
 	t.mu.Unlock()
+	SendWebhook(ctx, payload)
+}
 
-	if notify {
-		payload := CreateWebhookPayload(t.TaskID, t.Type, t.Status, t.Storage, t.Path, e.Err)
-		SendWebhook(nil, payload)
+func (s TaskStatus) terminal() bool {
+	return s == TaskStatusCompleted || s == TaskStatusFailed || s == TaskStatusCancelled
+}
+
+// notificationLocked makes one notification decision using a consistent snapshot.
+// Delivery may retry; receivers should deduplicate by task ID and terminal status.
+func (t *TaskProgressInfo) notificationLocked() *WebhookPayload {
+	if t.Webhook == "" || t.webhookNotified || !t.Status.terminal() {
+		return nil
 	}
+	t.webhookNotified = true
+	var err error
+	if t.Error != "" {
+		err = errors.New(t.Error)
+	}
+	return CreateWebhookPayload(t.TaskID, t.Type, t.Status, t.Storage, t.Path, err)
 }
-
-// ProgressTracker is retained for compatibility but is no longer the primary
-// progress path; taskevent drives updates now. These methods are safe no-ops
-// when called on a nil receiver.
-type ProgressTracker struct{}
-
-func NewProgressTracker(taskID, taskType, storage, path, title, webhook string) *ProgressTracker {
-	return &ProgressTracker{}
-}
-
-func (p *ProgressTracker) OnStart(totalBytes int64, totalFiles int)    {}
-func (p *ProgressTracker) OnProgress(downloadedBytes int64, downloadedFiles int) {}
-func (p *ProgressTracker) OnDone(err error)                            {}
-func (p *ProgressTracker) GetInfo() *TaskProgressInfo                  { return nil }
-func (p *ProgressTracker) UpdateProgressBytes(bytes int64)             {}
-func (p *ProgressTracker) UpdateProgressFiles(files int)               {}
