@@ -315,6 +315,8 @@ bot:
       error_version_var_invalid: "Currently in development version or version info injection failed: {{.Error}}"
       error_check_latest_failed: "Failed to check latest version: {{.Error}}"
       error_no_release_found: "No release found"
+      error_release_changed: "This update button has expired. Run /update again to check the release."
+      info_manual_upgrade_required: "This build or release requires a manual update. Back up configuration and data, stop the service, and replace the binary; for Docker, update the image."
       info_major_upgrade_required: "Major upgrade detected: {{.Current}} -> {{.Latest}} , please download the latest version from GitHub and check the migration guide"
       info_already_latest: "Already on latest version: {{.Version}}"
       info_new_version_in_docker: |-
@@ -333,7 +335,7 @@ bot:
         Upgrading will restart the bot. Proceed?
       info_upgrading_with_version: "Upgrading, current version: {{.Current}}"
       error_upgrade_failed: "Upgrade failed: {{.Error}}"
-      info_upgrade_success: "Upgraded to version {{.Version}}\nIf the bot did not restart automatically, please start it manually"
+      info_upgrade_success: "Upgraded to version {{.Version}}\nPrevious binary: {{.Backup}}\nIf the bot did not restart automatically, please start it manually"
       button_upgrade: "Upgrade"
     config:
       prompt_select_option: "Please select an option to configure"

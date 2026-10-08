@@ -316,6 +316,8 @@ bot:
       error_version_var_invalid: "当前处于开发版本或版本信息注入失败: {{.Error}}"
       error_check_latest_failed: "检测最新版本失败: {{.Error}}"
       error_no_release_found: "没有找到版本信息"
+      error_release_changed: "更新按钮已过期，请重新发送 /update 检查版本。"
+      info_manual_upgrade_required: "此构建或发布需人工更新。请备份配置和数据，停机后更换程序；Docker 请更新镜像。"
       info_major_upgrade_required: "检测到大版本更新: {{.Current}} -> {{.Latest}} , 请前往 GitHub 手动下载最新版本并查看迁移指南"
       info_already_latest: "当前已经是最新版本: {{.Version}}"
       info_new_version_in_docker: |-
@@ -334,7 +336,7 @@ bot:
         升级将重启 Bot , 是否升级?
       info_upgrading_with_version: "正在升级中, 当前版本: {{.Current}}"
       error_upgrade_failed: "升级失败: {{.Error}}"
-      info_upgrade_success: "已升级至版本 {{.Version}}\n若 Bot 未自动重启请手动启动"
+      info_upgrade_success: "已升级至版本 {{.Version}}\n旧程序备份: {{.Backup}}\n若 Bot 未自动重启请手动启动"
       button_upgrade: "升级"
     config:
       prompt_select_option: "请选择要配置的选项"

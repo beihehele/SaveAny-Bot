@@ -6,7 +6,7 @@ title: "安装与更新"
 
 ## 从预编译文件部署(推荐)
 
-在 [Release](https://github.com/krau/SaveAny-Bot/releases) 页面下载对应平台的二进制文件.
+使用本分支时, 二进制文件应来自[本仓库的 Release](https://github.com/beihehele/SaveAny-Bot/releases), 或从已验收的提交自行构建. 上游发布不包含本分支的全部修改.
 
 在解压后目录新建 `config.toml` 文件, 参考 [配置说明](../configuration) 编辑配置文件
 
@@ -123,38 +123,57 @@ docker compose up -d
 ### Docker
 
 ```shell
-docker run -d --name saveany-bot \
+docker run -d --name saveany-bot --restart unless-stopped \
     -v /path/to/config.toml:/app/config.toml \
+    -v /path/to/data:/app/data \
+    -v /path/to/cache:/app/cache \
     -v /path/to/downloads:/app/downloads \
     ghcr.io/beihehele/saveany-bot:latest
 ```
 
 {{< hint info >}}
-当前发布的为默认完整版镜像, 包含所有功能和依赖. 也可按版本号拉取指定发布, 例如: <code>ghcr.io/beihehele/saveany-bot:0.1.0</code>
+默认镜像提供完整版程序、FFmpeg 和 yt-dlp. Rclone 需要另行安装和配置; Playwright 插件需要兼容的浏览器运行环境. 稳定部署应固定到已验收的镜像版本或 digest, 并在隔离环境验证需要的功能.
 {{< /hint >}}
+
+`data` 保存数据库和 Telegram 会话, 更新或重建容器时必须保留. `cache` 必须是仅用于临时文件的独立目录, 不要与 `data` 或 `downloads` 共用.
+
+程序退出不再清空整个缓存目录，每个任务清理自己创建的临时文件。强制退出或超时可能留下残留；确认服务停止、目录用途和文件内容后再人工清理，旧的 `no_clean_cache` 选项保留兼容但不控制整目录删除。
 
 设置容器环境变量 `CONFIG_URL`（仅支持 HTTP(S)）时，程序直接加载远程配置，下载超时为 30 秒；HTTP 错误、响应不完整或配置解析失败会阻止启动。远程配置不会覆盖 `/app/config.toml` 或宿主机挂载文件，也不会保存为本地配置副本；未设置时继续读取本地配置。
 
 ## 更新
 
-若使用预编译二进制文件部署, 使用以下 CLI 命令更新:
+升级前先停止服务，将配置、整个 `data` 目录及自定义插件复制到独立备份目录，包括数据库与 Bot/UserBot 会话。保留旧版程序或镜像 digest；不要删除数据库来规避迁移失败。回滚时停机恢复经过检查的完整备份与旧程序，不能假定迁移后的数据库一定兼容旧版。配置移除用户仍会触发既有的用户同步与关联数据删除，应先核对用户列表。
 
-```bash
-./saveany-bot up
-```
+若使用二进制文件部署, 先备份配置和 `data`, 停止服务, 再用本仓库已验收的发布文件替换程序并重新启动. `up` / `upgrade` 和 Bot 内 `/update` 已改为检查 `beihehele/SaveAny-Bot` 的发布; 开发版本不支持自更新. Bot 内更新的停机和恢复流程尚未验收, 当前仍优先使用停止服务后的人工更新.
+
+自更新仅接受同主版本的更新稳定版本，使用本仓库流水线的默认构建资产；Docker、micro/pico 等带构建标签的版本应人工更新。查询最多 30 秒，下载及准备最多 5 分钟；资产和解压总量各限 512 MiB。下载按资产 ID 固定目标，并检查大小、SHA-256、程序模块及平台构建信息；缺少 GitHub 资产 digest 或同发布 `.sha256` 文件时拒绝自更新。CLI 失败返回非零退出码；旧 Bot 按钮或资产已变化时须重新发送 `/update`。
+
+替换前检查取消，提交阶段完成替换或回滚；成功后保留同目录 `.saveany-update-old-*` 旧程序，并显示备份路径。旧程序备份不包含配置、数据库或会话。恢复时停机并核对整套备份；确认新版运行正常后，再人工删除对应旧程序。SHA-256 校验仍信任本仓库发布者，尚未提供独立签名验证。
 
 如果是 Docker 部署, 使用以下命令更新:
 
-docker:
+Docker 更新前确认 `data` 已持久化并备份. 旧容器未挂载 `/app/data` 时, 先停止容器, 用 `docker cp saveany-bot:/app/data /path/to/data-backup` 导出数据, 并将后续容器的 `/app/data` 绑定到这份数据. 保留原有插件、代理和其他运行参数.
+
+已按上面的挂载方式部署时:
 
 ```bash
 docker pull ghcr.io/beihehele/saveany-bot:latest
-docker restart saveany-bot
+docker stop saveany-bot
+docker rm saveany-bot
+docker run -d --name saveany-bot --restart unless-stopped \
+    -v /path/to/config.toml:/app/config.toml \
+    -v /path/to/data:/app/data \
+    -v /path/to/cache:/app/cache \
+    -v /path/to/downloads:/app/downloads \
+    ghcr.io/beihehele/saveany-bot:latest
 ```
 
 docker compose:
 
 ```bash
 docker compose pull
-docker compose restart
+docker compose up -d
 ```
+
+仅重启已有容器不会切换到刚拉取的新镜像. Compose 的 `up -d` 会根据镜像变化重建容器并保留挂载数据, 见 [Docker 官方说明](https://docs.docker.com/reference/cli/docker/compose/up/). 上例的 `latest` 应替换为此次已验收的版本或 digest.

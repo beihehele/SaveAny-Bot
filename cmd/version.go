@@ -1,14 +1,15 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 
-	"github.com/krau/SaveAny-Bot/config"
-	"github.com/unvgo/ghselfupdate"
-
 	"github.com/blang/semver"
 	"github.com/spf13/cobra"
+
+	"github.com/krau/SaveAny-Bot/config"
+	"github.com/krau/SaveAny-Bot/pkg/updater"
 )
 
 var VersionCmd = &cobra.Command{
@@ -16,7 +17,7 @@ var VersionCmd = &cobra.Command{
 	Aliases: []string{"v"},
 	Short:   "Print the version number of saveany-bot",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("saveany-bot version: %s %s/%s\nBuildTime: %s, Commit: %s\n", config.Version, runtime.GOOS, runtime.GOARCH, config.BuildTime, config.GitCommit)
+		fmt.Printf("saveany-bot version: %s %s/%s\nBuildTime: %s, Commit: %s, Go: %s\n", config.Version, runtime.GOOS, runtime.GOARCH, config.BuildTime, config.GitCommit, runtime.Version())
 	},
 }
 
@@ -24,34 +25,42 @@ var upgradeCmd = &cobra.Command{
 	Use:     "upgrade",
 	Aliases: []string{"up"},
 	Short:   "Upgrade saveany-bot to the latest version",
-	Run: func(cmd *cobra.Command, args []string) {
-		v := semver.MustParse(config.Version)
-		latest, found, err := ghselfupdate.DetectLatest(config.GitRepo)
+	Args:    cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		v, err := semver.Parse(config.Version)
 		if err != nil {
-			fmt.Println("Error occurred while detecting latest version:", err)
-			return
+			return fmt.Errorf("cannot upgrade: invalid release version: %w", err)
+		}
+		if err := updater.CheckEnvironment(config.Docker == "true"); err != nil {
+			return err
+		}
+		latest, found, err := updater.DetectLatest(cmd.Context(), config.GitRepo)
+		if err != nil {
+			return fmt.Errorf("detect latest release: %w", err)
 		}
 		if !found {
-			fmt.Println("No releases found")
-			return
+			cmd.Println("No releases found")
+			return nil
 		}
-		if latest.Version.Major != v.Major {
-			fmt.Printf("Major version upgrade detected: %s -> %s. Please manually download the latest version and check the migration guide.\n", v, latest.Version)
-			return
+		if err := updater.CheckUpgrade(v, latest); err != nil {
+			if errors.Is(err, updater.ErrAlreadyLatest) {
+				cmd.Println("Current binary is the latest version", config.Version)
+				return nil
+			}
+			return fmt.Errorf("cannot upgrade %s to %s: %w", v, latest.Version(), err)
 		}
-		if latest.Version.Equals(v) || latest.Version.LT(v) {
-			fmt.Println("Current binary is the latest version", config.Version)
-			return
+		if err := latest.VerificationError(); err != nil {
+			return err
 		}
-		fmt.Printf("Updating to version %s...\n", latest.Version)
-		latest, err = ghselfupdate.UpdateSelf(v, config.GitRepo)
+		cmd.Printf("Updating to version %s...\n", latest.Version())
+		backup, err := updater.Apply(cmd.Context(), v, latest)
 		if err != nil {
-			fmt.Println("Update failed:", err)
-			return
+			return fmt.Errorf("update failed: %w", err)
 		}
-		fmt.Println("Successfully updated to version", latest.Version)
-		fmt.Println("Release note:\n", latest.ReleaseNotes)
-
+		cmd.Println("Successfully updated to version", latest.Version())
+		cmd.Println("Previous binary saved at", backup)
+		cmd.Println("Release note:\n", latest.ReleaseNotes())
+		return nil
 	},
 }
 

@@ -10,5 +10,5 @@ var (
 )
 
 const (
-	GitRepo = "krau/SaveAny-Bot"
+	GitRepo = "beihehele/SaveAny-Bot"
 )

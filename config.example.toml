@@ -1,5 +1,5 @@
 # 创建文件时，若需要保留中文注释，请务必确保本文件编码为 UTF-8 ，否则会无法读取。
-# 更详细的配置请在 https://sabot.unv.app/deployment/configuration 查看
+# 更详细的配置见 docs/content/zh/deployment/configuration/_index.md
 workers = 4    # 同时下载文件数
 retry = 3      # 下载失败重试次数
 threads = 4    # 单个任务下载使用的最大线程数
