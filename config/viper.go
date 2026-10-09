@@ -109,11 +109,12 @@ func Init(ctx context.Context, configFile ...string) error {
 
 	defaultConfigs := map[string]any{
 		// 基础配置
-		"lang":      "zh-Hans",
-		"workers":   3,
-		"retry":     3,
-		"threads":   4,
-		"log.level": "debug",
+		"lang":              "zh-Hans",
+		"workers":           3,
+		"retry":             3,
+		"threads":           4,
+		"log.level":         "debug",
+		"hook.exec.timeout": DefaultHookExecTimeout.String(),
 
 		// 缓存配置
 		"cache.ttl":          86400,
@@ -157,6 +158,9 @@ func Init(ctx context.Context, configFile ...string) error {
 	next := &Config{}
 	if err := viper.Unmarshal(next); err != nil {
 		return fmt.Errorf("decode config: %w", err)
+	}
+	if next.Hook.Exec.Timeout <= 0 {
+		return fmt.Errorf("hook.exec.timeout must be a positive duration")
 	}
 
 	storagesConfig, err := storage.LoadStorageConfigs(viper.GetViper())

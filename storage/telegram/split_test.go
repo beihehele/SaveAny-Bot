@@ -3,6 +3,8 @@ package telegram
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -76,5 +78,36 @@ func TestCreateSplitZip(t *testing.T) {
 				t.Fatal("archive contents changed after splitting and reassembly")
 			}
 		})
+	}
+}
+
+func TestCreateSplitZipCancellation(t *testing.T) {
+	for _, duringRead := range []bool{false, true} {
+		t.Run(fmt.Sprintf("during_read_%t", duringRead), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			payload := bytes.Repeat([]byte("cancel"), 1024)
+			var reader io.Reader = bytes.NewReader(payload)
+			if duringRead {
+				reader = &cancelMediaReader{Reader: bytes.NewReader(payload), cancel: cancel}
+			} else {
+				cancel()
+			}
+			base := filepath.Join(t.TempDir(), "archive")
+			if err := CreateSplitZip(ctx, reader, int64(len(payload)), "sample.dat", base, 65536); !errors.Is(err, context.Canceled) {
+				t.Fatalf("err=%v", err)
+			}
+			if _, err := os.Stat(base + ".zip"); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("cancelled archive was finalized: %v", err)
+			}
+		})
+	}
+}
+
+func TestCreateSplitZipRejectsInvalidPartSize(t *testing.T) {
+	for _, size := range []int64{0, -1} {
+		if err := CreateSplitZip(t.Context(), bytes.NewReader(nil), 0, "empty", filepath.Join(t.TempDir(), "archive"), size); err == nil {
+			t.Fatalf("invalid part size %d succeeded", size)
+		}
 	}
 }

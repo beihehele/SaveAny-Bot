@@ -2,7 +2,6 @@ package aria2dl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"sync/atomic"
@@ -17,6 +16,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/utils/dlutil"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/pkg/aria2"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 type ProgressTracker interface {
@@ -128,7 +128,7 @@ func (p *Progress) OnProgress(ctx context.Context, task *Task, status *aria2.Sta
 func (p *Progress) OnDone(ctx context.Context, task *Task, err error) {
 	logger := log.FromContext(ctx)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
+		if taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled {
 			logger.Infof("Aria2 task %s was canceled", task.TaskID())
 			ext := tgutil.ExtFromContext(ctx)
 			if ext != nil {

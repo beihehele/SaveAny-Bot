@@ -238,11 +238,16 @@ blacklist = true
 
 ```toml
 [hook.exec]
+timeout = "30s" # 每条命令的正时长期限；较长脚本可显式延长
 task_before_start = "echo '任务即将开始'"
 task_success = "bash /path/to/success_script.sh"
 task_fail = "curl -X POST https://example.com/api/notify -d '任务失败'"
 task_cancel = "bash /path/to/cancel_script.sh"
 ```
+
+每条命令默认有 30 秒执行期限，包括 `task_before_start`。可设置 `hook.exec.timeout` 或环境变量 `SAVEANY_HOOK_EXEC_TIMEOUT`；零、负数和无效时长会被拒绝。超时或 hook 失败只记录日志，不改写任务执行结果。启动前 hook 失败时，只要任务 context 仍有效，任务仍会执行。hook 不自动重试。
+
+取消时停止 hook shell 及其普通后代进程。Unix 使用独立进程组；Windows 先挂起 shell，加入本次命令专属的 Job Object 后再运行，取消时关闭 Job，无需外部 taskkill。Job 初始化失败会回收 shell 并返回诊断错误。Windows 命令正常结束时也会关闭 Job，剩余后台子进程随之终止，因此不应通过 Windows hook 启动需要长期驻留的后台服务。执行期限到达后，进程回收可能使返回略有延迟；此管理不构成脚本安全沙箱。服务取消后才启动的终态 hook 保留原有 5 秒关停宽限，同时受更短的配置期限约束；已运行的 hook 仍响应服务取消。
 
 ### 解析器
 

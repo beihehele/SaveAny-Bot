@@ -20,3 +20,14 @@ func ExtFromContext(ctx context.Context) *ext.Context {
 func ExtWithContext(ctx context.Context, extCtx *ext.Context) context.Context {
 	return context.WithValue(ctx, extKey, extCtx)
 }
+
+// ClientWithContext preserves client dependencies while deriving RPC lifetime.
+// The shared client context is never modified.
+func ClientWithContext(ctx context.Context, client *ext.Context) *ext.Context {
+	if client == nil {
+		return nil
+	}
+	derived := *client
+	derived.Context = ctx
+	return &derived
+}

@@ -10,6 +10,7 @@ import (
 	"github.com/duke-git/lancet/v2/retry"
 	"github.com/krau/SaveAny-Bot/common/tdler"
 	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
+	"github.com/krau/SaveAny-Bot/common/utils/retryutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/ctxkey"
 )
@@ -57,7 +58,7 @@ func (t *Task) Execute(ctx context.Context) error {
 		return fmt.Errorf("failed to get file stat: %w", err)
 	}
 	vctx := context.WithValue(ctx, ctxkey.ContentLength, fileStat.Size())
-	err = retry.Retry(func() error {
+	err = retryutil.RetrySave(vctx, func() error {
 		file, err := os.Open(t.localPath)
 		if err != nil {
 			return fmt.Errorf("failed to open cache file: %w", err)

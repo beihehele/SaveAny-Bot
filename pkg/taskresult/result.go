@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 )
 
 // State describes a submitted element, not a file excluded before submission.
@@ -14,6 +16,7 @@ const (
 	Pending     State = "pending"
 	Running     State = "running"
 	Succeeded   State = "succeeded"
+	Skipped     State = "skipped"
 	Failed      State = "failed"
 	Cancelled   State = "cancelled"
 	Interrupted State = "interrupted"
@@ -31,8 +34,8 @@ type Element struct {
 // Interrupted means internal cancellation (e.g. a sibling failed), distinct
 // from cancellation/deadline of the parent task. Bytes are tracked separately.
 type Summary struct {
-	Total, Pending, Running, Succeeded, Failed, Cancelled, Interrupted int
-	Elements                                                           []Element
+	Total, Pending, Running, Succeeded, Skipped, Failed, Cancelled, Interrupted int
+	Elements                                                                    []Element
 }
 
 // Tracker records outcomes by input index, so even duplicate IDs stay distinct.
@@ -73,6 +76,8 @@ func (t *Tracker) Finish(index int, err, parentErr error) {
 	switch {
 	case err == nil:
 		element.State = Succeeded
+	case errors.Is(err, storagetypes.ErrSaveSkipped):
+		element.State = Skipped
 	case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
 		if parentErr != nil {
 			element.State = Cancelled
@@ -100,6 +105,8 @@ func (t *Tracker) Snapshot() Summary {
 			result.Running++
 		case Succeeded:
 			result.Succeeded++
+		case Skipped:
+			result.Skipped++
 		case Failed:
 			result.Failed++
 		case Cancelled:

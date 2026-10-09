@@ -238,11 +238,16 @@ The configured value must be a full shell command line. The bot will execute thi
 
 ```toml
 [hook.exec]
+timeout = "30s" # Positive duration per command; increase for longer scripts
 task_before_start = "echo 'task is about to start'"
 task_success = "bash /path/to/success_script.sh"
 task_fail = "curl -X POST https://example.com/api/notify -d 'task failed'"
 task_cancel = "bash /path/to/cancel_script.sh"
 ```
+
+Each command has a 30-second default execution budget, including `task_before_start`. Set a positive duration in `hook.exec.timeout`, or use `SAVEANY_HOOK_EXEC_TIMEOUT`; zero, negative and malformed durations are rejected. Timeouts and hook failures are logged without changing the task's execution result. A failed before-start hook still allows execution if the task context remains active. Hooks do not retry automatically.
+
+Cancellation stops the hook shell and its ordinary descendants. Unix hooks use a separate process group. Windows starts the shell suspended, assigns it to a dedicated Job Object, then resumes it; cancellation closes the job without invoking taskkill. Job setup failures reap the shell and return a diagnostic error. Normal Windows command completion also closes the job and stops remaining background children, so Windows hooks must not launch services intended to outlive the command. Process cleanup can briefly extend the return time after the execution deadline; this process management is not a security sandbox. Terminal hooks started after service cancellation retain the existing five-second shutdown grace, subject to a shorter configured timeout; hooks already running remain cancellable by the service.
 
 ### Parsers
 

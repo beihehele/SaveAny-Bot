@@ -392,3 +392,126 @@ Go 1.26.9 的 Windows/Linux 默认源码复扫均退出 0，并由摘要断言�
 合入后在 `b9b6f63` 的源码上，Go 1.26.9 全量普通测试（count=1）、全量 vet、完整 Windows race（count=1）均退出 0。日志及实测提交 SHA 保存在 `tmp-architecture-validation-20261009/postmerge-20261009-134628`。本节完成后仅补充文档并归入本轮工具链提交；最终代码、测试和构建配置的 15 个文件逐项核对合入前冻结源码 SHA-256，全部相同。原始验证记录保留实测 SHA，不重标先前基于 `74618aa` 加工作区变更的二进制。
 
 Go 格式、累计 diff 空白检查、前述保护路径及用户草案校验通过，全部受版本控制的修改已提交。先前同源码的四种 CGO=0 构建、Windows/Linux 漏洞扫描、模块校验、媒体五包 race 重复 10 次、可选标签与容器入口回归作为补充证据复用。仍未执行真实 Telegram 联调、远端 Linux CI、目标 Linux/容器关闭及停止部署副本的备份/升级/整套恢复；未使用远端后端的已知缺陷继续暂缓。结论是本地合入及自动回归通过，正式发布验收尚未完成。
+
+## 2026-10-09 main 新增提交的选择性适配
+
+此前 dev 已推送到 `47c9c64`，[对应的 GitHub Quality 流水线](https://github.com/beihehele/SaveAny-Bot/actions/runs/37893401650)全部通过，包括 Linux 测试、race、可选标签、构建和可达漏洞检查；前文的远端 CI 缺口在该提交上已关闭。该结果不覆盖以下新工作区变更，也不代替真实部署验收。
+
+本轮 main 从 `5283f61` 更新到 `92e6072`。复核后只适配 `1d42329` 和 `c291166` 的取消分类修复，按 dev 现有模型形成一个批次，没有直接 merge 或 cherry-pick。main 的批文件执行结构与 dev 不同，不能将其整体引入稳定分支。删除回归测试、删除 AGENTS.md 的提交不采用；CLI 进度重构及 Telegram 子目录忽略文件清理暂缓，维持较小的实施范围。
+
+### 终态规则和兼容边界
+
+`taskresult.ClassifyOutcome` 根据外层任务 context 判断取消，worker 在结果策略校验后、终态 hook 前确定一次结果。完成事件同时携带该结果和原始错误，API/Webhook 消费已确定的结果，避免 hook 期间或事件投递期间发生的取消改变先前决定。没有结果字段的旧事件仍按原错误分类，HTTP 响应和 Webhook 没有新增字段。
+
+| 执行结果与外层任务状态 | 整体终态 |
+| --- | --- |
+| nil 返回，默认或 legacy 策略 | 成功；不因稍后的取消改判。 |
+| 非 nil 返回，任务 context 已取消 | 取消；底层可以返回普通 EOF 等错误，原始错误仍保留在完成事件中。 |
+| 非 nil 返回，任务 context 仍有效 | 失败；内部连接或兄弟子任务返回 context.Canceled 不代表用户取消。 |
+| 非 nil 返回，任务 context 超时 | 失败；保留既有 deadline 语义。 |
+| strict 策略下 nil 返回 | 先执行既有 CompletionError 校验，再解释其结果；没有改变 strict/legacy 规则。 |
+
+Bot 原有取消提示使用同一分类规则，涵盖 tfile、batchtfile、copyfwd、directlinks、parsed、telegraph、ytdlp 和 Aria2。tfile 仅提取终态文本构建以便离线测试，消息编辑请求和实体样式保持原有方式。Bot 提示仍在 Execute 内生成，没有将其重构成 worker 事件观察者；本轮不宣称解决 Bot 部分失败展示或 strict 的统一展示。transfer 原有通用失败提示保持现状。
+
+逐文件 Tracker、批任务调度、IgnoreErrors、SkipLarge 和保存/转发执行路径均未修改。已保存文件仍为 succeeded，普通文件错误仍为 failed，内部取消仍为 interrupted；整体取消不会批量重写文件状态。API DELETE 的立即取消与通知一次语义保留，后续完成事件仅可补充最终计数，不能覆盖其终态。取消响应继续使用原有错误字段行为，没有改变为逐项失败详情。
+
+### 回归与 review 证据
+
+新增回归覆盖内部 engine forcibly closed、真实任务取消但返回普通错误、nil 返回后的取消、deadline、strict/legacy、原始错误身份和逐文件计数。真实 shell hook 的同步夹具验证失败 hook 开始后才取消任务，完成事件仍报告原先选择的失败。独立子测试进程通过真实 core 队列、hooks、API 查询及 HTTP Webhook 验证终态一致，并覆盖事件投递期间的取消；不连接 Telegram。
+
+临时 Go overlay 将新分类器恢复为旧错误链判断，三个相关包的新增用例均因断言不符失败，包括内部取消被错报为取消、真实任务取消被错报为失败；这是反向验证，未修改源码，不能记为正常回归通过。夹具及日志位于忽略目录的下划线子目录，避免被全量 Go 包扫描收录。
+
+本轮日志与源码清单位于 `tmp-architecture-validation-20261009/_cancellation-adaptation-20261009-151316`。保护检查确认媒体组聚合、整组过滤、caption、copy/topic 转发执行、batch/transfer 执行、第三方依赖与 AGENTS.md 没有改变；用户 superpowers 草案哈希保持不变。
+
+冻结的 17 个 Go 文件在 Go 1.26.9 下全量普通测试（count=1）、独立全量 vet 和完整 Windows race（count=1）全部退出 0；普通/race 测试关闭重复内置 vet，独立 vet 已通过。完整回归包括媒体组、过滤、copy、Telegram/Local、任务结果和 API；仍使用真实 FFmpeg/ffprobe 处理临时媒体，未连接生产 Telegram。最终格式、diff 空白和源码清单检查通过。日志记录实测基线 `47c9c64` 加本轮工作区变更，不重标先前构建或远端流水线。
+
+最终 review 覆盖取消规则、hook/事件时序、API 兼容、通知一次、Bot 文案、strict/legacy 与文件统计，以及媒体执行保护边界，已实施范围内未发现剩余可复现阻断问题。本批可整理为一个本地提交；尚未推送、部署或打标签。当前候选仍须完成远端 CI、隔离 Telegram 的相册/caption/过滤/copy/topic、目标 Linux/容器退出与停止副本备份/升级/整套恢复。不能用此前 `47c9c64` 的 CI 结果宣告新提交已通过远端验证；整体正式发布验收仍未完成。
+
+## 2026-10-09 高级架构审查复核与生产缺陷修复
+
+本轮基于 dev 的 `3803bc5e3a9e19b528de81bbc1485171e049ed1f` 加工作区变更。用户确认 Bot 仅自己使用，HTTP API 仅本机或内网，生产存储仍为 Telegram/本地。多用户隔离暂降优先级；公开访问策略、未使用的远端后端、浏览器插件和自更新均不作为本轮已验收能力。未合并 main，也未实施此前暂缓的 CLI 重构。
+
+原始审查证据保存在 `tmp-architecture-validation-20261009/_senior-review-20261009/review.json`。其中六个观察用例是确认旧缺陷的证据，不能作为修复通过的结果。本轮源码清单、验证日志和最终 review 单独保存在同级 `_senior-fixes-20261009`，不覆盖旧记录。
+
+| 复核项 | 实施结果与边界 |
+| --- | --- |
+| SR01 视频辅助进程管道泄漏 | 移除额外 io.Pipe 生产者，由 os/exec 管理 stdin；FFmpeg/ffprobe 继承任务 context、使用有界超时并回收子进程。真实视频提前结束与工具启动失败均有回归。 |
+| SR02 分卷丢失任务取消 | 归档、上传及发送使用任务 context，保留 Telegram 客户端依赖；归档读循环检查取消，拒绝非正分卷大小。压缩格式、分卷命名、媒体分组和发送顺序不变。 |
+| SR03 skip_large 虚报成功 | 引入可识别的存储跳过错误，Tracker 单独记录 skipped，保存重试遇到跳过即停止。batch 中策略跳过不会取消其他文件；未保存项不计 succeeded，strict 拒绝全成功。 |
+| SR04 取消中任务过早消失 | RunningTasks 保留已取消但尚未 Done 的任务，使用既有“取消中”展示；没有调整队列调度或 worker 计数。 |
+| SR05 用户创建忽略 context/查询错误 | 只有 ErrRecordNotFound 才创建，写入绑定调用方 context，其他查询错误直接返回；配置同步仍负责用户生命周期。 |
+| SR06 copy 扫描及相册查询丢失 context | 派生 ext.Context 副本，保留客户端依赖；历史扫描、搜索和扩组查询使用任务 context，取消时不回退发送单条。非取消的扩组查询失败仍保留原单条回退，待真实环境专项评估。 |
+
+### 结果兼容与媒体保护
+
+API 计数结构和终态字段不增加：`failed` 汇总普通失败及策略跳过，内部仍可区分 skipped。默认/legacy 的整体完成规则与 IgnoreErrors 保持原行为，不能把 completed 解读为全部文件保存成功；strict 继续使用 worker 已有的统一结果策略。Bot 单文件跳过明确显示“未保存”，批任务附加跳过文件清单。没有引入自动重放、失败项重试或已保存文件回滚，普通 batch 失败及取消的继续/停止策略未改。
+
+batch 的继续规则只针对策略跳过；directlinks、parsed、telegraph 遇到该跳过错误会进入既有保存错误的停止分支，不将这些任务的文件调度一起重构。transfer 仍遵守调用方原有 IgnoreErrors 选择，单文件 tfile 会返回跳过错误。所有采用 RetrySave 的任务遇到策略跳过均只尝试一次，普通瞬态错误仍按原重试次数及退避规则处理。
+
+媒体组聚合、计时器身份、整组过滤、caption 与 source/target/topic/group 键保留。离线 RPC 回归验证相册 ID 顺序、DropAuthor、topic、caption 来源链接和实体偏移；取消扩组查询后没有转发或编辑请求。它们不连接 Telegram，不能证明真实账号权限、topic 路由或上传验收通过。源码保护检查核对 20 个关键文件与基线一致，涵盖监听聚合、整组过滤、原扩组算法、copy 执行计划、worker/hook、原取消分类、依赖和 AGENTS.md；用户原有 superpowers 草案哈希不变。
+
+超时不等于可以打断任意 io.Reader：当前媒体生产输入为可寻址文件；自定义 Reader 如果无限阻塞在 Read 内，context 不能强制中断它。归档取消可能留下暂存分卷，由 Telegram Save 所拥有的临时目录清理，不将独立 CreateSplitZip 错误返回解释为输出目录没有文件。媒体 stdout/stderr 总字节预算仍为后续容量治理项。
+
+### 回归与发布评估
+
+新用例覆盖真实 FFmpeg 成功提前结束、工具缺失、真实子进程取消/期限及等待回收、Save 到 split 的 context 交接、读取途中取消、策略跳过不读取/不发送、重试停止与普通瞬态重试、batch 其余文件继续、transfer 源关闭和暂存清理、strict 计数、Bot 文案、取消中任务列表、数据库查询及写入间取消、copy 搜索和相册查询。
+
+五个临时 Go overlay 分别撤回管道、跳过语义、归档取消、数据库写入 context 和 copy 扫描 context 修复；新增用例均因对应行为断言失败，不是编译失败。数据库首次全量回归失败来自测试夹具漏建 dirs 关联表，生产初始化实际迁移四个模型；夹具按生产结构修正后专项通过。失败日志保留，未记为全量通过。
+
+冻结的 36 个 Go 文件在 Go 1.26.9 下全量普通测试（count=1）、独立全量 vet 和完整 Windows race（count=1）均退出 0；普通测试约 222 秒、vet 约 44 秒、race 约 519 秒。普通/race 测试关闭重复内置 vet，独立 vet 已通过。sqlite_glebarez 的数据库回归及 no_playwright 的 parsers/API 回归也退出 0。上述结果覆盖修正夹具后的最终源码，未复用前一批候选的通过记录。
+
+CGO=0、amd64 的 Windows 默认、Linux 默认、Linux micro（no_jsparser,no_minio,no_bubbletea）与 Linux pico（另加 sqlite_glebarez）四种构建均退出 0。build-manifest.json 记录各产物 SHA-256；Go 构建信息逐项核对为 Go 1.26.9、对应平台/标签、CGO=0、基线 `3803bc5` 加工作区变更（vcs.modified=true）。产物仅为本地构建证据，不代替 Linux 运行或容器构建验收。
+
+最终整体 review 覆盖六项修复、原取消分类/strict/legacy/hooks 的交互、保存重试、文件统计和 Bot/API 展示、媒体保护、测试夹具及双语文档。已实施范围内未发现剩余可复现阻断问题；源码清单、Go 格式、diff 空白、20 个关键保护文件与用户草案校验通过，结论及完整验证索引记录在 final-review.json。本批可作为本地可合入候选，仍未提交、推送、打标签或部署；此前 `47c9c64` 的 GitHub Quality 成功记录不覆盖本轮候选。
+
+下一批优先梳理队列容量、全局下载/RPC/临时空间预算与 hook 生命周期，再逐步建立 Runtime 关闭所有权；需要明确拒绝/等待/取消契约后实施，不直接更换运行架构。持久任务/通知恢复、存储提交回执、readiness、插件原生操作边界继续保留；单用户部署不据此宣称具备多租户隔离。
+
+发布仍需候选提交的远端 CI、隔离 Telegram 相册/caption/过滤/copy/topic、目标 Linux/容器关闭，以及停止部署副本的备份、升级和整套恢复。用户目前没有隔离 Telegram 环境，因此本轮自动回归不能关闭该发布验收项。
+
+
+## 2026-10-09 第一批提交与 hook 执行期限治理
+
+上一节六项生产缺陷修复已于本轮提交至 dev：`b3ae9096b592b6cb399516693ee9788aeff9a2f2`（`fix(tasks): preserve cancellation and report skipped saves`）。提交包含上一批的代码、测试和文档；用户原有 superpowers 草案未加入提交。本轮没有推送、打标签或部署。
+
+下一批选择先修复同步 shell hook 无限占用 worker 的风险。`hook.exec.timeout` 默认 30 秒，可用正时长或 `SAVEANY_HOOK_EXEC_TIMEOUT` 调整；零、负数及无效时长拒绝初始化，保留原有效配置。四种事件命令统一继承调用方 context，并使用更早到达的期限；空命令仍不执行。长脚本需要显式调高期限，这是本批的配置兼容边界。
+
+hook 失败、超时仅记录诊断，启动前 hook 超时后若任务 context 仍有效则继续执行；终态 hook 不覆盖已选定的任务错误或结果，不增加自动重试。原 worker、结果分类与事件顺序未改。服务取消后才启动的终态 hook 保留原有 5 秒宽限，仍受更短配置期限约束；已经运行的 hook 继续响应服务取消。
+
+Unix shell 使用独立进程组并在取消时终止组内进程。Windows 在额外最多 2 秒内尝试 `taskkill /T /F`，失败时记录告警并回退终止 shell；命令回收设置 500 毫秒 WaitDelay。执行期限不等于总返回耗时，取消后清理仍可能增加短暂延迟。Windows 清理是尽力行为，主动脱离管理的后台进程不属于隔离保证；没有引入进程沙箱或 Job Object 管理。
+
+### 回归、异常记录及整体 review
+
+新测试验证默认/配置/环境变量期限、无效值不发布、配置期限与调用方较短期限、四种 hook 超时后队列继续处理下一项、任务原始结果保留、真实普通后代进程取消，以及已取消服务的终态 hook 宽限；Windows 另有真实卡住的 taskkill 夹具，验证该夹具中的终态 hook 调用在现有 8 秒关停等待内返回；这不保证任意执行中任务的总关闭耗时。冻结源码共 9 个 Go 文件。保护核对 56 个文件与本轮基线一致，覆盖上一批全部修复、worker/结果分类、媒体组监听聚合、过滤、caption、copy/topic 执行、启动顺序、依赖及 AGENTS.md；用户草案哈希保持不变。
+
+首次专项 race 暴露的是 Windows 测试清理尝试 TerminateProcess 一个已退出的夹具时返回 Access denied；夹具改为先检查退出状态，并持有原进程句柄避免 PID 重用。首次全量普通检查另外出现 core 断言全部通过后测试输出管道仍未关闭（WaitDelay expired），该次全量记为失败。短期限专项 5 次、完整 core 诊断 5 次及随后全量诊断均通过，记录的树清理均成功；该次管道异常的根因尚未确认。复核增加 Windows 清理失败告警，最终清理预算为 2 秒；最终 review 又发现 3 秒清理加 5 秒终态宽限及等待回收可能越过主程序 8 秒等待，因此收紧至 2 秒清理和 500 毫秒 WaitDelay 并增加卡住清理工具的回归，不能把这项防护写成已证明该异常根因已消除。所有失败和诊断日志保留在 `_hook-budgets-20261009`，诊断 overlay 不计最终源码的正式通过结果。
+
+最终源码在 Go 1.26.9 下全量普通测试、独立全量 vet、完整 Windows race 和 hook/config 专项 race 连续 3 次均退出 0，实测约 151、12、317 与 58 秒。普通/race 关闭重复内置 vet，独立 vet 已通过。四个临时 overlay 分别恢复无限配置期限、仅终止 shell、跳过原有关停宽限与过长清理预算，相关用例均因行为断言失败，未出现编译失败；真实源码保持不变。
+
+sqlite_glebarez 数据库及 no_playwright parsers/API 回归退出 0。CGO=0、amd64 的 Windows 默认、Linux 默认/micro/pico 与 macOS 默认五种构建退出 0；build-manifest.json 核对平台、标签、Go 版本、基线 b3ae909 加工作区变更及各产物 SHA-256。Linux/macOS 的 core 测试二进制也编译通过。这些是构建证据，Unix 新进程组取消仍须目标平台真实运行验收；本机没有完成 Linux/macOS 运行或容器关闭验证。
+
+整体 review 覆盖配置发布、执行与清理期限、context 原因保留、shell 引号、进程树、hook 结果与 API/队列事件兼容，以及双语文档。最终自动检查均通过，未发现新的可复现断言失败；首次 Windows 管道异常保留为观察项，不以多次通过替代根因确认。本批保留为可审查的未提交工作区变更；验证索引和源码保护结论见同级 final-review.json。
+
+### 剩余工作与发布边界
+
+队列仍无容量上限，全局下载/RPC/暂存预算与 Runtime 关闭所有权尚未实施。下一批先明确队列满时拒绝、等待与取消的契约，再引入可配置容量及预算；不直接改动媒体组调度。持久任务/通知恢复、存储提交回执、readiness 和插件原生操作边界继续保留，单用户部署下多租户隔离仍暂缓。
+
+本批及上一批均未由远端 CI 验证；此前 47c9c64 的成功流水线不覆盖它们。正式发布仍需候选提交 CI、隔离 Telegram 的相册/caption/过滤/copy/topic、目标 Linux/容器关闭，以及停止部署副本的备份、升级和整套恢复。Windows 管道异常也需要在后续验证中观察或定位；整体发布验收未完成。
+
+
+## 2026-10-09 合入复核：hook 进程退出证据与 Windows Job 管理
+
+本节更新上一阶段未提交 hook 候选的合入判断。复核发现原后代进程测试只检查短时间内没有写出标记，子进程休眠时可能假通过；现在先检查真实进程退出，再进行兜底清理。100 毫秒期限用例按当前测试专属可执行文件发现残留，覆盖未写 ready 文件的进程。Linux 将僵尸进程识别为已停止执行，Windows 持有句柄核验退出，避免 cleanup 掩盖行为失败。
+
+强化测试随后检出两项实际缺陷：外部 taskkill 启动/查询可能超过 2 秒清理预算，回退仅停止 shell 后仍有普通后代；改用进程快照也可能漏掉创建尚未完成的进程。最终 Windows 实现先以 CREATE_SUSPENDED 启动 shell，加入本次 hook 专属、关闭时终止成员的 Job Object 后再恢复主线程。取消与正常结束均关闭 Job，无需启动 taskkill，也不按陈旧 PID 列表终止进程。Job 初始化失败会停止并等待回收 suspended shell，取消 watcher 在等待前解除阻塞。Win32 的 uintptr 参数所指 Go 结构体使用 runtime.Pinner 固定，避免调用期间栈移动或提前失活；编译器逃逸检查确认该结构体在堆上。该管理不构成安全沙箱。
+
+Unix 仍使用独立进程组；worker、四种 hook 调用、原始任务结果、终态事件、服务取消后的 5 秒宽限及主程序 8 秒等待均保持本轮基线。Windows hook 正常结束后，Job 内剩余后台子进程也会停止，不能通过该 hook 启动长期驻留服务；双语配置文档已明确这一兼容边界。没有新增依赖或改动媒体组聚合、排序、caption、过滤和 copy/topic 算法。
+
+最终冻结 12 个 Go 文件，Go 1.26.9 下全量普通测试、独立 vet、全量 Windows race、hook/config/Windows 专项 race 连续三次全部退出 0，耗时分别约 818、60、1777、202 秒；普通和 race 关闭重复内置 vet，独立 vet 已通过。sqlite_glebarez 与 no_playwright 回归、CGO=0 amd64 的 Windows/Linux/macOS 默认及 Linux micro/pico 构建、Linux/macOS core 测试编译均通过。构建清单核验平台、标签、Go 版本、基线 b3ae909 加工作区变更与 SHA-256；本地产物不视为发布产物。
+
+临时 overlays 撤回 hook 期限、Job 关闭终止成员、原有关停宽限及完整树清理，测试均出现行为断言失败。子进程 ready 后额外休眠 10 秒的真实方案仍通过，仅停止 shell 的撤回被真实退出断言检出；短期限撤回对照使用 2 秒以确保产生实际子进程，不把“没有创建进程”当作漏检。另一个 race 注入在取消触发后令 Job 分配失败，确认错误保留、shell 被等待回收且未执行命令。正常结束停止后台子进程、卡住 taskkill 不被调用、无关 sibling 不被终止也有真实进程回归。
+
+源码保护核对 56 个文件与 b3ae909 一致，覆盖上一批修复、媒体链路、worker、启动、依赖及 AGENTS.md；用户 superpowers 草案哈希保持不变。最终检查与 review 索引位于 tmp-architecture-validation-20261009/_hook-exit-fix-20261009/final-review.json。此前外部工具、快照及未固定内存的阶段证据分别保留，未复用为最终源码通过记录。先前 Windows 测试输出管道异常的根因仍未确认，不能据本轮修复宣称已证明该历史异常完全消除。
+
+本地候选通过复核后整理为一个 hook 提交，并与之前两个已审查任务提交一起送入指向 dev 的候选 PR；合入仍以该候选 SHA 的 Ubuntu Quality 和最终 review 为准。尚不打发布标签或部署。隔离 Telegram 相册/caption/过滤/copy/topic、目标 Linux/容器关闭，以及停止部署副本后的备份、升级和整套恢复仍属发布验收范围。
+
+下一批队列容量需先明确接纳契约：当前监听相册逐文件入队，直接逐项拒绝会导致只接纳部分相册；应保留默认不限制容量，并先评估选定整组任务的原子接纳、满队列反馈与取消释放。拒绝入队时还需释放新建任务的 child context；等待策略不得阻塞 Bot/监听处理器。全局下载/RPC/暂存预算随后独立推进，本轮没有改队列或媒体组调度。

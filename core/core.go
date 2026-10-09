@@ -74,8 +74,11 @@ func worker(ctx context.Context, qe *queue.TaskQueue[Executable]) {
 			}
 			err = taskresult.CompletionError(taskCtx, err, resultSummary)
 		}
+		// Snapshot before hooks: a late cancellation must not make observers
+		// disagree with the hook selected for this execution result.
+		outcome := taskresult.ClassifyOutcome(taskCtx, err)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
+			if outcome == taskresult.OutcomeCancelled {
 				logger.Infof("Task %s was canceled", exe.TaskID())
 				if err := execTerminalHook(ctx, execHooks.TaskCancel); err != nil {
 					logger.Errorf("Failed to execute cancel hook for task %s: %v", exe.TaskID(), err)
@@ -92,7 +95,7 @@ func worker(ctx context.Context, qe *queue.TaskQueue[Executable]) {
 				logger.Errorf("Failed to execute success hook for task %s: %v", exe.TaskID(), err)
 			}
 		}
-		taskevent.Emit(taskCtx, taskevent.Event{TaskID: exe.TaskID(), Phase: taskevent.PhaseDone, Err: err, ResultSummary: resultSummary})
+		taskevent.Emit(taskCtx, taskevent.Event{TaskID: exe.TaskID(), Phase: taskevent.PhaseDone, Err: err, Outcome: outcome, ResultSummary: resultSummary})
 		qe.Done(qtask.ID)
 	}
 }

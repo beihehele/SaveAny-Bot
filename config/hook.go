@@ -1,10 +1,17 @@
 package config
 
+import "time"
+
+// DefaultHookExecTimeout bounds optional commands that occupy task workers.
+const DefaultHookExecTimeout = 30 * time.Second
+
 type hookConfig struct {
 	Exec hookExecConfig `toml:"exec" mapstructure:"exec" json:"exec"`
 }
 
 type hookExecConfig struct {
+	Timeout time.Duration `toml:"timeout" mapstructure:"timeout" json:"timeout"`
+
 	// command to execute, for all task types
 	TaskBeforeStart string `toml:"task_before_start" mapstructure:"task_before_start" json:"task_before_start"`
 	TaskSuccess     string `toml:"task_success" mapstructure:"task_success" json:"task_success"`

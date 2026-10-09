@@ -2,9 +2,11 @@ package telegram
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os/exec"
 	"time"
 
 	"github.com/celestix/gotgproto/ext"
@@ -51,24 +53,12 @@ func getMP4Meta(rs io.ReadSeeker) (metadata *VideoMetadata, err error) {
 }
 
 // getVideoMetadata uses ffprobe to get video metadata
-func getVideoMetadata(rs io.ReadSeeker) (*VideoMetadata, error) {
-	pipeReader, pipeWriter := io.Pipe()
-
-	go func() {
-		defer pipeWriter.Close()
-		rs.Seek(0, io.SeekStart)
-		io.Copy(pipeWriter, rs)
-	}()
-
-	result, err := ffmpeg.ProbeReaderWithTimeout(
-		pipeReader,
-		time.Second*10,
-		ffmpeg.KwArgs{
-			"select_streams": "v:0",
-			"show_entries":   "stream=width,height:format=duration",
-			"of":             "json",
-		},
-	)
+func getVideoMetadata(ctx context.Context, rs io.ReadSeeker) (*VideoMetadata, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error",
+		"-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "json", "-")
+	result, err := runMediaCommand(ctx, rs, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +73,7 @@ func getVideoMetadata(rs io.ReadSeeker) (*VideoMetadata, error) {
 		} `json:"format"`
 	}
 
-	if err := json.Unmarshal([]byte(result), &data); err != nil {
+	if err := json.Unmarshal(result, &data); err != nil {
 		return nil, err
 	}
 
@@ -105,42 +95,56 @@ func getVideoMetadata(rs io.ReadSeeker) (*VideoMetadata, error) {
 	return meta, nil
 }
 
-func extractThumbFrame(rs io.ReadSeeker) ([]byte, error) {
-	data, err := extractFrameAt(rs, 1.0)
+func extractThumbFrame(ctx context.Context, rs io.ReadSeeker) ([]byte, error) {
+	// Both timestamps share one budget; fallback must not prolong cancellation.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	data, err := extractFrameAt(ctx, rs, 1.0)
 	if err == nil && len(data) > 0 {
 		return data, nil
 	}
-	return extractFrameAt(rs, 0.0)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return extractFrameAt(ctx, rs, 0.0)
 }
 
-func extractFrameAt(rs io.ReadSeeker, timestamp float64) ([]byte, error) {
-	pipeReader, pipeWriter := io.Pipe()
-
-	go func() {
-		defer pipeWriter.Close()
-		rs.Seek(0, io.SeekStart)
-		io.Copy(pipeWriter, rs)
-	}()
-
-	var out bytes.Buffer
-
-	err := ffmpeg.
+func extractFrameAt(ctx context.Context, rs io.ReadSeeker, timestamp float64) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	stream := ffmpeg.
 		Input("pipe:0", ffmpeg.KwArgs{
 			"ss": fmt.Sprintf("%.3f", timestamp),
 		}).
 		Output("pipe:1", ffmpeg.KwArgs{
 			"vframes": 1,
 			"f":       "mjpeg",
-		}).
-		WithInput(pipeReader).
-		WithOutput(&out).
-		OverWriteOutput().
-		Run()
+		})
+	stream.Context = ctx
+	return runMediaCommand(ctx, rs, stream.OverWriteOutput().Compile())
+}
 
-	if err != nil {
+func runMediaCommand(ctx context.Context, rs io.ReadSeeker, cmd *exec.Cmd) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-
+	if _, err := rs.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("seek media input: %w", err)
+	}
+	var out, stderr bytes.Buffer
+	// Let os/exec own stdin copying. An extra io.Pipe producer would survive
+	// when the child stops reading after its first frame or fails to start.
+	cmd.Stdin = rs
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	cmd.WaitDelay = time.Second
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("media command failed (%s): %w", stderr.String(), err)
+	}
 	return out.Bytes(), nil
 }
 

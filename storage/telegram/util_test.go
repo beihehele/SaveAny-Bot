@@ -45,7 +45,7 @@ func makeTestVideo(t *testing.T) *os.File {
 }
 
 func TestExtractThumbFrame(t *testing.T) {
-	thumb, err := extractThumbFrame(makeTestVideo(t))
+	thumb, err := extractThumbFrame(t.Context(), makeTestVideo(t))
 	if err != nil {
 		t.Fatalf("failed to extract thumb frame: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestExtractThumbFrame(t *testing.T) {
 }
 
 func TestGetVideoMetadata(t *testing.T) {
-	meta, err := getVideoMetadata(makeTestVideo(t))
+	meta, err := getVideoMetadata(t.Context(), makeTestVideo(t))
 	if err != nil {
 		t.Fatalf("failed to get video metadata: %v", err)
 	}

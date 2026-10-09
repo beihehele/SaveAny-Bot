@@ -15,6 +15,7 @@ import (
 	"github.com/duke-git/lancet/v2/retry"
 	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
 	"github.com/krau/SaveAny-Bot/common/utils/ioutil"
+	"github.com/krau/SaveAny-Bot/common/utils/retryutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/ctxkey"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
@@ -141,7 +142,7 @@ func (t *Task) Execute(ctx context.Context) error {
 
 func (t *Task) processLink(ctx context.Context, file *File) error {
 	logger := log.FromContext(ctx)
-	err := retry.Retry(func() error {
+	err := retryutil.RetrySave(ctx, func() error {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, file.URL, nil)
 		if err != nil {
 			return fmt.Errorf("failed to create GET request for %s: %w", file.URL, err)

@@ -45,7 +45,10 @@ type Event struct {
 	TotalFiles      int
 	DownloadedFiles int
 	Err             error
-	ResultSummary   *taskresult.Counts
+	// Outcome is the worker's terminal decision, captured before terminal hooks.
+	// Zero preserves compatibility with events from older producers.
+	Outcome       taskresult.Outcome
+	ResultSummary *taskresult.Counts
 }
 
 // Sink receives task events. Implementations must be safe for concurrent use.

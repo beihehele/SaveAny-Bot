@@ -2,15 +2,23 @@ package database
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 func CreateUser(ctx context.Context, chatID int64) error {
 	if _, err := GetUserByChatID(ctx, chatID); err == nil {
 		return nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("find user %d: %w", chatID, err)
 	}
-	return db.Create(&User{ChatID: chatID}).Error
+	if err := db.WithContext(ctx).Create(&User{ChatID: chatID}).Error; err != nil {
+		return fmt.Errorf("create user %d: %w", chatID, err)
+	}
+	return nil
 }
 
 func GetAllUsers(ctx context.Context) ([]User, error) {

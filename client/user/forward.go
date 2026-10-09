@@ -31,6 +31,10 @@ func ForwardMessagesDropAuthor(rpcCtx context.Context, ectx *ext.Context, fromCh
 	if rpcCtx == nil {
 		rpcCtx = ectx
 	}
+	if err := rpcCtx.Err(); err != nil {
+		return err
+	}
+	ectx = tgutil.ClientWithContext(rpcCtx, ectx)
 	if len(messageIDs) == 0 {
 		return fmt.Errorf("empty message ids")
 	}
@@ -90,14 +94,24 @@ func ForwardMessage(rpcCtx context.Context, ectx *ext.Context, fromChatID, toCha
 	if rpcCtx == nil {
 		rpcCtx = ectx
 	}
+	if err := rpcCtx.Err(); err != nil {
+		return err
+	}
+	ectx = tgutil.ClientWithContext(rpcCtx, ectx)
 	msg, err := tgutil.GetMessageByID(ectx, fromChatID, msgID)
 	if err != nil {
+		if ctxErr := rpcCtx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		return fmt.Errorf("get source message: %w", err)
 	}
 	ids := []int{msgID}
 	linkID := msgID
 	if gid, ok := msg.GetGroupedID(); ok && gid != 0 {
 		group, err := tgutil.GetGroupedMessages(ectx, fromChatID, msg)
+		if ctxErr := rpcCtx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if err == nil && len(group) > 0 {
 			ids = make([]int, 0, len(group))
 			for _, m := range group {

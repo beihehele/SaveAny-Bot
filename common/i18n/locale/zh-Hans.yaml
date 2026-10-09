@@ -425,6 +425,8 @@ bot:
       task_canceled_with_id: "处理已取消: {{.TaskID}}"
       task_failed_with_error: "处理失败: {{.Error}}"
       batch_done_prefix: "处理完成\n文件数: "
+      storage_files_skipped: "未保存（存储策略跳过）:\n{{.Skipped}}"
+      file_skipped_with_reason: "未保存: {{.Name}}\n跳过原因: {{.Error}}"
       direct_done_prefix: "处理完成, 文件数量: "
       parsed_start_prefix: "开始下载 {{.Site}} 的资源\n总大小: "
       parsed_done_prefix: "处理完成, 资源数量: "

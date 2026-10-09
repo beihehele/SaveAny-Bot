@@ -392,6 +392,8 @@ With `legacy` or `strict`, a task that entered and finished execution includes `
 
 Each submitted file belongs to one state; the six state counts sum to `total`. Counts exclude files removed during preprocessing and contain no names, per-file errors, or retry manifest. If an operation returns cancellation/deadline, it is recorded as `cancelled` when the parent context has ended, otherwise as `interrupted`. This describes the observed state rather than proving a unique cause among concurrent events. Queued tasks and tasks cancelled before execution have no execution summary; absence does not mean every file succeeded.
 
+`failed` also includes files left unsaved by storage policy during execution, such as Telegram `skip_large`. Internally these are distinguished as `skipped`; the API keeps its existing count fields. They never count as `succeeded`, and `strict` reports incomplete saving. `legacy` retains its existing whole-task completion rules.
+
 `DELETE` reports cancelled immediately. If execution has not yet exited, that cancellation webhook may lack counts. After execution exits, queries can gain final counts and a new `updated_at`, while the terminal status stays cancelled and no second notification is sent. Webhook receivers should still deduplicate by task ID and terminal status.
 
 ---

@@ -98,7 +98,14 @@ func (w *splitWriter) finalize() error {
 	return nil
 }
 
+// CreateSplitZip writes an uncompressed archive in bounded parts.
 func CreateSplitZip(ctx context.Context, reader io.Reader, size int64, fileName, outputBase string, partSize int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if partSize <= 0 {
+		return fmt.Errorf("split part size must be positive")
+	}
 	outputDir := filepath.Dir(outputBase)
 	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
@@ -121,12 +128,15 @@ func CreateSplitZip(ctx context.Context, reader io.Reader, size int64, fileName,
 		return fmt.Errorf("failed to create zip header: %w", err)
 	}
 
-	copied, err := io.Copy(writer, reader)
+	copied, err := io.Copy(writer, &splitContextReader{ctx: ctx, reader: reader})
 	if err != nil {
 		return fmt.Errorf("failed to write data: %w", err)
 	}
 	if copied != size {
 		return fmt.Errorf("incomplete write: expected %d bytes, got %d bytes", size, copied)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if err := zipWriter.Close(); err != nil {
 		return fmt.Errorf("failed to close zip writer: %w", err)
@@ -134,8 +144,27 @@ func CreateSplitZip(ctx context.Context, reader io.Reader, size int64, fileName,
 	if err := splitWriter.Close(); err != nil {
 		return fmt.Errorf("failed to close split writer: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := splitWriter.finalize(); err != nil {
 		return fmt.Errorf("failed to rename split files: %w", err)
 	}
 	return nil
+}
+
+type splitContextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r *splitContextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := r.reader.Read(p)
+	if ctxErr := r.ctx.Err(); ctxErr != nil {
+		return n, ctxErr
+	}
+	return n, err
 }

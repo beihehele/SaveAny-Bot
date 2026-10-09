@@ -75,7 +75,7 @@ func (t *Task) Execute(ctx context.Context) error {
 	}
 	summary := t.ResultSummary()
 	logger.Info("Transfer file outcomes", "total", summary.Total, "succeeded", summary.Succeeded,
-		"failed", summary.Failed, "cancelled", summary.Cancelled, "interrupted", summary.Interrupted,
+		"skipped", summary.Skipped, "failed", summary.Failed, "cancelled", summary.Cancelled, "interrupted", summary.Interrupted,
 		"pending", summary.Pending, "running", summary.Running)
 	if err != nil {
 		logger.Errorf("Error during transfer processing: %v", err)
