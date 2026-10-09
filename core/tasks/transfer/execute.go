@@ -89,7 +89,7 @@ func (t *Task) Execute(ctx context.Context) error {
 	return err
 }
 
-func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
+func (t *Task) processElement(ctx context.Context, elem TaskElement) (resultErr error) {
 	logger := log.FromContext(ctx).WithPrefix(fmt.Sprintf("file[%s]", elem.FileInfo.Name))
 
 	// Check whether the source storage supports reading
@@ -103,7 +103,18 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
-	defer reader.Close()
+	source := &sourceReader{ctx: ctx, reader: reader, expected: size}
+	stopClose := context.AfterFunc(ctx, func() {
+		if err := source.Close(); err != nil {
+			logger.Debug("Failed to close canceled source", "error", err)
+		}
+	})
+	defer func() {
+		stopClose()
+		if err := source.Close(); err != nil && !errors.Is(resultErr, err) {
+			resultErr = errors.Join(resultErr, err)
+		}
+	}()
 
 	// Build target storage path: /target_path/filename
 	storagePath := path.Join(elem.TargetPath, elem.FileInfo.Name)
@@ -111,18 +122,28 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 	// Inject file size into context
 	ctx = context.WithValue(ctx, ctxkey.ContentLength, size)
 
-	if config.C().Stream {
-		if err := elem.TargetStorage.Save(ctx, reader, storagePath); err != nil {
+	_, cannotStream := elem.TargetStorage.(storage.StorageCannotStream)
+	if config.C().Stream && !cannotStream {
+		// The source belongs to this task; an HTTP destination must not close
+		// it before the task has checked EOF and the source's final result.
+		if err := elem.TargetStorage.Save(ctx, struct{ io.Reader }{source}, storagePath); err != nil {
 			return fmt.Errorf("failed to upload file to storage: %w", err)
+		}
+		if err := source.finish(); err != nil {
+			return fmt.Errorf("verify source: %w", err)
 		}
 	} else {
 		logger.Info("Downloading to temporary file for ReadSeeker support")
-		tempFile, err := t.downloadToTemp(reader, elem.FileInfo.Name)
+		tempFile, err := t.downloadToTemp(source, elem.FileInfo.Name)
 		if err != nil {
 			return fmt.Errorf("failed to download to temp: %w", err)
 		}
 		defer os.Remove(tempFile.Name())
 		defer tempFile.Close()
+		if err := source.finish(); err != nil {
+			return fmt.Errorf("verify source: %w", err)
+		}
+		ctx = context.WithValue(ctx, ctxkey.ContentLength, source.read)
 
 		if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
 			return fmt.Errorf("failed to seek temp file: %w", err)
@@ -134,7 +155,7 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 		}
 	}
 
-	t.uploaded.Add(size)
+	t.uploaded.Add(source.read)
 	if t.Progress != nil {
 		t.Progress.OnProgress(ctx, t)
 	}
