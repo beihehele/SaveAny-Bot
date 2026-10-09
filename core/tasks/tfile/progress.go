@@ -2,7 +2,6 @@ package tfile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/dlutil"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 type ProgressTracker interface {
@@ -126,11 +126,26 @@ func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 		log.FromContext(ctx).Debugf("Progress done for file [%s]", info.FileName())
 	}
 
+	text, entities, stylingErr := completionMessage(ctx, info, err)
+	if stylingErr != nil {
+		log.FromContext(ctx).Errorf("Failed to build entities: %s", stylingErr)
+		return
+	}
+	req := &tg.MessagesEditMessageRequest{ID: p.MessageID}
+	req.SetMessage(text)
+	req.SetEntities(entities)
+
+	ext := tgutil.ExtFromContext(ctx)
+	if ext != nil {
+		ext.EditMessage(p.ChatID, req)
+	}
+}
+
+func completionMessage(ctx context.Context, info TaskInfo, err error) (string, []tg.MessageEntityClass, error) {
 	entityBuilder := entity.Builder{}
 	var stylingErr error
-
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
+		if taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled {
 			stylingErr = styling.Perform(&entityBuilder,
 				styling.Plain(i18n.T(i18nk.BotMsgProgressTaskCanceled, nil)),
 				styling.Plain("\n"),
@@ -155,21 +170,10 @@ func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 	}
 
 	if stylingErr != nil {
-		log.FromContext(ctx).Errorf("Failed to build entities: %s", stylingErr)
-		return
+		return "", nil, stylingErr
 	}
-
 	text, entities := entityBuilder.Complete()
-	req := &tg.MessagesEditMessageRequest{
-		ID: p.MessageID,
-	}
-	req.SetMessage(text)
-	req.SetEntities(entities)
-
-	ext := tgutil.ExtFromContext(ctx)
-	if ext != nil {
-		ext.EditMessage(p.ChatID, req)
-	}
+	return text, entities, nil
 }
 
 type ProgressOption func(*Progress)

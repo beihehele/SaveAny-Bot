@@ -2,7 +2,6 @@ package ytdlp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 // ProgressTracker defines the interface for tracking ytdlp task progress
@@ -121,7 +121,7 @@ func (p *Progress) OnProgress(ctx context.Context, task *Task, status string) {
 func (p *Progress) OnDone(ctx context.Context, task *Task, err error) {
 	logger := log.FromContext(ctx)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
+		if taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled {
 			logger.Infof("yt-dlp task %s was canceled", task.TaskID())
 			ext := tgutil.ExtFromContext(ctx)
 			if ext != nil {

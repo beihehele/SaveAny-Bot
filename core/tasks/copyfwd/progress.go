@@ -2,7 +2,6 @@ package copyfwd
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 const progressMinInterval = 2 * time.Second
@@ -71,7 +71,7 @@ func (p *Progress) OnForward(ctx context.Context, done, total int) {
 func (p *Progress) OnDone(ctx context.Context, forwarded, failed int, err error) {
 	var text string
 	switch {
-	case err != nil && errors.Is(err, context.Canceled):
+	case taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled:
 		text = i18n.T(i18nk.BotMsgProgressCopyCanceled)
 	case err != nil:
 		text = i18n.T(i18nk.BotMsgProgressTaskFailedWithError, map[string]any{"Error": err.Error()})

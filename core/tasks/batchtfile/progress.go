@@ -2,7 +2,6 @@ package batchtfile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/dlutil"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 type ProgressTracker interface {
@@ -135,7 +135,7 @@ func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 	var stylingErr error
 
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
+		if taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled {
 			stylingErr = styling.Perform(&entityBuilder,
 				styling.Plain(i18n.T(i18nk.BotMsgProgressTaskCanceled, nil)),
 			)

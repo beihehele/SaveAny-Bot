@@ -229,11 +229,26 @@ func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 		}
 	case taskevent.PhaseDone:
 		t.acceptResultSummaryLocked(e.ResultSummary)
-		if errors.Is(e.Err, context.Canceled) {
+		outcome := e.Outcome
+		if outcome == taskresult.OutcomeUnknown {
+			// Older producers have no task-context decision. Keep their existing
+			// error-based contract; worker events always carry an explicit outcome.
+			switch {
+			case errors.Is(e.Err, context.Canceled):
+				outcome = taskresult.OutcomeCancelled
+			case e.Err != nil:
+				outcome = taskresult.OutcomeFailed
+			default:
+				outcome = taskresult.OutcomeSuccess
+			}
+		}
+		if outcome == taskresult.OutcomeCancelled {
 			t.Status = TaskStatusCancelled
-		} else if e.Err != nil {
+		} else if outcome == taskresult.OutcomeFailed {
 			t.Status = TaskStatusFailed
-			t.Error = e.Err.Error()
+			if e.Err != nil {
+				t.Error = e.Err.Error()
+			}
 		} else {
 			t.Status = TaskStatusCompleted
 		}

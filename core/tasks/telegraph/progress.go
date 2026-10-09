@@ -2,7 +2,6 @@ package telegraph
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/charmbracelet/log"
@@ -12,6 +11,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 type ProgressTracker interface {
@@ -98,7 +98,7 @@ func (p *Progress) OnProgress(ctx context.Context, info TaskInfo) {
 func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 	logger := log.FromContext(ctx)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
+		if taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled {
 			logger.Infof("Telegraph task %s was canceled", info.TaskID())
 			ext := tgutil.ExtFromContext(ctx)
 			if ext != nil {

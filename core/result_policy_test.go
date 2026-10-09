@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +29,7 @@ func (t *resultLifecycleTask) ResultSummary() taskresult.Summary {
 
 func TestWorkerResultPoliciesSelectHooksAndTerminalEvents(t *testing.T) {
 	fileError := errors.New("storage unavailable")
+	engineError := fmt.Errorf("engine forcibly closed: %w", context.Canceled)
 	for _, tc := range []struct {
 		name                        string
 		policy                      taskresult.Policy
@@ -42,6 +44,13 @@ func TestWorkerResultPoliciesSelectHooksAndTerminalEvents(t *testing.T) {
 		{name: "strict all failed", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Failed: 2}, want: taskresult.ErrIncomplete, hook: "task_fail"},
 		{name: "strict all saved", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Succeeded: 2}, hook: "task_success"},
 		{name: "strict preserves error", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Failed: 2}, err: fileError, want: fileError, hook: "task_fail"},
+		{name: "active task internal cancellation fails", err: engineError, want: engineError, hook: "task_fail"},
+		{name: "strict internal cancellation preserves interrupted files", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Succeeded: 1, Interrupted: 1}, err: engineError, want: engineError, hook: "task_fail"},
+		{name: "parent cancellation with ordinary error", cancel: true, err: fileError, want: fileError, hook: "task_cancel"},
+		{name: "strict parent cancellation preserves successful and failed files", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Succeeded: 1, Failed: 1}, cancel: true, err: fileError, want: fileError, hook: "task_cancel"},
+		{name: "parent cancellation with wrapped cancel", cancel: true, err: engineError, want: engineError, hook: "task_cancel"},
+		{name: "default nil after cancellation remains successful", cancel: true, hook: "task_success"},
+		{name: "legacy nil after cancellation keeps saved files", policy: taskresult.Legacy, summary: taskresult.Summary{Total: 2, Succeeded: 2}, cancel: true, hook: "task_success"},
 		{name: "strict preserves deadline", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Cancelled: 2}, err: context.DeadlineExceeded, want: context.DeadlineExceeded, hook: "task_fail"},
 		{name: "strict nil after cancel", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Succeeded: 2}, cancel: true, want: context.Canceled, hook: "task_cancel"},
 		{name: "strict cancellation before execute has no summary", policy: taskresult.Strict, cancelBeforeExecute: true, want: context.Canceled, hook: "task_cancel"},
@@ -84,6 +93,13 @@ func TestWorkerResultPoliciesSelectHooksAndTerminalEvents(t *testing.T) {
 			e := <-sink.done
 			if !errors.Is(e.Err, tc.want) {
 				t.Fatalf("event error=%v want=%v", e.Err, tc.want)
+			}
+			if tc.err != nil && e.Err != tc.err {
+				t.Fatal("terminal event lost the original error")
+			}
+			wantOutcome := map[string]taskresult.Outcome{"task_success": taskresult.OutcomeSuccess, "task_fail": taskresult.OutcomeFailed, "task_cancel": taskresult.OutcomeCancelled}[tc.hook]
+			if e.Outcome != wantOutcome {
+				t.Fatalf("event outcome=%v disagrees with hook %s", e.Outcome, tc.hook)
 			}
 			wantSummary := tc.policy != "" && !tc.cancelBeforeExecute
 			if (e.ResultSummary != nil) != wantSummary {

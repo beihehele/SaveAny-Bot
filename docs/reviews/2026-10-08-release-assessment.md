@@ -392,3 +392,37 @@ Go 1.26.9 的 Windows/Linux 默认源码复扫均退出 0，并由摘要断言�
 合入后在 `b9b6f63` 的源码上，Go 1.26.9 全量普通测试（count=1）、全量 vet、完整 Windows race（count=1）均退出 0。日志及实测提交 SHA 保存在 `tmp-architecture-validation-20261009/postmerge-20261009-134628`。本节完成后仅补充文档并归入本轮工具链提交；最终代码、测试和构建配置的 15 个文件逐项核对合入前冻结源码 SHA-256，全部相同。原始验证记录保留实测 SHA，不重标先前基于 `74618aa` 加工作区变更的二进制。
 
 Go 格式、累计 diff 空白检查、前述保护路径及用户草案校验通过，全部受版本控制的修改已提交。先前同源码的四种 CGO=0 构建、Windows/Linux 漏洞扫描、模块校验、媒体五包 race 重复 10 次、可选标签与容器入口回归作为补充证据复用。仍未执行真实 Telegram 联调、远端 Linux CI、目标 Linux/容器关闭及停止部署副本的备份/升级/整套恢复；未使用远端后端的已知缺陷继续暂缓。结论是本地合入及自动回归通过，正式发布验收尚未完成。
+
+## 2026-10-09 main 新增提交的选择性适配
+
+此前 dev 已推送到 `47c9c64`，[对应的 GitHub Quality 流水线](https://github.com/beihehele/SaveAny-Bot/actions/runs/37893401650)全部通过，包括 Linux 测试、race、可选标签、构建和可达漏洞检查；前文的远端 CI 缺口在该提交上已关闭。该结果不覆盖以下新工作区变更，也不代替真实部署验收。
+
+本轮 main 从 `5283f61` 更新到 `92e6072`。复核后只适配 `1d42329` 和 `c291166` 的取消分类修复，按 dev 现有模型形成一个批次，没有直接 merge 或 cherry-pick。main 的批文件执行结构与 dev 不同，不能将其整体引入稳定分支。删除回归测试、删除 AGENTS.md 的提交不采用；CLI 进度重构及 Telegram 子目录忽略文件清理暂缓，维持较小的实施范围。
+
+### 终态规则和兼容边界
+
+`taskresult.ClassifyOutcome` 根据外层任务 context 判断取消，worker 在结果策略校验后、终态 hook 前确定一次结果。完成事件同时携带该结果和原始错误，API/Webhook 消费已确定的结果，避免 hook 期间或事件投递期间发生的取消改变先前决定。没有结果字段的旧事件仍按原错误分类，HTTP 响应和 Webhook 没有新增字段。
+
+| 执行结果与外层任务状态 | 整体终态 |
+| --- | --- |
+| nil 返回，默认或 legacy 策略 | 成功；不因稍后的取消改判。 |
+| 非 nil 返回，任务 context 已取消 | 取消；底层可以返回普通 EOF 等错误，原始错误仍保留在完成事件中。 |
+| 非 nil 返回，任务 context 仍有效 | 失败；内部连接或兄弟子任务返回 context.Canceled 不代表用户取消。 |
+| 非 nil 返回，任务 context 超时 | 失败；保留既有 deadline 语义。 |
+| strict 策略下 nil 返回 | 先执行既有 CompletionError 校验，再解释其结果；没有改变 strict/legacy 规则。 |
+
+Bot 原有取消提示使用同一分类规则，涵盖 tfile、batchtfile、copyfwd、directlinks、parsed、telegraph、ytdlp 和 Aria2。tfile 仅提取终态文本构建以便离线测试，消息编辑请求和实体样式保持原有方式。Bot 提示仍在 Execute 内生成，没有将其重构成 worker 事件观察者；本轮不宣称解决 Bot 部分失败展示或 strict 的统一展示。transfer 原有通用失败提示保持现状。
+
+逐文件 Tracker、批任务调度、IgnoreErrors、SkipLarge 和保存/转发执行路径均未修改。已保存文件仍为 succeeded，普通文件错误仍为 failed，内部取消仍为 interrupted；整体取消不会批量重写文件状态。API DELETE 的立即取消与通知一次语义保留，后续完成事件仅可补充最终计数，不能覆盖其终态。取消响应继续使用原有错误字段行为，没有改变为逐项失败详情。
+
+### 回归与 review 证据
+
+新增回归覆盖内部 engine forcibly closed、真实任务取消但返回普通错误、nil 返回后的取消、deadline、strict/legacy、原始错误身份和逐文件计数。真实 shell hook 的同步夹具验证失败 hook 开始后才取消任务，完成事件仍报告原先选择的失败。独立子测试进程通过真实 core 队列、hooks、API 查询及 HTTP Webhook 验证终态一致，并覆盖事件投递期间的取消；不连接 Telegram。
+
+临时 Go overlay 将新分类器恢复为旧错误链判断，三个相关包的新增用例均因断言不符失败，包括内部取消被错报为取消、真实任务取消被错报为失败；这是反向验证，未修改源码，不能记为正常回归通过。夹具及日志位于忽略目录的下划线子目录，避免被全量 Go 包扫描收录。
+
+本轮日志与源码清单位于 `tmp-architecture-validation-20261009/_cancellation-adaptation-20261009-151316`。保护检查确认媒体组聚合、整组过滤、caption、copy/topic 转发执行、batch/transfer 执行、第三方依赖与 AGENTS.md 没有改变；用户 superpowers 草案哈希保持不变。
+
+冻结的 17 个 Go 文件在 Go 1.26.9 下全量普通测试（count=1）、独立全量 vet 和完整 Windows race（count=1）全部退出 0；普通/race 测试关闭重复内置 vet，独立 vet 已通过。完整回归包括媒体组、过滤、copy、Telegram/Local、任务结果和 API；仍使用真实 FFmpeg/ffprobe 处理临时媒体，未连接生产 Telegram。最终格式、diff 空白和源码清单检查通过。日志记录实测基线 `47c9c64` 加本轮工作区变更，不重标先前构建或远端流水线。
+
+最终 review 覆盖取消规则、hook/事件时序、API 兼容、通知一次、Bot 文案、strict/legacy 与文件统计，以及媒体执行保护边界，已实施范围内未发现剩余可复现阻断问题。本批可整理为一个本地提交；尚未推送、部署或打标签。当前候选仍须完成远端 CI、隔离 Telegram 的相册/caption/过滤/copy/topic、目标 Linux/容器退出与停止副本备份/升级/整套恢复。不能用此前 `47c9c64` 的 CI 结果宣告新提交已通过远端验证；整体正式发布验收仍未完成。

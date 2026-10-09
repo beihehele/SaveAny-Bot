@@ -2,7 +2,6 @@ package directlinks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/dlutil"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 type TaskInfo interface {
@@ -50,7 +50,7 @@ type Progress struct {
 func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 	logger := log.FromContext(ctx)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
+		if taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled {
 			logger.Infof("Parsed task %s was canceled", info.TaskID())
 			ext := tgutil.ExtFromContext(ctx)
 			if ext != nil {
