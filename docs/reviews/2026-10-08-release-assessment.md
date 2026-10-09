@@ -333,3 +333,62 @@ API 只传输固定的七个计数，不包含输入名称、逐项错误或重�
 补充 review 用临时夹具模拟下载成功、最终配置复制失败，确认旧 entrypoint 的 `cat > /app/config.toml` 会截断旧配置。现复用 Go 的远程配置加载器，HTTP(S) `CONFIG_URL` 通过 `--config` 传入，不写入本地文件，不需要对文件 bind mount 进行覆盖或回滚。下载期限由原 shell 的 60 秒改为 Go 的 30 秒；不再将远程内容持久化成本地配置副本。未设置 CONFIG_URL 时仍读取本地配置，非 HTTP(S) 值直接拒绝。配置回归覆盖成功、HTTP 错误、无效 TOML、不完整响应以及失败后保留最后有效配置和原文件；入口夹具覆盖参数引用、默认入口、退出码传递、拒绝无效协议和避免在入口日志输出带凭据的 URL。CI 增加该 shell 契约检查。
 
 本次新代码仅涉及容器入口及配置加载回归，未改变媒体组聚合、定时器、caption、过滤、copy/topic、Telegram 存储或任务/hook 策略。历史整理不意味着发布验收完成；真实 Telegram、远端 Linux CI、目标 Linux/容器退出和停止副本升级/恢复仍缺证据，Aria2、浏览器插件及自更新使用状态仍未知。最终新 SHA 的验证结果与原提交映射单独记录在本轮 TEMP 报告，未推送、打标签或部署。
+
+## 2026-10-09 架构问题复核与最小修复
+
+用户本轮确认生产只使用 Telegram/本地，不使用 WebDAV、S3/MinIO、Rclone 或 Aria2；AList 此前也已确认未使用。上述后端专项暂缓，保留已复现缺陷，不能视为已经修复或验收。浏览器插件和自更新使用状态仍未确认。此前段落的状态描述是当时记录，以本节更新为准。
+
+本轮基于 dev 的 `74618aa` 逐批处理架构复查中的最小修复。架构复查原报告与断言结果位于系统 TEMP 的 `saveany-architecture-review-20261008-3c7a13db8c924ea8bd50e270b555cfc2`；本轮独立证据位于 `saveany-architecture-fixes-20261009-6281fac67d4546afac4b1a52fb122c83`。没有合并 main、修改第三方依赖或触及用户的 `docs/superpowers/` 草案；最终漏洞复扫触发的 Go 工具链安全补丁单独记录如下。
+
+| 问题 | 本轮状态 | 核实与实施边界 |
+| --- | --- | --- |
+| ARCH01 自动转发媒体组旧计时器抢占新缓冲 | 已修复，真实 Telegram 待验收 | 回调在同一锁内核对计时器身份，覆盖重置、键复用、零延迟；原 source/target/topic/group 键、整组过滤、消息顺序与 ForwardMessage 扩组路径保留。 |
+| ARCH02 WebDAV 路径转义不一致 | 暂缓 | 生产未使用；原缺陷保留。 |
+| ARCH03 S3 等后端并发检查后写入可能覆盖 | 暂缓 | 生产未使用；没有以单进程锁宣称远端原子创建。 |
+| ARCH04 远端 Exists 混淆不存在与查询失败 | 暂缓 | 生产未使用；bool Exists 接口及远端实现未调整。 |
+| ARCH05 源读取/关闭失败被报告为成功 | transfer 层已修复，Rclone 部分暂缓 | 验证真实 EOF、已知长度、关闭错误；未知长度以实际读取字节计数；取消关闭源；Rclone 自身退出错误的缺陷未修复。 |
+| ARCH06 Aria2 所选文件全缺失仍返回成功 | 暂缓 | Aria2 未使用；其他任务的缺文件与 skip 结果语义仍为待办。 |
+| ARCH07 Twitter 元数据 HEAD 忽略取消 | 已修复 | HEAD 继承请求 context，取消/期限错误返回；普通元数据失败仍可解析，空配置也继承默认解析 HTTP 客户端/代理。 |
+| ARCH08 远端保存错误丢失取消身份 | 暂缓 | WebDAV/Rclone 未使用；原缺陷保留。 |
+| ARCH09 API 入队缺少 Telegram 客户端上下文 | 已修复，真实上传待验收 | 对 Telegram 目标保留已有客户端或解析可用 Bot/Userbot；无客户端在登记/入队前拒绝；服务 context、进度 sink、结果策略保留。 |
+| ARCH10 transfer 未遵守 CannotStream | 已修复 | 即使 stream=true，Telegram 等目标仍先完整下载到可寻址临时文件并校验源，再调用保存。 |
+
+### 数据真实性与兼容范围
+
+源 reader 的所有权属于 transfer；成功 EOF 暴露前完成源关闭，关闭只执行一次。当前 Local 保存通过完整复制到自身临时文件后提交，因此短读、超长或源关闭错误不会发布成功文件。Telegram 使用 CannotStream 回退，在首次上传前完成源校验。stream 目标提前停止读取并返回 nil 会被判为失败；对不读取完整源便自行发布的其他后端，本层不能提供远端撤回或事务保证，不把错误检测当作通用原子保存契约。
+
+没有更改 IgnoreErrors 的兼容默认、Bot/batch/copyfwd 的整体继续/停止策略、SkipLarge 语义、worker hooks 或队列调度。文件摘要反映新检测出的失败；默认 legacy 返回值仍按既有执行策略，strict 继续消费 worker 的统一决策。没有增加自动重试、重复转发或失败项重放。
+
+复查补齐 EOF 校验过程中取消的确定性回归：在 context 检查之间或底层 Read 返回数据时取消，都保留取消错误。源已验证 EOF/Close 且目标保存成功后才发生父取消时，文件仍计为 succeeded 和真实字节，整体 Execute 仍返回父取消；避免把已保存文件重新计为 cancelled，给后续重试造成重复保存依据。
+
+API 客户端注入以服务 context 为父，HTTP 断开仍不取消已接受任务，服务退出仍取消任务。非 Telegram 目标不会要求客户端。子测试进程通过真实 core 队列和隔离存储注册表验证客户端、进度、strict 策略与关闭；使用假的 ext.Context，不连接 Telegram，不能作为真实权限、topic 或上传验证。
+
+### 验证与发布判断
+
+媒体相关五个包的专项 race 重复 10 次通过；transfer/Local/taskresult 的专项 race 重复 3 次通过；API/Twitter/core/taskevent/taskresult 的专项 race 重复 3 次通过。新用例覆盖源最终关闭失败、已知/未知长度、只读指定长度的上传者、提前成功、阻塞源取消、HEAD 取消/期限/取消后返回成功、默认及显式代理，以及 API 客户端缺失与服务/请求生命周期。媒体实测还使用本机 FFmpeg/ffprobe 生成与处理临时视频，不依赖生产消息。
+
+Go 1.26.8 下全量普通测试（count=1）、vet、完整 Windows race（count=1）与模块完整性校验均退出 0。然而新漏洞库 `2026-10-08T22:31:09Z` 的 Windows 默认源码扫描命中 10 个可达标准库漏洞，断言按预期失败，原始 JSON 和失败摘要保留；此前 `2026-10-07` 快照的零可达结论不能作为本日候选的安全结果。
+
+经[Go 官方发布记录](https://go.dev/doc/devel/release)和本次漏洞条目的修复版本复核，升级同系列安全补丁到 Go 1.26.9，同步 go.mod 的 toolchain、Quality/Release workflow 和三种 Docker builder；最低语言版本及第三方依赖不变。Docker Hub 官方 golang 仓库的 `1.26.9-alpine` OCI 索引已下载，原始字节 SHA-256 与 registry digest 核对一致，包含 Linux amd64/arm64；使用新 digest 固定 builder，保留 runtime Alpine 的既有 digest。未在本机执行 Docker 镜像构建。
+
+最终 Go 1.26.9 的全量普通测试、全量 vet、完整 Windows race（count=1）、媒体五包专项 race（count=10）、no_playwright 的 parsers/API 和 sqlite_glebarez 数据库回归均退出 0。传输取消边界最后调整后又对冻结源码执行全量普通测试（count=1，关闭重复内置 vet，独立全量 vet 已通过），确认退出 0；race、标签回归和产物覆盖最终冻结源码。容器入口契约也退出 0。源码哈希、Go 格式、保护路径、活跃工具链版本及 diff 空白检查通过。
+
+Go 1.26.9、CGO=0、amd64 的 Windows 默认、Linux 默认/micro/pico 四种构建均退出 0；逐项核对产物 SHA-256、Go 版本、平台、CGO、标签与 vcs.revision，均对应 `74618aa6ae5f919a6fefdef9de33cd99cb70b9e3` 加本轮工作区变更（vcs.modified=true）。冻结源码清单、build-manifest-final.json、artifact-verification.json 和检查日志保存在本轮证据目录；产物位于 E 盘上述忽略目录的 artifacts。它们是本地候选证据，未作为发布包部署。
+
+合入前整体复查覆盖四批实现、回归、工具链/构建配置和剩余待办，已实施范围内未发现剩余可复现阻断问题，可作为本地可合入候选。上述验证完成时尚未提交、推送、打标签或部署，HEAD 为 `74618aa`，用户草案哈希保持不变；后续本地提交整理不改写这些构建和扫描的历史证据。整个项目仍不宣告正式发布通过。
+
+Go 1.26.9 的 Windows/Linux 默认源码复扫均退出 0，并由摘要断言确认没有可达条目；两份结果各保留 12 条模块/包级提示。同一新快照比旧记录增加 5 条 `golang.org/x/net` 模块级提示，未导入对应受影响包；其余原有 compress/text/crypto 提示保留。此处只说明扫描覆盖的调用/导入边界，不表示第三方依赖完全没有漏洞，未为清空提示扩大 Telegram 依赖升级范围。
+
+首次补丁下载在默认模块代理发生连接超时，备用代理下载并完成 Go 的工具链校验。首次新工具链编译因系统盘空间不足退出；原始失败日志保留，没有记为通过。随后将本轮编译缓存、Go/测试临时文件和构建产物改放 E 盘的 Git 忽略目录 `tmp-architecture-validation-20261009`，复制本轮新缓存以继续验证，没有清理用户的全局 Go 缓存或已有证据。
+
+剩余发布验收是隔离 Telegram 的相册/caption/过滤/copy/topic、远端 Linux CI、目标 Linux/容器退出，以及停止部署副本的备份、升级和整套恢复。真实 Telegram 环境目前暂无，跨平台构建不代替 Linux 运行验证。队列容量与并发预算、Runtime.Close、持久任务/通知恢复、多租户隔离和 Bot 部分失败展示按实际产品目标分批设计，本轮不扩展为运行架构重写。
+
+## 2026-10-09 本地合入后整体复查
+
+本轮四批修复已整理为 dev 的四个本地提交：媒体组计时器所有权（`fca7f50`）、源完整性与 CannotStream 回退（`6a3ede1`）、API Telegram 客户端与 Twitter 请求取消（`4ec3be1`）、Go 1.26.9 安全补丁及验证记录。原八个主题提交、共享基线及备份分支未改写，没有合并 main，也未推送、打标签或部署。用户原有 `docs/superpowers/` 草案未纳入提交，SHA-256 与合入前相同。
+
+整体复查以 `6ae4475` 为累计基线，检查包含 185 个文件、149 个 Go 文件的累计差异及关键模块交互；本轮新增范围为 16 个文件。复查重点为媒体缓冲/扩组/caption/过滤/topic、存储配置与本地发布、队列/取消/hooks/结果决策、API 客户端/进度/Webhook、解析器运行时与 HTTP、更新器恢复、数据库迁移、容器入口和构建质量门槛。已实施范围内没有发现新增可复现阻断问题；前述架构待办与真实环境验收保留，不能扩展为全项目无缺陷或可直接发布的结论。
+
+合入后在 `b9b6f63` 的源码上，Go 1.26.9 全量普通测试（count=1）、全量 vet、完整 Windows race（count=1）均退出 0。日志及实测提交 SHA 保存在 `tmp-architecture-validation-20261009/postmerge-20261009-134628`。本节完成后仅补充文档并归入本轮工具链提交；最终代码、测试和构建配置的 15 个文件逐项核对合入前冻结源码 SHA-256，全部相同。原始验证记录保留实测 SHA，不重标先前基于 `74618aa` 加工作区变更的二进制。
+
+Go 格式、累计 diff 空白检查、前述保护路径及用户草案校验通过，全部受版本控制的修改已提交。先前同源码的四种 CGO=0 构建、Windows/Linux 漏洞扫描、模块校验、媒体五包 race 重复 10 次、可选标签与容器入口回归作为补充证据复用。仍未执行真实 Telegram 联调、远端 Linux CI、目标 Linux/容器关闭及停止部署副本的备份/升级/整套恢复；未使用远端后端的已知缺陷继续暂缓。结论是本地合入及自动回归通过，正式发布验收尚未完成。

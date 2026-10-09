@@ -2,7 +2,7 @@ module github.com/krau/SaveAny-Bot
 
 go 1.25.0
 
-toolchain go1.26.8
+toolchain go1.26.9
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
