@@ -44,6 +44,14 @@ format = ""
 # 下载后转封装的视频容器格式, 留空则不转封装. 默认 mp4
 recode = "mp4"
 
+# 任务事件命令；每次执行的期限，需为正时长。较长脚本可显式调整。
+[hook.exec]
+timeout = "30s"
+# task_before_start = "echo starting"
+# task_success = "echo completed"
+# task_fail = "echo failed"
+# task_cancel = "echo cancelled"
+
 # HTTP API 配置
 [api]
 # 启用 HTTP API
