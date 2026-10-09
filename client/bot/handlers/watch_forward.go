@@ -23,14 +23,14 @@ type forwardAlbumGroup struct {
 type forwardAlbumBuffer struct {
 	mu      sync.Mutex
 	groups  map[forwardAlbumKey]*forwardAlbumGroup
-	timers  map[forwardAlbumKey]*time.Timer
+	timers  map[forwardAlbumKey]*mediaTimer
 	onFlush func(sourceID, targetID int64, targetTopicID int, ids []int)
 }
 
 func newForwardAlbumBuffer(onFlush func(sourceID, targetID int64, targetTopicID int, ids []int)) *forwardAlbumBuffer {
 	return &forwardAlbumBuffer{
 		groups:  make(map[forwardAlbumKey]*forwardAlbumGroup),
-		timers:  make(map[forwardAlbumKey]*time.Timer),
+		timers:  make(map[forwardAlbumKey]*mediaTimer),
 		onFlush: onFlush,
 	}
 }
@@ -52,17 +52,29 @@ func (b *forwardAlbumBuffer) add(sourceID, targetID int64, targetTopicID int, gr
 	if filterMatched {
 		g.matched = true
 	}
-	b.timers[key] = time.AfterFunc(timeout, func() {
-		b.mu.Lock()
-		g := b.groups[key]
-		delete(b.groups, key)
-		delete(b.timers, key)
-		b.mu.Unlock()
+	timer := &mediaTimer{}
+	timer.Timer = time.AfterFunc(timeout, func() {
+		g := b.takeGroup(key, timer)
 		if g == nil || len(g.ids) == 0 || !g.matched {
 			return
 		}
 		b.onFlush(sourceID, targetID, targetTopicID, g.ids)
 	})
+	b.timers[key] = timer
+}
+
+func (b *forwardAlbumBuffer) takeGroup(key forwardAlbumKey, timer *mediaTimer) *forwardAlbumGroup {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	// Stop cannot revoke a callback that has started. Only the current timer
+	// may consume an album, including when its key is reused after a flush.
+	if b.timers[key] != timer {
+		return nil
+	}
+	g := b.groups[key]
+	delete(b.groups, key)
+	delete(b.timers, key)
+	return g
 }
 
 var watchForwardAlbumBuf = newForwardAlbumBuffer(func(sourceID, targetID int64, targetTopicID int, ids []int) {

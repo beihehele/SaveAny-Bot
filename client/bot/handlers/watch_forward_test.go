@@ -1,10 +1,69 @@
 package handlers
 
 import (
+	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestForwardAlbumTimerOwnership(t *testing.T) {
+	for _, reuse := range []bool{false, true} {
+		t.Run(map[bool]string{false: "reset", true: "reused key"}[reuse], func(t *testing.T) {
+			buf := newForwardAlbumBuffer(func(int64, int64, int, []int) { t.Error("unexpected timer flush") })
+			key := forwardAlbumKey{SourceID: 1, TargetID: 2, TargetTopicID: 3, GroupedID: 4}
+			buf.add(1, 2, 3, 4, 10, true, time.Hour)
+			old := buf.timers[key]
+			defer old.Stop()
+			want := []int{10, 11}
+			if reuse {
+				buf.takeGroup(key, old)
+				want = []int{11}
+			}
+			buf.add(1, 2, 3, 4, 11, false, time.Hour)
+			current := buf.timers[key]
+			defer current.Stop()
+			if got := buf.takeGroup(key, old); got != nil {
+				t.Fatal("obsolete callback consumed the current album")
+			}
+			if buf.timers[key] != current {
+				t.Fatal("obsolete callback removed the current timer")
+			}
+			got := buf.takeGroup(key, current)
+			if got == nil || !reflect.DeepEqual(got.ids, want) || got.matched != !reuse {
+				t.Fatalf("album = %+v, want ids %v and matched %v", got, want, !reuse)
+			}
+			if buf.takeGroup(key, current) != nil {
+				t.Fatal("callback consumed an album twice")
+			}
+		})
+	}
+}
+
+func TestForwardAlbumZeroDelayTimer(t *testing.T) {
+	var flushed atomic.Int32
+	done := make(chan struct{}, 100)
+	buf := newForwardAlbumBuffer(func(int64, int64, int, []int) {
+		flushed.Add(1)
+		done <- struct{}{}
+	})
+	for i := range 100 {
+		buf.add(1, 2, 3, int64(i), i, true, 0)
+	}
+	for range 100 {
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			t.Fatal("zero-delay timer failed to flush")
+		}
+	}
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+	if len(buf.groups) != 0 || len(buf.timers) != 0 || flushed.Load() != 100 {
+		t.Fatalf("groups=%d timers=%d flushes=%d", len(buf.groups), len(buf.timers), flushed.Load())
+	}
+}
 
 func TestForwardAlbumBufferFlushesSortedIDs(t *testing.T) {
 	var mu sync.Mutex
