@@ -14,7 +14,7 @@ type TelegramStorageConfig struct {
 	RateBurst int   `toml:"rate_burst" mapstructure:"rate_burst" json:"rate_burst"`
 	SkipLarge bool  `toml:"skip_large" mapstructure:"skip_large" json:"skip_large"` // skip files larger than Telegram limit(2GB)
 	// split files larger than Telegram limit(2GB) into parts of specified size, in MB, leave 0 to set default(2000MB)
-	// only effective when SkipLarge is false
+	// applied to files that have not already been skipped by SkipLarge
 	// use zip when splitting
 	SplitSizeMB int64 `toml:"split_size_mb" mapstructure:"split_size_mb" json:"split_size_mb"`
 }

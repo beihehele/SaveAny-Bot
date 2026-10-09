@@ -424,6 +424,8 @@ bot:
       task_canceled_with_id: "Processing canceled: {{.TaskID}}"
       task_failed_with_error: "Processing failed: {{.Error}}"
       batch_done_prefix: "Completed\nFile count: "
+      storage_files_skipped: "Not saved (skipped by storage policy):\n{{.Skipped}}"
+      file_skipped_with_reason: "Not saved: {{.Name}}\nSkip reason: {{.Error}}"
       direct_done_prefix: "Completed, file count: "
       parsed_start_prefix: "Starting download from {{.Site}}\nTotal size: "
       parsed_done_prefix: "Completed, resource count: "

@@ -33,6 +33,7 @@ type Provider interface {
 }
 
 // Counts is a bounded wire representation; it excludes names and error texts.
+// Failed includes policy-skipped (unsaved) files to preserve the wire schema.
 type Counts struct {
 	Total       int `json:"total"`
 	Pending     int `json:"pending"`
@@ -46,7 +47,7 @@ type Counts struct {
 // Counts returns only the counts in this detached summary.
 func (s Summary) Counts() Counts {
 	return Counts{Total: s.Total, Pending: s.Pending, Running: s.Running, Succeeded: s.Succeeded,
-		Failed: s.Failed, Cancelled: s.Cancelled, Interrupted: s.Interrupted}
+		Failed: s.Failed + s.Skipped, Cancelled: s.Cancelled, Interrupted: s.Interrupted}
 }
 
 // Valid checks that nonnegative counts exactly cover the submitted inputs.

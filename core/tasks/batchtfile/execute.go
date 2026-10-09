@@ -13,8 +13,10 @@ import (
 	"github.com/krau/SaveAny-Bot/common/tdler"
 	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
 	"github.com/krau/SaveAny-Bot/common/utils/ioutil"
+	"github.com/krau/SaveAny-Bot/common/utils/retryutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/ctxkey"
+	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 	"golang.org/x/sync/errgroup"
 )
@@ -32,7 +34,13 @@ func (t *Task) Execute(ctx context.Context) error {
 	for index, elem := range t.elems {
 		eg.Go(func() (err error) {
 			t.results.Start(index)
-			defer func() { t.results.Finish(index, err, ctx.Err()) }()
+			var resultErr error
+			defer func() {
+				if resultErr == nil {
+					resultErr = err
+				}
+				t.results.Finish(index, resultErr, ctx.Err())
+			}()
 			t.processingMu.Lock()
 			if t.processing[elem.ID] != nil {
 				t.processingMu.Unlock()
@@ -45,13 +53,20 @@ func (t *Task) Execute(ctx context.Context) error {
 				delete(t.processing, elem.ID)
 				t.processingMu.Unlock()
 			}()
-			return t.processElement(gctx, elem)
+			err = t.processElement(gctx, elem)
+			resultErr = err
+			if errors.Is(err, storagetypes.ErrSaveSkipped) && ctx.Err() == nil {
+				// A policy skip must not cancel the remaining album files. Keep
+				// the skip for the deferred result while returning nil to errgroup.
+				return nil
+			}
+			return err
 		})
 	}
 	err := eg.Wait()
 	summary := t.ResultSummary()
 	logger.Info("Batch file outcomes", "total", summary.Total, "succeeded", summary.Succeeded,
-		"failed", summary.Failed, "cancelled", summary.Cancelled, "interrupted", summary.Interrupted,
+		"skipped", summary.Skipped, "failed", summary.Failed, "cancelled", summary.Cancelled, "interrupted", summary.Interrupted,
 		"pending", summary.Pending, "running", summary.Running)
 	if err != nil {
 		logger.Errorf("Error during batch file processing: %v", err)
@@ -154,7 +169,7 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 		return fmt.Errorf("failed to get file stat: %w", err)
 	}
 	vctx := context.WithValue(ctx, ctxkey.ContentLength, fileStat.Size())
-	err = retry.Retry(func() error {
+	err = retryutil.RetrySave(vctx, func() error {
 		var file *os.File
 		file, err = os.Open(elem.localPath)
 		if err != nil {

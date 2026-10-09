@@ -131,6 +131,21 @@ func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 	} else {
 		log.FromContext(ctx).Debugf("Batch task %s completed successfully", info.TaskID())
 	}
+	text, entities, stylingErr := batchCompletionMessage(ctx, info, err, p.skippedFiles)
+	if stylingErr != nil {
+		log.FromContext(ctx).Errorf("Failed to build entities: %s", stylingErr)
+		return
+	}
+	req := &tg.MessagesEditMessageRequest{ID: p.MessageID}
+	req.SetMessage(text)
+	req.SetEntities(entities)
+	ext := tgutil.ExtFromContext(ctx)
+	if ext != nil {
+		ext.EditMessage(p.ChatID, req)
+	}
+}
+
+func batchCompletionMessage(ctx context.Context, info TaskInfo, err error, conflictSkipped []string) (string, []tg.MessageEntityClass, error) {
 	entityBuilder := entity.Builder{}
 	var stylingErr error
 
@@ -154,32 +169,34 @@ func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 			styling.Plain(i18n.T(i18nk.BotMsgProgressTotalSizePrefix, nil)),
 			styling.Code(fmt.Sprintf("%.2f MB", float64(info.TotalSize())/(1024*1024))),
 			func() styling.StyledTextOption {
-				if len(p.skippedFiles) == 0 {
+				if len(conflictSkipped) == 0 {
 					return styling.Plain("")
 				}
 				return styling.Plain("\n\n" + i18n.T(i18nk.BotMsgCommonInfoConflictFilesSkipped, map[string]any{
-					"Skipped": strings.Join(p.skippedFiles, "\n"),
+					"Skipped": strings.Join(conflictSkipped, "\n"),
 				}))
 			}(),
 		)
 	}
+	if provider, ok := info.(taskresult.Provider); ok && stylingErr == nil {
+		var skipped []string
+		for _, element := range provider.ResultSummary().Elements {
+			if element.State == taskresult.Skipped {
+				skipped = append(skipped, element.Name)
+			}
+		}
+		if len(skipped) > 0 {
+			stylingErr = styling.Perform(&entityBuilder, styling.Plain("\n\n"+i18n.T(i18nk.BotMsgProgressStorageFilesSkipped, map[string]any{
+				"Skipped": strings.Join(skipped, "\n"),
+			})))
+		}
+	}
 
 	if stylingErr != nil {
-		log.FromContext(ctx).Errorf("Failed to build entities: %s", stylingErr)
-		return
+		return "", nil, stylingErr
 	}
-
 	text, entities := entityBuilder.Complete()
-	req := &tg.MessagesEditMessageRequest{
-		ID: p.MessageID,
-	}
-	req.SetMessage(text)
-	req.SetEntities(entities)
-
-	ext := tgutil.ExtFromContext(ctx)
-	if ext != nil {
-		ext.EditMessage(p.ChatID, req)
-	}
+	return text, entities, nil
 }
 
 func NewProgressTracker(messageID int, chatID int64) ProgressTracker {

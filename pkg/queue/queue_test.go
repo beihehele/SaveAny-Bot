@@ -80,9 +80,15 @@ func TestIsExecuting(t *testing.T) {
 	if !q.IsExecuting(got.ID) {
 		t.Fatal("cancelled-but-not-Done task should still be executing")
 	}
+	if running := q.RunningTasks(); len(running) != 1 || running[0].ID != got.ID || !running[0].Cancelled {
+		t.Fatalf("cancelled worker disappeared from running list: %+v", running)
+	}
 	q.Done(got.ID)
 	if q.IsExecuting(got.ID) {
 		t.Fatal("after Done, task should not be executing")
+	}
+	if len(q.RunningTasks()) != 0 {
+		t.Fatal("finished task remained in running list")
 	}
 }
 

@@ -122,16 +122,13 @@ func (tq *TaskQueue[T]) ActiveLength() int {
 	return count
 }
 
-// RunningTasks returns the currently running tasks' info.
+// RunningTasks includes cancelled tasks until Done releases their worker slot.
 func (tq *TaskQueue[T]) RunningTasks() []TaskInfo {
 	tq.mu.RLock()
 	defer tq.mu.RUnlock()
 
 	tasks := make([]TaskInfo, 0, len(tq.runningTaskMap))
 	for _, task := range tq.runningTaskMap {
-		if task.Cancelled() {
-			continue
-		}
 		tasks = append(tasks, TaskInfo{
 			ID:        task.ID,
 			Title:     task.Title,

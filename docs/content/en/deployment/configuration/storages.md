@@ -85,8 +85,10 @@ Does not support Stream mode.
 chat_id = "123456789" # Telegram chat ID, the bot will send files to this chat
 force_file = false # Force sending as file, default is false
 skip_large = false # Skip large files, default is false. If enabled, files exceeding Telegram's limit will not be uploaded.
-spilt_size_mb = 2000 # Split size in MB, default is 2000 MB (2 GB). Files larger than this will be split into multiple parts (zip format). Ignored when skip_large is true.
+split_size_mb = 2000 # Split size in MB, default is 2000 MB (2 GB). Larger files use zip parts unless skip_large skips them first.
 ```
+
+Files skipped by `skip_large` are reported as unsaved and never counted as successful saves. Batch Telegram file tasks continue with the remaining files; API `transfer` tasks using `strict` cannot succeed with skipped inputs.
 
 ## Rclone
 

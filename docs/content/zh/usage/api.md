@@ -392,6 +392,8 @@ Authorization: Bearer <token>
 
 每个已提交文件计入一种状态，六种状态之和等于 `total`。计数不包含预处理时排除的文件，不提供文件名、逐项错误或重试清单。文件操作返回取消/期限错误时，按记录当刻父 context 是否已经结束归入 `cancelled` 或 `interrupted`；这描述观察状态，不证明并发事件的唯一原因。排队或执行前取消的任务没有执行摘要，字段缺失不能解释为全部成功。
 
+`failed` 也包含执行期间被存储策略跳过、实际未保存的文件，例如 Telegram 的 `skip_large`。内部会区分 `skipped`，API 保留现有计数字段；这类文件不计入 `succeeded`，`strict` 校验会报告未全部保存。`legacy` 仍保留原有整体完成规则。
+
 `DELETE` 会立即报告 cancelled；若当时执行尚未退出，该次取消 Webhook 可能没有摘要。执行退出后，查询可补充最终计数并更新 `updated_at`，保持取消终态，不再发送第二次通知。Webhook 接收端仍应按任务 ID 和终态去重。
 
 ---

@@ -2,6 +2,7 @@ package tfile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/dlutil"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
@@ -152,6 +154,10 @@ func completionMessage(ctx context.Context, info TaskInfo, err error) (string, [
 				styling.Plain(i18n.T(i18nk.BotMsgProgressFileNamePrefix, nil)),
 				styling.Code(info.FileName()),
 			)
+		} else if errors.Is(err, storagetypes.ErrSaveSkipped) {
+			stylingErr = styling.Perform(&entityBuilder, styling.Plain(i18n.T(i18nk.BotMsgProgressFileSkippedWithReason, map[string]any{
+				"Name": info.FileName(), "Error": err.Error(),
+			})))
 		} else {
 			stylingErr = styling.Perform(&entityBuilder,
 				styling.Plain(i18n.T(i18nk.BotMsgProgressDownloadFailedPrefix, nil)),

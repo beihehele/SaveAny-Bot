@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/duke-git/lancet/v2/retry"
 	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
+	"github.com/krau/SaveAny-Bot/common/utils/retryutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 	"golang.org/x/sync/errgroup"
@@ -60,7 +61,7 @@ func (t *Task) processPic(ctx context.Context, picUrl string, index int) error {
 		retry.Context(ctx),
 		retry.RetryTimes(uint(config.C().Retry)),
 	}
-	err := retry.Retry(func() error {
+	err := retryutil.RetrySave(ctx, func() error {
 		body, err := t.client.Download(ctx, picUrl)
 		if err != nil {
 			return fmt.Errorf("failed to download picture %s: %w", picUrl, err)

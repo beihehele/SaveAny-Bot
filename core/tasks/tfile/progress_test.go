@@ -10,6 +10,7 @@ import (
 
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
+	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 )
 
 type completionInfo struct{}
@@ -54,5 +55,13 @@ func TestCompletionMessageDistinguishesInternalAndTaskCancellation(t *testing.T)
 				t.Fatal("success message lost the save path")
 			}
 		})
+	}
+}
+
+func TestCompletionMessageReportsPolicySkipWithoutSavePath(t *testing.T) {
+	i18n.Init("en")
+	text, _, err := completionMessage(t.Context(), completionInfo{}, fmt.Errorf("too large: %w", storagetypes.ErrSaveSkipped))
+	if err != nil || !strings.HasPrefix(text, "Not saved: album-photo.jpg") || !strings.Contains(text, "Skip reason:") || strings.Contains(text, "[local]:photos") {
+		t.Fatalf("skipped file was displayed as saved: %q %v", text, err)
 	}
 }

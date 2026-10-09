@@ -8,12 +8,14 @@ import (
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/client/user"
+	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/pkg/msgfilter"
 )
 
 type scanProgressFn func(matched, atMsgID int)
 
 func collectMatchedIDs(ctx context.Context, uctx *ext.Context, sourceID int64, filter string, count int, onProgress scanProgressFn) ([]int, error) {
+	uctx = tgutil.ClientWithContext(ctx, uctx)
 	node, err := msgfilter.ParseFilter(filter)
 	if err != nil {
 		return nil, err

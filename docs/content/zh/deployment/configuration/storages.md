@@ -90,9 +90,11 @@ force_file = false
 skip_large = false
 # 分卷大小, 单位 MB, 默认为 2000 MB (2 GB). 
 # 超过该大小的文件将被分割成多个部分上传.(使用 zip 格式)
-# 当 skip_large 启用时, 该选项无效.
-spilt_size_mb = 2000
+# 被 skip_large 跳过的文件不会分卷；其余文件仍按此大小判断是否分卷.
+split_size_mb = 2000
 ```
+
+`skip_large` 跳过的文件会明确报告为未保存，不计入成功保存数量。批量 Telegram 文件任务会继续处理其余文件；API `transfer` 的 `strict` 策略不会把包含跳过文件的任务判为全部成功。
 
 ## Rclone
 

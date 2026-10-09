@@ -26,6 +26,7 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/consts/tglimit"
 	"github.com/krau/SaveAny-Bot/pkg/enums/ctxkey"
 	storenum "github.com/krau/SaveAny-Bot/pkg/enums/storage"
+	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 	"github.com/rs/xid"
 	"golang.org/x/time/rate"
 )
@@ -75,6 +76,9 @@ func (t *Telegram) CannotDetectExistence() string {
 }
 
 func (t *Telegram) Save(ctx context.Context, r io.Reader, storagePath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	storagePath = path.Clean(storagePath)
 	tctx := tgutil.ExtFromContext(ctx)
 	if tctx == nil {
@@ -90,7 +94,7 @@ func (t *Telegram) Save(ctx context.Context, r io.Reader, storagePath string) er
 	}()
 	if t.config.SkipLarge && size > MaxUploadFileSize {
 		log.FromContext(ctx).Warnf("Skipping file larger than Telegram limit (%d bytes): %d bytes", MaxUploadFileSize, size)
-		return nil
+		return fmt.Errorf("%w: file size %d exceeds Telegram limit %d with skip_large enabled", storagetypes.ErrSaveSkipped, size, MaxUploadFileSize)
 	}
 	rs, seekable := r.(io.ReadSeeker)
 	splitSize := t.config.SplitSizeMB * 1024 * 1024
@@ -145,7 +149,7 @@ func (t *Telegram) Save(ctx context.Context, r io.Reader, storagePath string) er
 	}
 	if size > splitSize {
 		// large file, use split uploader
-		return t.splitUpload(tctx, r, filename, upler, peer, size, splitSize)
+		return t.splitUpload(ctx, tctx, r, filename, upler, peer, size, splitSize)
 	}
 
 	var file tg.InputFileClass
@@ -175,21 +179,25 @@ func (t *Telegram) Save(ctx context.Context, r io.Reader, storagePath string) er
 		switch mtypeStr := mtype.String(); {
 		case strings.HasPrefix(mtypeStr, "video/"):
 			media = doc.Video().SupportsStreaming()
-			thumb, err := extractThumbFrame(rs)
+			thumb, err := extractThumbFrame(ctx, rs)
 			if err == nil {
 				thumb, err := upler.FromBytes(ctx, "thumb.jpg", thumb)
 				if err == nil {
 					doc = doc.Thumb(thumb)
 				}
 			}
-			rs.Seek(0, io.SeekStart)
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if _, err := rs.Seek(0, io.SeekStart); err != nil {
+				return fmt.Errorf("seek video input: %w", err)
+			}
 			switch mtypeStr {
 			case "video/mp4":
 				info, err := getMP4Meta(rs)
 				if err != nil {
 					// Fallback to ffprobe if gomedia fails (e.g., malformed MP4)
-					rs.Seek(0, io.SeekStart)
-					info, err = getVideoMetadata(rs)
+					info, err = getVideoMetadata(ctx, rs)
 				}
 				if err == nil {
 					media = doc.Video().
@@ -198,7 +206,7 @@ func (t *Telegram) Save(ctx context.Context, r io.Reader, storagePath string) er
 						SupportsStreaming()
 				}
 			default:
-				info, err := getVideoMetadata(rs)
+				info, err := getVideoMetadata(ctx, rs)
 				if err == nil {
 					media = doc.Video().
 						Duration(time.Duration(info.Duration)*time.Second).
@@ -212,6 +220,9 @@ func (t *Telegram) Save(ctx context.Context, r io.Reader, storagePath string) er
 			media = message.UploadedPhoto(file, caption)
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	sender := tctx.Sender
 	_, err = sender.WithUploader(upler).To(peer).Media(ctx, media)
 	return err
@@ -221,7 +232,7 @@ func (t *Telegram) CannotStream() string {
 	return "Telegram storage must use a ReaderSeeker"
 }
 
-func (t *Telegram) splitUpload(ctx *ext.Context, r io.Reader, filename string, upler *uploader.Uploader, peer tg.InputPeerClass, fileSize, splitSize int64) error {
+func (t *Telegram) splitUpload(ctx context.Context, tctx *ext.Context, r io.Reader, filename string, upler *uploader.Uploader, peer tg.InputPeerClass, fileSize, splitSize int64) error {
 	tempId := xid.New().String()
 	outputBase := filepath.Join(config.C().Temp.BasePath, tempId, strings.Split(filename, ".")[0])
 	defer func() {
@@ -270,7 +281,7 @@ func (t *Telegram) splitUpload(ctx *ext.Context, r io.Reader, filename string, u
 			Filename(filepath.Base(matched[0])).
 			ForceFile(true).
 			MIME("application/zip")
-		_, err = ctx.Sender.
+		_, err = tctx.Sender.
 			WithUploader(upler).
 			To(peer).
 			Media(ctx, doc)
@@ -285,7 +296,7 @@ func (t *Telegram) splitUpload(ctx *ext.Context, r io.Reader, filename string, u
 		multiMedia = append(multiMedia, doc)
 	}
 
-	sender := ctx.Sender
+	sender := tctx.Sender
 
 	if len(multiMedia) <= 10 {
 		_, err = sender.WithUploader(upler).
