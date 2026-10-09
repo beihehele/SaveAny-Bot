@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/celestix/gotgproto/ext"
 	"github.com/charmbracelet/log"
 	"github.com/rs/xid"
 
+	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
 	"github.com/krau/SaveAny-Bot/core/tasks/aria2dl"
@@ -22,6 +24,7 @@ import (
 	"github.com/krau/SaveAny-Bot/core/tasks/ytdlp"
 	"github.com/krau/SaveAny-Bot/parsers/parsers"
 	"github.com/krau/SaveAny-Bot/pkg/aria2"
+	storenum "github.com/krau/SaveAny-Bot/pkg/enums/storage"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/parser"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
@@ -32,9 +35,10 @@ import (
 
 // TaskFactory 任务工厂
 type TaskFactory struct {
-	ctx          context.Context
-	prepareCtx   context.Context
-	resultPolicy taskresult.Policy
+	ctx           context.Context
+	prepareCtx    context.Context
+	resultPolicy  taskresult.Policy
+	clientContext func() (*ext.Context, error)
 }
 
 // CreateTaskWithContext limits preprocessing to the request. Enqueued tasks keep
@@ -54,7 +58,28 @@ func (f *TaskFactory) preprocessingContext() context.Context {
 
 // NewTaskFactory 创建任务工厂
 func NewTaskFactory(ctx context.Context) *TaskFactory {
-	return &TaskFactory{ctx: ctx}
+	return &TaskFactory{ctx: ctx, clientContext: getClientContext}
+}
+
+func (f *TaskFactory) contextForStorage(storageName string) (context.Context, error) {
+	stor, ok := storage.GetStorage(storageName)
+	if !ok || stor.Type() != storenum.Telegram || tgutil.ExtFromContext(f.ctx) != nil {
+		return f.ctx, nil
+	}
+	resolve := f.clientContext
+	if resolve == nil {
+		resolve = getClientContext
+	}
+	client, err := resolve()
+	if err != nil {
+		return nil, fmt.Errorf("telegram storage client is unavailable: %w", err)
+	}
+	if client == nil {
+		return nil, errors.New("telegram storage client is unavailable")
+	}
+	// Keep the service lifetime and values. The client's own context must not
+	// replace the parent of an accepted API task.
+	return tgutil.ExtWithContext(f.ctx, client), nil
 }
 
 // CreateTask 创建任务
@@ -104,6 +129,10 @@ func (f *TaskFactory) registerAndEnqueueTask(task core.Executable, taskType task
 	if err := f.preprocessingContext().Err(); err != nil {
 		return err
 	}
+	taskCtx, err := f.contextForStorage(storageName)
+	if err != nil {
+		return err
+	}
 	taskID := task.TaskID()
 	info := RegisterTask(taskID, string(taskType), storageName, path, task.Title(), webhook)
 	info.mu.Lock()
@@ -114,12 +143,12 @@ func (f *TaskFactory) registerAndEnqueueTask(task core.Executable, taskType task
 	// Inject the progress sink into the context so the task's Emit calls update
 	// the API store (and fire the webhook on terminal states) without the task
 	// knowing about the API.
-	taskCtx := taskevent.WithSink(f.ctx, info)
+	taskCtx = taskevent.WithSink(taskCtx, info)
 	if f.resultPolicy != "" {
 		taskCtx = taskresult.WithPolicy(taskCtx, f.resultPolicy)
 	}
 
-	err := core.AddTask(taskCtx, task)
+	err = core.AddTask(taskCtx, task)
 	if err != nil {
 		DeleteTask(taskID)
 		return fmt.Errorf("failed to add task: %w", err)

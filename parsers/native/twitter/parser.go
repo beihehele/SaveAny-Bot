@@ -67,11 +67,20 @@ func (p *TwitterParser) Parse(ctx context.Context, u string) (*parser.Item, erro
 	}
 	resources := make([]parser.Resource, 0, len(fxResp.Tweet.Media.All))
 	for _, media := range fxResp.Tweet.Media.All {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		var size int64
-		resp, err := p.client.Head(media.URL)
+		request, err := http.NewRequestWithContext(ctx, http.MethodHead, media.URL, nil)
 		if err == nil {
-			size = resp.ContentLength
-			resp.Body.Close()
+			resp, err := p.client.Do(request)
+			if err == nil {
+				size = resp.ContentLength
+				resp.Body.Close()
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		resources = append(resources, parser.Resource{
 			URL:      media.URL,
@@ -101,9 +110,9 @@ func (p *TwitterParser) Name() string {
 }
 
 func (p *TwitterParser) Configure(config map[string]any) error {
+	p.client = *netutil.DefaultParserHTTPClient()
 	if config == nil {
 		p.apiDomain = fxTwitterApi
-		p.client = *netutil.DefaultParserHTTPClient()
 		return nil
 	}
 	if domain, ok := config["api_domain"].(string); ok && domain != "" {
