@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -138,7 +139,7 @@ func findRunningHookFixtureProcesses() (processes []*os.Process, err error) {
 		if int(entry.ProcessID) == os.Getpid() || !strings.EqualFold(windows.UTF16ToString(entry.ExeFile[:]), filepath.Base(executable)) {
 			continue
 		}
-		handle, openErr := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, entry.ProcessID)
+		handle, openErr := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, entry.ProcessID)
 		if openErr != nil {
 			if errors.Is(openErr, windows.ERROR_INVALID_PARAMETER) {
 				continue // Process exited after the snapshot.
@@ -148,6 +149,9 @@ func findRunningHookFixtureProcesses() (processes []*os.Process, err error) {
 		buffer := make([]uint16, 32768)
 		length := uint32(len(buffer))
 		queryErr := windows.QueryFullProcessImageName(handle, 0, &buffer[0], &length)
+		if queryErr != nil {
+			queryErr = fmt.Errorf("query fixture candidate %d: %w", entry.ProcessID, queryErr)
+		}
 		if queryErr == nil && strings.EqualFold(filepath.Clean(windows.UTF16ToString(buffer[:length])), executable) {
 			// Keep the queried process handle until FindProcess has acquired its
 			// own handle, preventing PID reuse between identity check and capture.
@@ -155,9 +159,10 @@ func findRunningHookFixtureProcesses() (processes []*os.Process, err error) {
 			if findErr == nil {
 				processes = append(processes, process)
 			} else {
-				queryErr = findErr
+				queryErr = fmt.Errorf("capture fixture candidate %d: %w", entry.ProcessID, findErr)
 			}
 		}
+		queryErr = hookFixtureInspectionError(handle, queryErr)
 		if closeErr := windows.CloseHandle(handle); queryErr != nil || closeErr != nil {
 			return processes, errors.Join(queryErr, closeErr)
 		}
@@ -166,4 +171,78 @@ func findRunningHookFixtureProcesses() (processes []*os.Process, err error) {
 		return processes, nextErr
 	}
 	return processes, nil
+}
+
+func hookFixtureInspectionError(handle windows.Handle, inspectErr error) error {
+	if inspectErr == nil {
+		return nil
+	}
+	// The process may exit between the snapshot, image query and FindProcess.
+	// Ignore inspection failure only when this original handle proves exit;
+	// retaining it also prevents accidentally checking a reused PID.
+	status, waitErr := windows.WaitForSingleObject(handle, 0)
+	if waitErr == nil && status == windows.WAIT_OBJECT_0 {
+		return nil
+	}
+	return errors.Join(inspectErr, waitErr)
+}
+
+func TestWindowsHookFixtureInspectionKeepsLiveErrorsAndRecognizesExit(t *testing.T) {
+	command := exec.Command(os.Args[0], "-test.run=^TestHookHelperProcess$")
+	command.Env = append(os.Environ(), "SAVEANY_TEST_HOOK_MODE=wait")
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	reaped := false
+	t.Cleanup(func() {
+		if !reaped {
+			if err := command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+				t.Error(err)
+			}
+			var exitErr *exec.ExitError
+			if err := command.Wait(); err != nil && !errors.As(err, &exitErr) {
+				t.Error(err)
+			}
+		}
+	})
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, uint32(command.Process.Pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := windows.CloseHandle(handle); err != nil {
+			t.Error(err)
+		}
+	})
+	denied := fmt.Errorf("capture fixture: %w", windows.ERROR_ACCESS_DENIED)
+	if err := hookFixtureInspectionError(handle, denied); !errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		t.Fatalf("live fixture inspection error was hidden: %v", err)
+	}
+	if err := command.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	var exitErr *exec.ExitError
+	if err := command.Wait(); !errors.As(err, &exitErr) {
+		t.Fatalf("fixture did not terminate: %v", err)
+	}
+	reaped = true
+	// Exercise the original discovery window with a real exited process while
+	// the query handle still pins its identity. Windows may deny FindProcess's
+	// stronger access rights at this point.
+	captured, captureErr := os.FindProcess(command.Process.Pid)
+	if captured != nil {
+		if err := captured.Release(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Logf("capture after fixture exit: %v", captureErr)
+	if err := hookFixtureInspectionError(handle, captureErr); err != nil {
+		t.Fatalf("real exited fixture capture error: %v", err)
+	}
+	if err := hookFixtureInspectionError(handle, denied); err != nil {
+		t.Fatalf("already exited fixture inspection was reported as a live error: %v", err)
+	}
+	if err := hookFixtureInspectionError(windows.InvalidHandle, denied); !errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		t.Fatal("unverifiable fixture inspection error was hidden")
+	}
 }

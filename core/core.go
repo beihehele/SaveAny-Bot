@@ -135,13 +135,33 @@ func Run(ctx context.Context) <-chan struct{} {
 // AddTask transfers a new task wrapper to the queue. If admission fails, it
 // releases only that wrapper's child context and preserves the caller's context.
 func AddTask(ctx context.Context, task Executable) error {
+	return AddTasks(ctx, task)
+}
+
+// AddTasks transfers all new task wrappers to the queue in one admission.
+// Rejection releases every new child context, leaving accepted work and the
+// caller's context intact. An empty group is a no-op.
+func AddTasks(ctx context.Context, tasks ...Executable) error {
+	if len(tasks) == 0 {
+		return nil
+	}
 	qe := currentQueue()
 	if qe == nil {
 		return errors.New("task queue is not initialized")
 	}
-	qtask := queue.NewTask(ctx, task.TaskID(), task.Title(), task)
-	if err := qe.Add(qtask); err != nil {
-		qtask.Cancel()
+	for _, task := range tasks {
+		if task == nil {
+			return errors.New("cannot add nil task")
+		}
+	}
+	wrappers := make([]*queue.Task[Executable], 0, len(tasks))
+	for _, task := range tasks {
+		wrappers = append(wrappers, queue.NewTask(ctx, task.TaskID(), task.Title(), task))
+	}
+	if err := qe.AddBatch(wrappers...); err != nil {
+		for _, wrapper := range wrappers {
+			wrapper.Cancel()
+		}
 		return err
 	}
 	return nil

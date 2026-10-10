@@ -29,6 +29,15 @@ func NewTaskQueue[T any]() *TaskQueue[T] {
 // Add takes ownership only on success; rejection does not cancel the task.
 // Cancelling on rejection could cancel an accepted task resubmitted by pointer.
 func (tq *TaskQueue[T]) Add(task *Task[T]) error {
+	return tq.AddBatch(task)
+}
+
+// AddBatch accepts all tasks in order or rejects the entire group without
+// changing queue state or taking ownership. An empty group is a no-op.
+func (tq *TaskQueue[T]) AddBatch(tasks ...*Task[T]) error {
+	if len(tasks) == 0 {
+		return nil
+	}
 	tq.mu.Lock()
 	defer tq.mu.Unlock()
 
@@ -36,19 +45,34 @@ func (tq *TaskQueue[T]) Add(task *Task[T]) error {
 		return errors.New("queue is closed")
 	}
 
-	if _, exists := tq.taskMap[task.ID]; exists {
-		return fmt.Errorf("task with ID %s already exists", task.ID)
+	seen := make(map[string]struct{}, len(tasks))
+	for index, task := range tasks {
+		if task == nil {
+			return fmt.Errorf("nil task at index %d", index)
+		}
+		if _, exists := tq.taskMap[task.ID]; exists {
+			return fmt.Errorf("task with ID %s already exists", task.ID)
+		}
+		if _, exists := seen[task.ID]; exists {
+			return fmt.Errorf("task with ID %s repeated in group", task.ID)
+		}
+		if task.Cancelled() {
+			return fmt.Errorf("task %s has been cancelled", task.ID)
+		}
+		seen[task.ID] = struct{}{}
 	}
 
-	if task.Cancelled() {
-		return fmt.Errorf("task %s has been cancelled", task.ID)
+	for _, task := range tasks {
+		task.element = tq.tasks.PushBack(task)
+		tq.taskMap[task.ID] = task
 	}
 
-	element := tq.tasks.PushBack(task)
-	task.element = element
-	tq.taskMap[task.ID] = task
-
-	tq.cond.Signal()
+	if len(tasks) == 1 {
+		tq.cond.Signal()
+	} else {
+		// Each member remains an independent task; wake all idle workers.
+		tq.cond.Broadcast()
+	}
 	return nil
 }
 
