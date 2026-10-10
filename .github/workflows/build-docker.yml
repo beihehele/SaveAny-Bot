@@ -14,8 +14,8 @@ permissions:
   packages: write
 
 concurrency:
-  group: docker-build-${{ github.repository }}
-  cancel-in-progress: true
+  group: docker-build-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   quality:
@@ -57,7 +57,15 @@ jobs:
           MAJOR_MINOR="${{ steps.vars.outputs.major_minor }}"
           SHA="${{ steps.vars.outputs.short_sha }}"
 
-          echo "tags=${REPO}:latest,${REPO}:${VERSION},${REPO}:${MAJOR_MINOR},${REPO}:sha-${SHA}" >> "$GITHUB_OUTPUT"
+          case "$VERSION" in
+            *-*)
+              TAGS="${REPO}:${VERSION},${REPO}:sha-${SHA}"
+              ;;
+            *)
+              TAGS="${REPO}:latest,${REPO}:${VERSION},${REPO}:${MAJOR_MINOR},${REPO}:sha-${SHA}"
+              ;;
+          esac
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6

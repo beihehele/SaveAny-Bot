@@ -24,15 +24,11 @@ jobs:
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
-
-      - name: Setup node
-        uses: actions/setup-node@v6
         with:
-          node-version: 22
-
-      - run: npx changelogithub
-        env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
+          generate_release_notes: true
+          body_path: docs/releases/telegram-local.md
 
   build-matrix:
     needs: [quality, create-release]
@@ -47,13 +43,14 @@ jobs:
             goarch: amd64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Extract version from Git Ref
         id: extract_version
         run: |
           VERSION=$(echo "${{ github.ref }}" | sed 's/refs\/tags\/v//')
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD_TIME=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
 
       - name: Release Go Binary
         uses: wangyoucao577/go-release-action@v1
@@ -66,10 +63,14 @@ jobs:
           extra_files: |
             LICENSE
             README.md
+            README_zh.md
+            config.example.toml
+            config.example.full.toml
+            docs/releases/telegram-local.md
           ldflags: >-
             -s -w
             -X "github.com/krau/SaveAny-Bot/config.Version=${{ env.VERSION }}"
-            -X "github.com/krau/SaveAny-Bot/config.BuildTime=${{ format(github.event.repository.updated_at, 'yyyy-MM-dd HH:mm:ss') }}"
+            -X "github.com/krau/SaveAny-Bot/config.BuildTime=${{ env.BUILD_TIME }}"
             -X "github.com/krau/SaveAny-Bot/config.GitCommit=${{ github.sha }}"
           binary_name: saveany-bot
           sha256sum: 'true'
