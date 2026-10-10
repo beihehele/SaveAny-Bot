@@ -11,6 +11,7 @@ import (
 
 	"github.com/celestix/gotgproto/ext"
 	"github.com/charmbracelet/log"
+	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/mediautil"
 	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/ruleutil"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
@@ -185,8 +186,7 @@ func resolveWatchLocalStorage(ctx context.Context, userID uint) (*database.User,
 	return user, stor, defaultDirPath, nil
 }
 
-func createWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Storage, defaultDirPath string, file tfile.TGFileMessage) {
-	logger := log.FromContext(ctx)
+func buildWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Storage, defaultDirPath string, file tfile.TGFileMessage) (*coretfile.Task, error) {
 	dirPath := defaultDirPath
 	fileStor := stor
 	if user.ApplyRule && user.Rules != nil {
@@ -197,8 +197,7 @@ func createWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.St
 				var err error
 				fileStor, err = storage.GetStorageByUserIDAndName(ctx, user.ChatID, matchedStorageName.String())
 				if err != nil {
-					logger.Errorf("Failed to get storage by user ID and name: %s", err)
-					return
+					return nil, fmt.Errorf("get storage for file %s: %w", file.Name(), err)
 				}
 			}
 		}
@@ -206,12 +205,17 @@ func createWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.St
 	storagePath := path.Join(dirPath, file.Name())
 	injectCtx := tgutil.ExtWithContext(ctx.Context, ctx)
 	taskid := xid.New().String()
-	task, err := coretfile.NewTGFileTask(taskid, injectCtx, file, fileStor, storagePath, nil)
+	return coretfile.NewTGFileTask(taskid, injectCtx, file, fileStor, storagePath, nil)
+}
+
+func createWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Storage, defaultDirPath string, file tfile.TGFileMessage) {
+	logger := log.FromContext(ctx)
+	task, err := buildWatchLocalTask(ctx, user, stor, defaultDirPath, file)
 	if err != nil {
 		logger.Errorf("create task failed: %s", err)
 		return
 	}
-	if err := core.AddTask(injectCtx, task); err != nil {
+	if err := core.AddTask(tgutil.ExtWithContext(ctx.Context, ctx), task); err != nil {
 		logger.Errorf("add task failed: %s", err)
 		return
 	}
@@ -225,6 +229,15 @@ func processWatchLocalAlbum(ctx *ext.Context, userID uint, files []tfile.TGFileM
 		logger.Warnf("skip local album: %v", err)
 		return
 	}
+	processWatchLocalAlbumTasks(ctx, user, stor, defaultDirPath, files, core.AddTasks)
+}
+
+// watchAlbumEnqueue keeps submission explicit so preparation and rejection can
+// be checked without changing the application queue singleton.
+type watchAlbumEnqueue func(context.Context, ...core.Executable) error
+
+func processWatchLocalAlbumTasks(ctx *ext.Context, user *database.User, stor storage.Storage, defaultDirPath string, files []tfile.TGFileMessage, enqueue watchAlbumEnqueue) {
+	logger := log.FromContext(ctx)
 	caption := albumCaptionText(files)
 	for _, f := range files {
 		applyWatchFilename(ctx, user, f, caption)
@@ -235,14 +248,47 @@ func processWatchLocalAlbum(ctx *ext.Context, userID uint, files []tfile.TGFileM
 		needAlbumHandling = matchedDirPath.NeedNewForAlbum()
 	}
 	if needAlbumHandling {
-		processWatchMediaGroup(ctx, user, stor, defaultDirPath, files)
+		processWatchMediaGroup(ctx, user, stor, defaultDirPath, files, enqueue)
 		return
 	}
+	tasks := make([]core.Executable, 0, len(files))
 	for _, f := range files {
-		createWatchLocalTask(ctx, user, stor, defaultDirPath, f)
+		task, err := buildWatchLocalTask(ctx, user, stor, defaultDirPath, f)
+		if err != nil {
+			logger.Error("Prepare watch album file failed", "user_id", user.ChatID, "file", f.Name(), "error", err)
+			continue
+		}
+		tasks = append(tasks, task)
+	}
+	if len(files) > 0 {
+		submitWatchAlbum(ctx, user.ChatID, files[0].Message(), tasks, len(files)-len(tasks), enqueue)
 	}
 }
-func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.Storage, dirPath string, files []tfile.TGFileMessage) {
+
+func submitWatchAlbum(ctx *ext.Context, userID int64, source *tg.Message, tasks []core.Executable, prepareFailed int, enqueue watchAlbumEnqueue) int {
+	logger := log.FromContext(ctx)
+	var groupedID int64
+	var peer tg.PeerClass
+	if source != nil {
+		groupedID, peer = source.GroupedID, source.PeerID
+	}
+	if len(tasks) == 0 {
+		if prepareFailed > 0 {
+			logger.Warn("Watch album has no prepared tasks", "user_id", userID, "grouped_id", groupedID, "source_peer", peer, "prepare_failed", prepareFailed)
+		}
+		return 0
+	}
+	if err := enqueue(tgutil.ExtWithContext(ctx.Context, ctx), tasks...); err != nil {
+		logger.Error("Watch album admission rejected", "user_id", userID, "grouped_id", groupedID, "source_peer", peer,
+			"rejected_tasks", len(tasks), "prepare_failed", prepareFailed, "error", err)
+		return 0
+	}
+	logger.Info("Watch album tasks admitted", "user_id", userID, "grouped_id", groupedID, "source_peer", peer,
+		"admitted_tasks", len(tasks), "prepare_failed", prepareFailed)
+	return len(tasks)
+}
+
+func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.Storage, dirPath string, files []tfile.TGFileMessage, enqueue watchAlbumEnqueue) {
 	logger := log.FromContext(ctx)
 	if len(files) == 0 {
 		return
@@ -271,6 +317,7 @@ func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.
 		dirPath string
 	}
 	albumFiles := make(map[int64][]albumFile)
+	prepareFailed := make(map[int64]int)
 
 	// Collect files by group ID
 	for _, file := range files {
@@ -281,6 +328,9 @@ func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.
 			fileStor, err = storage.GetStorageByUserIDAndName(ctx, user.ChatID, storName)
 			if err != nil {
 				logger.Errorf("Failed to get storage by user ID and name: %s", err)
+				if groupID, ok := file.Message().GetGroupedID(); ok && groupID != 0 {
+					prepareFailed[groupID]++
+				}
 				continue
 			}
 		}
@@ -322,6 +372,7 @@ func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.
 
 		logger.Infof("Creating album folder for group %d: %s with %d files", groupID, albumDir, len(afiles))
 
+		tasks := make([]core.Executable, 0, len(afiles))
 		for _, af := range afiles {
 			afstorPath := path.Join(af.dirPath, albumDir, af.file.Name())
 			taskid := xid.New().String()
@@ -330,12 +381,9 @@ func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.
 				logger.Errorf("create task failed for album file: %s", err)
 				continue
 			}
-			if err := core.AddTask(injectCtx, task); err != nil {
-				logger.Errorf("add task failed: %s", err)
-				continue
-			}
-			totalTasks++
+			tasks = append(tasks, task)
 		}
+		totalTasks += submitWatchAlbum(ctx, user.ChatID, afiles[0].file.Message(), tasks, prepareFailed[groupID]+len(afiles)-len(tasks), enqueue)
 	}
 	logger.Infof("Added %d watch media tasks for user %d", totalTasks, user.ChatID)
 }
