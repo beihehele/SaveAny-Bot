@@ -8,5 +8,16 @@ data/
 cache/
 docs/
 config.example.toml
+config.toml
+config.*.toml
+tmp-*/
+tmp/
+temp/
+logs/
+.worktrees/
+saveany-bot
+saveany-bot.exe
+*.test
+*.test.exe
 docker-compose.*
 playwright/

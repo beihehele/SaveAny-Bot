@@ -1,5 +1,7 @@
 # 队列接纳契约与容量治理评估
 
+> 这是 `be4bbaa` 时的评估。后续已合入监听相册原子接纳，逐文件入队描述保留为历史依据；容量上限尚未实施。最新状态见 [当前待办与发布验收](2026-10-10-release-readiness.md) 和 [原子接纳复查](2026-10-10-atomic-album-admission-review.md)。
+
 基线：dev `be4bbaa5c34d37188c756a71be488b772ef6207f`。生产为单用户、Telegram/本地存储，HTTP API 仅本机或内网；当前没有隔离 Telegram 联调环境。
 
 ## 已核实的现状
