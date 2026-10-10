@@ -132,12 +132,19 @@ func Run(ctx context.Context) <-chan struct{} {
 	return done
 }
 
+// AddTask transfers a new task wrapper to the queue. If admission fails, it
+// releases only that wrapper's child context and preserves the caller's context.
 func AddTask(ctx context.Context, task Executable) error {
 	qe := currentQueue()
 	if qe == nil {
 		return errors.New("task queue is not initialized")
 	}
-	return qe.Add(queue.NewTask(ctx, task.TaskID(), task.Title(), task))
+	qtask := queue.NewTask(ctx, task.TaskID(), task.Title(), task)
+	if err := qe.Add(qtask); err != nil {
+		qtask.Cancel()
+		return err
+	}
+	return nil
 }
 
 func CancelTask(ctx context.Context, id string) error {
