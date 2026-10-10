@@ -26,6 +26,8 @@ func NewTaskQueue[T any]() *TaskQueue[T] {
 	return tq
 }
 
+// Add takes ownership only on success; rejection does not cancel the task.
+// Cancelling on rejection could cancel an accepted task resubmitted by pointer.
 func (tq *TaskQueue[T]) Add(task *Task[T]) error {
 	tq.mu.Lock()
 	defer tq.mu.Unlock()
