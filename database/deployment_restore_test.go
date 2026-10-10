@@ -30,8 +30,8 @@ func TestStoppedDeploymentBackupUpgradeAndRestore(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("config.toml", "[[users]]\nid=42\nstorages=['archive']\n[[storages]]\nname='archive'\ntype='local'\nbase_path='downloads'\n")
-	write("plugins/custom.js", "// private deployment plugin fixture\n")
+	write("config.toml", "[[users]]\nid=42\nstorages=['archive']\n[[storages]]\nname='archive'\ntype='local'\nenable=true\nbase_path='downloads'\n")
+	write("private/notes.txt", "private deployment fixture\n")
 	write("downloads/saved.txt", "previously saved file\n")
 	start := func(root string) {
 		t.Helper()
@@ -42,6 +42,9 @@ func TestStoppedDeploymentBackupUpgradeAndRestore(t *testing.T) {
 			t.Fatal(err)
 		}
 		Init(t.Context())
+		if err := ValidateStorageReferences(t.Context()); err != nil {
+			t.Fatal(err)
+		}
 		conn, err := db.DB()
 		if err != nil {
 			t.Fatal(err)

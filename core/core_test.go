@@ -24,7 +24,7 @@ type lifecycleTask struct {
 
 func (t lifecycleTask) TaskID() string                    { return t.id }
 func (t lifecycleTask) Title() string                     { return t.id }
-func (t lifecycleTask) Type() tasktype.TaskType           { return tasktype.TaskTypeDirectlinks }
+func (t lifecycleTask) Type() tasktype.TaskType           { return tasktype.TaskTypeTgfiles }
 func (t lifecycleTask) Execute(ctx context.Context) error { return t.run(ctx) }
 
 func resetCoreQueue(t *testing.T) {

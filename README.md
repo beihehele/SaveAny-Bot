@@ -4,7 +4,7 @@
 
 **English** | [简体中文](./README_zh.md)
 
-> **Save Any Telegram File to Anywhere 📂. Support restrict saving content and beyond telegram.**
+> **Save Telegram files locally and manage chat watches and history copies.**
 
 [![Release Date](https://img.shields.io/github/release-date/beihehele/SaveAny-Bot?label=release)](https://github.com/beihehele/SaveAny-Bot/releases)
 [![tag](https://img.shields.io/github/v/tag/beihehele/SaveAny-Bot.svg)](https://github.com/beihehele/SaveAny-Bot/releases)
@@ -17,26 +17,13 @@
 
 </div>
 
-## 🎯 Features
+## Features
 
-- Support documents / videos / photos / stickers… and even [Telegraph](https://telegra.ph/)
-- Bypass "restrict saving content" media
-- Batch download
-- Streaming transfer
-- Multi-user support
-- Auto organize files based on storage rules
-- Watch specified chats and auto-save messages, with filters
-- Transfer files between different storage backends
-- Integrate with yt-dlp to download and save media from 1000+ websites
-- Aria2 integration to download files from URLs/magnets and save to storages
-- Write JS parser plugins to save files from almost any website
-- Storage backends:
-  - Alist
-  - S3
-  - WebDAV
-  - Local filesystem
-  - Rclone (via command line)
-  - Telegram (re-upload to specified chats)
+- Save Telegram documents, photos, videos and albums to local directories.
+- Watch chats and copy history, retaining filters, album boundaries and topics.
+- Organize local saves with directory rules and filename templates.
+- Inspect and cancel tasks through Telegram or the optional admin console.
+- Keep multiple named Local roots and per-user storage access settings.
 
 ## 📦 Quick Start
 
@@ -80,7 +67,6 @@ Read this fork's [installation and update guide](docs/content/en/deployment/inst
 
 ## Development and tests
 
-Video integration tests require `ffmpeg` and `ffprobe` on `PATH`. Tests generate video and split archive samples in temporary directories and clean them up automatically. No separately downloaded fixtures or production Bot configuration and sessions are needed.
 
 ```bash
 go test ./...

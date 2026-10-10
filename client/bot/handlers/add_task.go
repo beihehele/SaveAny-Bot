@@ -3,7 +3,6 @@ package handlers
 import (
 	"errors"
 	"fmt"
-	"path"
 	"strings"
 
 	"github.com/celestix/gotgproto/dispatcher"
@@ -14,7 +13,6 @@ import (
 	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/shortcut"
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
-	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
 	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/tcbdata"
@@ -87,30 +85,7 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 			return shortcut.CreateAndAddBatchTGFileTaskWithEdit(ctx, userID, selectedStorage, dirPath, data.Files, msgID, data.ConflictStrategy)
 		}
 		return shortcut.CreateAndAddTGFileTaskWithEdit(ctx, userID, selectedStorage, dirPath, data.Files[0], msgID, data.ConflictStrategy)
-	case tasktype.TaskTypeTphpics:
-		return shortcut.CreateAndAddtelegraphWithEdit(ctx, userID, data.TphPageNode, data.TphDirPath, data.TphPics, selectedStorage, msgID)
-	case tasktype.TaskTypeParseditem:
-		if len(data.ParsedItem.Resources) > 1 {
-			dirPath = path.Join(dirPath, fsutil.NormalizePathname(data.ParsedItem.Title))
-		}
-		shortcut.CreateAndAddParsedTaskWithEdit(ctx, selectedStorage, dirPath, data.ParsedItem, msgID, userID)
-	case tasktype.TaskTypeDirectlinks:
-		shortcut.CreateAndAddDirectTaskWithEdit(ctx, selectedStorage, dirPath, data.DirectLinks, msgID, userID)
-	case tasktype.TaskTypeAria2:
-		client := GetAria2Client()
-		if client == nil {
-			ctx.AnswerCallback(msgelem.AlertCallbackAnswer(queryID, i18n.T(i18nk.BotMsgAria2ErrorAria2ClientInitFailed, map[string]any{
-				"Error": "aria2 client not initialized",
-			})))
-			return dispatcher.EndGroups
-		}
-		shortcut.CreateAndAddAria2TaskWithEdit(ctx, selectedStorage, dirPath, data.Aria2URIs, client, msgID, userID)
-	case tasktype.TaskTypeYtdlp:
-		shortcut.CreateAndAddYtdlpTaskWithEdit(ctx, selectedStorage, dirPath, data.YtdlpURLs, data.YtdlpFlags, msgID, userID)
-	case tasktype.TaskTypeTransfer:
-		return handleTransferCallback(ctx, userID, selectedStorage, dirPath, data, msgID)
 	default:
 		return fmt.Errorf("unexcept task type: %s", data.TaskType)
 	}
-	return dispatcher.EndGroups
 }

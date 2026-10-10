@@ -29,8 +29,6 @@ jobs:
         with:
           go-version: '1.26.9'
           cache-dependency-path: go.sum
-      - name: Install media test dependencies
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Verify modules
         run: go mod verify
       - name: Check container entrypoint contracts
@@ -43,7 +41,6 @@ jobs:
         run: go test -race ./...
       - name: Test optional feature variants
         run: |
-          go test -tags=no_playwright ./parsers/... ./api
           go test -tags=sqlite_glebarez ./database
       - name: Build supported variants
         env:
@@ -51,8 +48,7 @@ jobs:
         run: |
           go build -trimpath -o "$RUNNER_TEMP/saveany-linux" .
           GOOS=windows GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/saveany-windows.exe" .
-          go build -trimpath -tags=no_jsparser,no_minio,no_bubbletea -o "$RUNNER_TEMP/saveany-micro" .
-          go build -trimpath -tags=no_jsparser,no_minio,sqlite_glebarez,no_bubbletea -o "$RUNNER_TEMP/saveany-pico" .
+          go build -trimpath -tags=sqlite_glebarez -o "$RUNNER_TEMP/saveany-sqlite-alternate" .
       - name: Check reachable vulnerabilities
         run: |
           GOBIN="$RUNNER_TEMP/tools" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0

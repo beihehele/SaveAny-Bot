@@ -4,9 +4,9 @@ This document provides essential information for AI coding agents working on the
 
 ## Project Overview
 
-SaveAny-Bot is a Telegram bot written in Go that saves files/messages from Telegram and various websites to multiple storage backends (local, S3, MinIO, WebDAV, AList, Telegram). It features a plugin system for parsing web content and extensible storage backends.
+SaveAny-Bot is a Telegram bot written in Go that saves Telegram files locally and manages chat watching and history copying, with an optional administrator web console. Local is the only supported storage backend.
 
-**Tech Stack**: Go 1.25.0 minimum (see `go.mod`), gotd/td (Telegram MTProto), Cobra (CLI), Viper (config), GORM (ORM), SQLite, Goja (JS runtime), Playwright (browser automation)
+**Tech Stack**: Go 1.25.0 minimum (see `go.mod`), gotd/td (Telegram MTProto), Cobra (CLI), Viper (config), GORM (ORM), SQLite
 
 ## Build & Test Commands
 
@@ -30,7 +30,7 @@ go test ./...
 
 # Run tests in specific package
 go test ./pkg/queue
-go test ./storage/telegram
+go test ./storage/local
 
 # Run tests with verbose output
 go test -v ./...
@@ -186,7 +186,7 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 ### Application Structure
 - **Entry point**: `main.go` → `cmd.Execute(ctx)`
 - **CLI root**: `cmd/root.go` (Cobra), implementation in `cmd/run.go`
-- **Current startup sequence**: Config → Cache → i18n → Database → Storage → Parsers → Prepare queue → Userbot → Bot → API → Queue workers
+- **Current startup sequence**: Config → Cache → i18n → Database → Validate stored references → Storage → Prepare queue → Userbot → Bot → API → Admin → Queue workers
 - Follow this order when adding new initialization steps in `cmd/run.go::initAll`
 
 ### Configuration (Viper)
@@ -207,7 +207,7 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 - **Task interface**: `core/core.go::Executable` (Type, Title, TaskID, Execute methods)
 - **Queue**: `pkg/queue.TaskQueue[Executable]` (generic, thread-safe)
 - **Workers**: Count from `config.C().Workers`
-- **Task types**: Implementations in `core/tasks/**` (tfile, parsed, telegraph, directlinks, batchtfile)
+- **Task types**: Implementations in `core/tasks/**` (tfile, batchtfile, copyfwd)
 - **Lifecycle hooks**: `TaskBeforeStart`, `TaskSuccess`, `TaskFail`, `TaskCancel` (defined in config)
 - **Adding tasks**: Use `core.AddTask(ctx, task)`
 
@@ -220,20 +220,13 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 
 ### Storage Backends
 - **Interface**: Defined in `config/storage/types.go` and `storage/`
-- **Implementations**: local, alist, s3/minio, webdav, telegram (each in subdirectory)
+- **Supported implementation**: local; preserve directory reads, listing, overwrite and atomic save behavior.
 - **Adding new storage**:
   1. Add enum to `pkg/enums/storage`
   2. Create config struct in `config/storage/` with `Validate()` method
   3. Implement storage in `storage/<name>/`
   4. Register the config in `config/storage/factory.go::storageFactories` and the backend in `storage/storage.go::storageConstructors`
   5. Update `config.example.toml` with example
-
-### Parser Plugins (JavaScript)
-- **Runtime**: Goja (JS runtime) + Playwright (browser automation)
-- **Plugin API**: `registerParser({ metadata, canHandle, parse })` in JS
-- **Integration**: Defined in `parsers/` directory
-- **Documentation**: See `plugins/README.md`
-- Plugin `parse` returns `Item`/`Resource` which becomes download/transfer task
 
 ### Internationalization (i18n)
 - **Usage**: `i18n.T(i18nk.SomeKey, map[string]any{"Name": value})`
@@ -256,7 +249,6 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 4. **User sync is automatic** - don't manually create/delete users in DB; use config-based sync.
 5. **Prefer context logger** - use `log.FromContext(ctx)` over global logger when context is available.
 6. **Storage factory pattern** - new storage types must register in both `config/storage/factory.go::storageFactories` and `storage/storage.go::storageConstructors`.
-7. **Plugin API compatibility** - changes to `Item`/`Resource` structures require updating `plugins/README.md`.
 
 ## Common Patterns
 
@@ -295,7 +287,7 @@ When referencing code locations, use `path/to/file.go:line` format (e.g., `core/
 ## Notes
 
 - Binary size matters: use `CGO_ENABLED=0` for static binaries
-- FFmpeg is included in Docker images for media processing
+- Docker images need no external media-processing executables.
 - Build process supports cross-compilation (amd64/arm64, Linux/macOS/Windows)
 - Documentation site uses Hugo; edit files in `docs/` directory
 - Session data stored in SQLite; delete `data/session.db` if changing bot token

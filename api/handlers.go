@@ -10,13 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
-	"github.com/krau/SaveAny-Bot/parsers/parsers"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
-	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 	"github.com/krau/SaveAny-Bot/storage"
-	ytdlp "github.com/lrstanley/go-ytdlp"
 )
 
 // Handlers 处理器结构体
@@ -190,56 +186,22 @@ func (h *Handlers) GetTaskTypesHandler(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET method is allowed")
 		return
 	}
-
-	types := []tasktype.TaskType{
-		tasktype.TaskTypeDirectlinks,
-		tasktype.TaskTypeYtdlp,
-		tasktype.TaskTypeAria2,
-		tasktype.TaskTypeParseditem,
-		tasktype.TaskTypeTgfiles,
-		tasktype.TaskTypeTphpics,
-		tasktype.TaskTypeTransfer,
-	}
-
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"types":        types,
-		"capabilities": taskCapabilities(r.Context(), types),
-	})
+	types := []tasktype.TaskType{tasktype.TaskTypeTgfiles}
+	WriteJSON(w, http.StatusOK, map[string]any{"types": types, "capabilities": taskCapabilities(r.Context(), types)})
 }
 
 func taskCapabilities(ctx context.Context, types []tasktype.TaskType) []TaskCapability {
 	capabilities := make([]TaskCapability, 0, len(types))
 	for _, typ := range types {
 		capability := TaskCapability{Type: typ, Available: true}
-		if typ == tasktype.TaskTypeTransfer {
-			capability.ResultPolicies = []taskresult.Policy{taskresult.Legacy, taskresult.Strict}
-		}
-		switch typ {
-		case tasktype.TaskTypeAria2:
-			if !config.C().Aria2.Enable || strings.TrimSpace(config.C().Aria2.Url) == "" {
-				capability.Available, capability.Reason = false, "aria2 is not configured"
-			}
-		case tasktype.TaskTypeYtdlp:
-			// Use the pinned wrapper's resolution rules, including its cache. This
-			// only builds a command; it never executes or downloads a binary.
-			if cmd := ytdlp.New().BuildCommand(ctx); cmd.Err != nil {
-				capability.Available, capability.Reason = false, "yt-dlp executable is unavailable"
-			}
-		case tasktype.TaskTypeParseditem:
-			if len(parsers.Get()) == 0 {
-				capability.Available, capability.Reason = false, "no parsers are registered"
-			}
-		case tasktype.TaskTypeTgfiles:
-			if _, err := getClientContext(); err != nil {
-				capability.Available, capability.Reason = false, "Telegram client is not initialized"
-			}
+		if _, err := getClientContext(); err != nil {
+			capability.Available, capability.Reason = false, "Telegram client is not initialized"
 		}
 		capabilities = append(capabilities, capability)
 	}
 	return capabilities
 }
 
-// HealthCheckHandler 健康检查处理器
 func (h *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",

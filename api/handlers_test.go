@@ -7,27 +7,16 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
-	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 func TestTaskTypesDescribeDisabledPrerequisites(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(p, []byte("workers = 1\n[aria2]\nenable = false\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := config.Init(t.Context(), p); err != nil {
-		t.Fatal(err)
-	}
 	handlers, _ := setupTestServer(t)
 	rr := httptest.NewRecorder()
 	handlers.GetTaskTypesHandler(rr, httptest.NewRequest(http.MethodGet, "/api/v1/task-types", nil))
@@ -38,24 +27,14 @@ func TestTaskTypesDescribeDisabledPrerequisites(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Types) != 7 || len(response.Capabilities) != 7 {
+	if len(response.Types) != 1 || response.Types[0] != tasktype.TaskTypeTgfiles || len(response.Capabilities) != 1 {
 		t.Fatalf("response=%+v", response)
 	}
-	for _, c := range response.Capabilities {
-		if c.Type == tasktype.TaskTypeAria2 && (c.Available || c.Reason == "") {
-			t.Fatalf("disabled aria2 advertised as ready: %+v", c)
-		}
-		if c.Type == tasktype.TaskTypeTransfer {
-			if len(c.ResultPolicies) != 2 || c.ResultPolicies[0] != taskresult.Legacy || c.ResultPolicies[1] != taskresult.Strict {
-				t.Fatalf("transfer result policies missing: %+v", c)
-			}
-		} else if len(c.ResultPolicies) != 0 {
-			t.Fatalf("unsupported result policies advertised: %+v", c)
-		}
+	if response.Capabilities[0].Available || response.Capabilities[0].Reason == "" {
+		t.Fatal("uninitialized Telegram advertised as ready")
 	}
 }
 
-// setupTestServer creates a test server with handlers
 func setupTestServer(t *testing.T) (*Handlers, *TaskFactory) {
 	factory := NewTaskFactory(t.Context())
 	handlers := NewHandlers(factory)
@@ -109,7 +88,7 @@ func TestCreateTaskHandler(t *testing.T) {
 			name:   "Missing storage",
 			method: http.MethodPost,
 			body: CreateTaskRequest{
-				Type: tasktype.TaskTypeDirectlinks,
+				Type: tasktype.TaskTypeTgfiles,
 				Path: "downloads",
 			},
 			wantStatus: http.StatusBadRequest,
@@ -119,7 +98,7 @@ func TestCreateTaskHandler(t *testing.T) {
 			name:   "Storage not found",
 			method: http.MethodPost,
 			body: CreateTaskRequest{
-				Type:    tasktype.TaskTypeDirectlinks,
+				Type:    tasktype.TaskTypeTgfiles,
 				Storage: "non-existent-storage",
 				Path:    "downloads",
 				Params:  json.RawMessage(`{"urls":["https://example.com/file.zip"]}`),
@@ -226,7 +205,7 @@ func TestListTasksHandlerNewestFirst(t *testing.T) {
 		{"same-z", time.Minute},
 	} {
 		id := prefix + item.name
-		info := RegisterTask(id, "directlinks", "local", "downloads", item.name, "")
+		info := RegisterTask(id, "tgfiles", "local", "downloads", item.name, "")
 		info.mu.Lock()
 		info.CreatedAt = base.Add(item.offset)
 		info.mu.Unlock()
@@ -272,7 +251,7 @@ func TestGetTaskHandler(t *testing.T) {
 
 	// Register a test task
 	testTaskID := "test-get-task"
-	RegisterTask(testTaskID, "directlinks", "local", "downloads", "Test", "")
+	RegisterTask(testTaskID, "tgfiles", "local", "downloads", "Test", "")
 	defer DeleteTask(testTaskID)
 
 	tests := []struct {
@@ -338,7 +317,7 @@ func TestCancelTaskHandler(t *testing.T) {
 
 	// Register a test task
 	testTaskID := "test-cancel-task"
-	RegisterTask(testTaskID, "directlinks", "local", "downloads", "Test", "")
+	RegisterTask(testTaskID, "tgfiles", "local", "downloads", "Test", "")
 	defer DeleteTask(testTaskID)
 
 	tests := []struct {
@@ -457,7 +436,7 @@ func TestConcurrentProgressStore(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			taskID := fmt.Sprintf("concurrent-test-%d", id)
-			RegisterTask(taskID, "directlinks", "local", "downloads", "Test", "")
+			RegisterTask(taskID, "tgfiles", "local", "downloads", "Test", "")
 		}(i)
 	}
 
@@ -497,7 +476,7 @@ func TestConcurrentProgressStore(t *testing.T) {
 
 // TestTaskProgressConcurrentUpdates tests concurrent progress updates.
 func TestTaskProgressConcurrentUpdates(t *testing.T) {
-	info := RegisterTask("concurrent-progress", "directlinks", "local", "downloads", "Test", "")
+	info := RegisterTask("concurrent-progress", "tgfiles", "local", "downloads", "Test", "")
 	info.Emit(taskevent.Event{TaskID: "concurrent-progress", Phase: taskevent.PhaseStart, TotalBytes: 10000})
 
 	var wg sync.WaitGroup
@@ -544,7 +523,7 @@ func TestTaskFactoryValidation(t *testing.T) {
 		{
 			name: "Storage not found",
 			request: &CreateTaskRequest{
-				Type:    tasktype.TaskTypeDirectlinks,
+				Type:    tasktype.TaskTypeTgfiles,
 				Storage: "non-existent",
 				Path:    "downloads",
 				Params:  json.RawMessage(`{"urls":["https://example.com/file.zip"]}`),
@@ -747,7 +726,7 @@ func TestMethodNotAllowedHandler(t *testing.T) {
 
 // TestTaskProgressInfoTimeUpdate tests that timestamps are updated correctly
 func TestTaskProgressInfoTimeUpdate(t *testing.T) {
-	info := RegisterTask("time-test", "directlinks", "local", "downloads", "Test", "")
+	info := RegisterTask("time-test", "tgfiles", "local", "downloads", "Test", "")
 	defer DeleteTask("time-test")
 
 	originalTime := info.UpdatedAt
@@ -763,7 +742,7 @@ func TestTaskProgressInfoTimeUpdate(t *testing.T) {
 func TestWebhookPayloadWithNilCompletedAt(t *testing.T) {
 	payload := WebhookPayload{
 		TaskID:      "test-id",
-		Type:        "directlinks",
+		Type:        "tgfiles",
 		Status:      TaskStatusRunning,
 		Storage:     "local",
 		Path:        "downloads/file.zip",

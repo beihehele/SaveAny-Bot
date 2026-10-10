@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/krau/SaveAny-Bot/admin"
 	"github.com/krau/SaveAny-Bot/api"
 	"github.com/krau/SaveAny-Bot/client/bot"
 	userclient "github.com/krau/SaveAny-Bot/client/user"
@@ -16,7 +17,6 @@ import (
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
 	"github.com/krau/SaveAny-Bot/database"
-	"github.com/krau/SaveAny-Bot/parsers"
 	"github.com/krau/SaveAny-Bot/storage"
 	"github.com/spf13/cobra"
 )
@@ -87,16 +87,10 @@ func initAll(ctx context.Context) (<-chan struct{}, error) {
 	i18n.Init(config.C().Lang)
 	logger.Info("Initializing...")
 	database.Init(ctx)
-	storage.LoadStorages(ctx)
-	if config.C().Parser.PluginEnable {
-		for _, dir := range config.C().Parser.PluginDirs {
-			if err := parsers.LoadPlugins(ctx, dir); err != nil {
-				logger.Error("Failed to load parser plugins", "dir", dir, "error", err)
-			} else {
-				logger.Debug("Loaded parser plugins from directory", "dir", dir)
-			}
-		}
+	if err := database.ValidateStorageReferences(ctx); err != nil {
+		return nil, err
 	}
+	storage.LoadStorages(ctx)
 	core.Prepare()
 	if config.C().Telegram.Userbot.Enable {
 		_, err := userclient.Login(ctx)
@@ -110,6 +104,9 @@ func initAll(ctx context.Context) (<-chan struct{}, error) {
 	}
 	if err := api.Start(ctx); err != nil {
 		logger.Error("Failed to start API server", "error", err)
+	}
+	if err := admin.Start(ctx); err != nil {
+		logger.Error("Failed to start admin console", "error", err)
 	}
 	return exitChan, nil
 }

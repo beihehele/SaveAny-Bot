@@ -22,7 +22,7 @@ Basic syntax for adding rules:
 Pay attention to spaces; the bot can only parse correctly formatted syntax. Below is an example of a valid rule command:
 
 ```
-/rule add FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ MyAlist /videos
+/rule add FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ archive /videos
 ```
 
 In addition, if `CHOSEN` is used as the storage name in the rule, it means files will be stored under the path of the storage you selected by clicking the inline button.
@@ -45,11 +45,11 @@ Parameters:
 Examples:
 
 ```
-# Import preset rules into "MyAlist" with the default directory layout
-/rule preset MyAlist
+# Import preset rules into "archive" with the default directory layout
+/rule preset archive
 
 # Import preset rules with a custom base path "downloads/sorted"
-/rule preset MyAlist downloads/sorted
+/rule preset archive downloads/sorted
 ```
 
 This will create `FILENAME-REGEX` rules for each category, routing matched files to the corresponding subdirectory under `base_path`:
@@ -73,10 +73,10 @@ Rule types:
 Matches based on filename regex. The rule content must be a valid regular expression, such as:
 
 ```
-FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ MyAlist /videos
+FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ archive /videos
 ```
 
-This means files with extensions mp4, mkv, ts, avi, flv will be saved to the `/videos` directory in the storage named `MyAlist` (also affected by the `base_path` in the configuration file).
+This means files with extensions mp4, mkv, ts, avi, flv will be saved to the `/videos` directory in the storage named `archive` (also affected by the `base_path` in the configuration file).
 
 ## MESSAGE-REGEX
 
@@ -91,7 +91,7 @@ If the path in the rule uses `NEW-FOR-ALBUM`, the bot will create a new folder f
 For example:
 
 ```
-IS-ALBUM true MyWebdav NEW-FOR-ALBUM
+IS-ALBUM true archive NEW-FOR-ALBUM
 ```
 
-This will save media-group messages to the storage named `MyWebdav`, creating a new folder (generated from the first file) for each album.
+This will save media-group messages to the storage named `archive`, creating a new folder (generated from the first file) for each album.

@@ -139,44 +139,7 @@ func WriteError(w http.ResponseWriter, statusCode int, errCode, message string) 
 	})
 }
 
-// Task 参数结构体
-
-// DirectLinksParams directlinks 任务参数
-type DirectLinksParams struct {
-	URLs []string `json:"urls"`
-}
-
-// YTDLPParams ytdlp 任务参数
-type YTDLPParams struct {
-	URLs  []string `json:"urls"`
-	Flags []string `json:"flags,omitempty"`
-}
-
-// Aria2Params aria2 任务参数
-type Aria2Params struct {
-	URLs    []string          `json:"urls"`
-	Options map[string]string `json:"options,omitempty"`
-}
-
-// ParsedParams parsed 任务参数
-type ParsedParams struct {
-	URL string `json:"url"`
-}
-
-// TransferParams transfer 任务参数
-type TransferParams struct {
-	SourceStorage string `json:"source_storage"`
-	SourcePath    string `json:"source_path"`
-	TargetStorage string `json:"target_storage"`
-	TargetPath    string `json:"target_path"`
-}
-
-// TGFilesParams tgfiles 任务参数
+// TGFilesParams contains Telegram message links to save locally.
 type TGFilesParams struct {
 	MessageLinks []string `json:"message_links"`
-}
-
-// TPHPicsParams tphpics 任务参数
-type TPHPicsParams struct {
-	TelegraphURL string `json:"telegraph_url"`
 }

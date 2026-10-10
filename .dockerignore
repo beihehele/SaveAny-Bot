@@ -20,4 +20,3 @@ saveany-bot.exe
 *.test
 *.test.exe
 docker-compose.*
-playwright/

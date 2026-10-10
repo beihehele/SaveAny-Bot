@@ -24,10 +24,6 @@ func BuildAddSelectStorageKeyboard(stors []storage.Storage, adddata tcbdata.Add)
 	if taskType == "" {
 		if len(adddata.Files) > 0 {
 			taskType = tasktype.TaskTypeTgfiles
-		} else if adddata.TphPageNode != nil {
-			taskType = tasktype.TaskTypeTphpics
-		} else if adddata.ParsedItem != nil {
-			taskType = tasktype.TaskTypeParseditem
 		} else {
 			return nil, fmt.Errorf("unknown task type: %s", taskType)
 		}
@@ -43,22 +39,6 @@ func BuildAddSelectStorageKeyboard(stors []storage.Storage, adddata tcbdata.Add)
 
 			Files:   adddata.Files,
 			AsBatch: len(adddata.Files) > 1,
-
-			TphPageNode: adddata.TphPageNode,
-			TphPics:     adddata.TphPics,
-			TphDirPath:  adddata.TphDirPath,
-
-			ParsedItem: adddata.ParsedItem,
-
-			DirectLinks: adddata.DirectLinks,
-
-			Aria2URIs:  adddata.Aria2URIs,
-			YtdlpURLs:  adddata.YtdlpURLs,
-			YtdlpFlags: adddata.YtdlpFlags,
-
-			TransferSourceStorName: adddata.TransferSourceStorName,
-			TransferSourcePath:     adddata.TransferSourcePath,
-			TransferFiles:          adddata.TransferFiles,
 		}
 		dataid := xid.New().String()
 		err := cache.Set(dataid, data)

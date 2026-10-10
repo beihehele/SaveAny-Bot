@@ -2,152 +2,18 @@
 title: "存储端配置"
 ---
 
-# 存储端配置
+# 本地存储
 
-请先阅读 [配置说明](../) 了解配置文件的基本格式.
-
-## Alist
-
-`type=alist`
-
-不支持 Stream 模式.
-
-```toml
-url = "https://alist.example.com" # Alist 的 URL
-username = "your_username"  # Alist 的用户名
-password = "your_password" # Alist 的密码
-base_path = "/path/saveanybot" # Alist 中的基础路径, 所有文件将存储在此路径下
-token_exp = 3600 # Alist 访问令牌的自动刷新时间, 单位秒
-token = "your_token" 
-# Alist 的访问令牌, 可选, 如果不设置则使用用户名和密码进行身份验证. 
-# 使用 token 验证时无法自动刷新 token
-```
-
-## 本地磁盘
-
-`type=local`
-
-```toml
-base_path = "./downloads" # 本地存储的基础路径, 所有文件将存储在此路径下
-```
-
-任务中的 `/photos/file.jpg` 表示存储根目录下的路径。原生盘符、UNC 路径、越过根目录的 `..` 及指向根目录外的符号链接会被拒绝；已有依赖这类路径的规则应先在离线配置副本中检查。
-
-写入先生成同目录临时文件，成功后才提交到最终文件名；失败或取消不会截断原有文件。未启用覆盖时，同名文件使用 `_1`、`_2` 等后缀，覆盖时保留原有文件权限。不支持硬链接的文件系统使用进程内锁和 rename 回退；此时不要让其他进程同时写入同一目录。内部 `.saveany-<ID>.tmp` 文件不出现在列举结果中，异常退出后的残留应停机检查后清理。
-
-## WebDAV
-`type=webdav`
-
-```toml
-url = "https://webdav.example.com" # WebDAV 的 URL
-username = "your_username"  # WebDAV
-password = "your_password" # WebDAV 的密码
-base_path = "/path/to/webdav" # WebDAV 中的基础路径, 所有文件将存储在此路径下
-```
-
-## S3
-
-`type=s3`
-
-```toml
-endpoint = "s3.example.com" # S3 的端点, 默认为 aws S3 的端点
-region = "us-east-1" # S3 的区域
-access_key_id = "your_access_key_id" # S3 的访问密钥 ID
-secret_access_key = "your_secret_access_key" # S3 的秘密访问密钥
-bucket_name = "your_bucket_name" # S3 的存储桶名称
-base_path = "/path/to/s3" # S3 中的基础路径, 所有文件将存储在此路径下
-virtual_host = false # 使用虚拟主机风格的 URL, 默认为 false
-```
-
-虚拟主机风格的 URL 示例:
-
-```
-https://your_bucket_name.s3.example.com/path/to/s3/your_file
-```
-
-路径风格(关闭 virtual_host)的 URL 示例:
-
-```
-https://s3.example.com/your_bucket_name/path/to/s3/your_file
-```
-
-如果你使用的是第三方的兼容 S3 的服务, 一般使用的是路径风格的 URL. 而 AWS S3 则通常使用虚拟主机风格的 URL. 详情请参考你所使用的 S3 兼容服务的文档.
-
-## Telegram
-
-`type=telegram`
-
-不支持 Stream 模式。
-
-**限制**：无法检测「路径是否已存在」（`Exists` 恒为 false），因此重名策略中的 `ask` / `skip` 对该存储**无效**，实际会始终上传新消息。
-
-```toml
-# Telegram 聊天 ID, Bot 将把文件发送到这个聊天
-chat_id = "123456789"
-# 是否强制使用文件方式发送, 默认为 false
-force_file = false
-# 是否跳过大文件, 默认为 false. 如果启用, 超过 Telegram 限制的文件将不会上传.
-skip_large = false
-# 分卷大小, 单位 MB, 默认为 2000 MB (2 GB). 
-# 超过该大小的文件将被分割成多个部分上传.(使用 zip 格式)
-# 被 skip_large 跳过的文件不会分卷；其余文件仍按此大小判断是否分卷.
-split_size_mb = 2000
-```
-
-`skip_large` 跳过的文件会明确报告为未保存，不计入成功保存数量。批量 Telegram 文件任务会继续处理其余文件；API `transfer` 的 `strict` 策略不会把包含跳过文件的任务判为全部成功。
-
-## Rclone
-
-`type=rclone`
-
-通过 [rclone](https://rclone.org/) 命令行工具支持多种云存储服务. 需要先安装 rclone 并配置好远程存储.
-
-```toml
-# rclone 配置的远程名称, 可以是任何在 rclone.conf 中配置的远程
-remote = "mydrive"
-# 在远程存储中的基础路径, 所有文件将存储在此路径下
-base_path = "/telegram"
-# rclone 配置文件的路径, 可选, 留空使用默认路径 (~/.config/rclone/rclone.conf)
-config_path = ""
-# 传递给 rclone 命令的额外参数, 可选
-flags = ["--transfers", "4", "--checkers", "8"]
-```
-
-### 配置 rclone 远程
-
-首先需要配置 rclone 远程, 运行 `rclone config` 命令进行交互式配置, 或直接编辑 `rclone.conf` 文件.
-
-rclone 支持多种云存储服务, 包括但不限于:
-- Google Drive
-- Dropbox
-- OneDrive
-- Amazon S3 及兼容服务
-- SFTP
-- FTP
-- 更多服务请参考 [rclone 官方文档](https://rclone.org/overview/)
-
-### 使用示例
-
-配置 Google Drive 后, 可以这样配置存储:
+目前只支持 `local`，可以配置多个不同名称、不同根目录的本地存储。
 
 ```toml
 [[storages]]
-name = "GoogleDrive"
-type = "rclone"
+name = "本机1"
+type = "local"
 enable = true
-remote = "gdrive"
-base_path = "/SaveAnyBot"
+base_path = "./downloads"
 ```
 
-如果使用自定义的 rclone 配置文件:
+名称唯一，启用时 `base_path` 必填。容器中使用 `/app/downloads` 对应的挂载目录。用户 `storages` 为允许/排除的名称列表，`blacklist` 控制列表含义。
 
-```toml
-[[storages]]
-name = "MyRemote"
-type = "rclone"
-enable = true
-remote = "myremote"
-base_path = "/backup"
-config_path = "/path/to/rclone.conf"
-flags = ["--progress"]
-```
+用 `/storage` 选择默认存储，`/dir` 登记常用相对目录；`/rule` 可以选择其中任一本地存储。已保存文件不因删除目录登记而删除。网页提供目录浏览和文件下载。

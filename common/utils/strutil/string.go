@@ -1,8 +1,6 @@
 package strutil
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -10,12 +8,6 @@ import (
 
 	"github.com/duke-git/lancet/v2/slice"
 )
-
-func HashString(s string) string {
-	hash := md5.New()
-	hash.Write([]byte(s))
-	return hex.EncodeToString(hash.Sum(nil))
-}
 
 var TagRe = regexp.MustCompile(`(?:^|[\p{Zs}\s.,!?(){}[\]<>\"\'，。！？（）：；、])#([\p{L}\d_]+)`)
 

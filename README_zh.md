@@ -2,7 +2,7 @@
 
 # <img src="docs/static/logo.png" width="45" align="center"> Save Any Bot
 
-> **把 Telegram 上的文件转存到多种存储端**
+> **保存 Telegram 文件到本地，管理聊天监听和历史消息复制**
 
 [![Release Date](https://img.shields.io/github/release-date/beihehele/SaveAny-Bot?label=release)](https://github.com/beihehele/SaveAny-Bot/releases)
 [![tag](https://img.shields.io/github/v/tag/beihehele/SaveAny-Bot.svg)](https://github.com/beihehele/SaveAny-Bot/releases)
@@ -15,26 +15,13 @@
 
 </div>
 
-## 🎯 特性
+## 功能
 
-- 支持文档/视频/图片/贴纸…甚至还有 [Telegraph](https://telegra.ph/)
-- 破解禁止保存的文件
-- 批量下载
-- 流式传输
-- 多用户使用
-- 基于存储规则的自动整理
-- 监听并自动转存指定聊天的消息, 支持过滤
-- 在不同存储端之间转存文件
-- 集成 yt-dlp, 从所支持的网站下载并转存媒体文件
-- 集成 Aria2, 支持直链/磁力下载和转存
-- 使用 js 编写解析器插件以转存任意网站的文件
-- 存储端支持:
-  - Alist
-  - S3
-  - WebDAV
-  - 本地磁盘
-  - Rclone
-  - Telegram (重传回指定聊天)
+- 保存 Telegram 文档、图片、视频和媒体组到本地目录。
+- 监听聊天、复制历史消息，保留过滤、媒体组边界和 Topic。
+- 使用目录规则、命名模板及文件冲突策略整理本地保存。
+- 通过 Telegram 或可选网页后台查询和取消任务。
+- 支持多个命名 Local 根目录及用户存储访问范围。
 
 ## 快速开始
 
@@ -77,7 +64,6 @@ docker run -d --name saveany-bot --restart unless-stopped \
 
 ## 开发与测试
 
-视频集成测试需要 `ffmpeg` 和 `ffprobe` 在 `PATH` 中可用。测试会在临时目录生成视频和分卷样本并自动清理，不需要额外下载测试文件或提供生产 Bot 配置、会话。
 
 ```bash
 go test ./...

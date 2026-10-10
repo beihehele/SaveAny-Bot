@@ -52,7 +52,7 @@ func TestServiceCancellationStopsWebhookRequestAndRetryWait(t *testing.T) {
 	defer server.Close()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	info := RegisterTask(t.Name(), "directlinks", "store", "", "test", server.URL)
+	info := RegisterTask(t.Name(), "tgfiles", "store", "", "test", server.URL)
 	t.Cleanup(func() { DeleteTask(t.Name()) })
 	info.mu.Lock()
 	info.webhookContext = ctx
@@ -85,7 +85,7 @@ func TestQueuedCancellationWebhookOnce(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	info := RegisterTask(t.Name(), "directlinks", "store", "", "test", server.URL)
+	info := RegisterTask(t.Name(), "tgfiles", "store", "", "test", server.URL)
 	t.Cleanup(func() { DeleteTask(t.Name()) })
 	var wg sync.WaitGroup
 	for range 20 {

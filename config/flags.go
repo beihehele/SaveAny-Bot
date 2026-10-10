@@ -15,7 +15,6 @@ func RegisterFlags(cmd *cobra.Command) {
 	flags.Int("retry", 0, "retry times")
 	flags.Int("threads", 0, "number of threads")
 	flags.Bool("stream", false, "enable stream mode")
-	flags.Bool("no-clean-cache", false, "legacy option; cache directories are no longer cleared on exit")
 	flags.String("proxy", "", "proxy URL (http, https, socks5, socks5h)")
 	flags.String("log-level", "", "log level (trace/debug, info, warn, error, fatal)")
 
@@ -36,11 +35,6 @@ func RegisterFlags(cmd *cobra.Command) {
 	// 临时目录配置
 	flags.String("temp-base-path", "", "temp directory base path")
 
-	// Parser 配置
-	flags.Bool("parser-plugin-enable", false, "enable parser plugins")
-	flags.StringSlice("parser-plugin-dirs", nil, "parser plugin directories")
-	flags.String("parser-proxy", "", "parser proxy URL")
-
 	// 绑定到 viper
 	bindFlags(cmd)
 }
@@ -53,7 +47,6 @@ func bindFlags(cmd *cobra.Command) {
 	viper.BindPFlag("retry", flags.Lookup("retry"))
 	viper.BindPFlag("threads", flags.Lookup("threads"))
 	viper.BindPFlag("stream", flags.Lookup("stream"))
-	viper.BindPFlag("no_clean_cache", flags.Lookup("no-clean-cache"))
 	viper.BindPFlag("proxy", flags.Lookup("proxy"))
 	viper.BindPFlag("log.level", flags.Lookup("log-level"))
 
@@ -73,10 +66,6 @@ func bindFlags(cmd *cobra.Command) {
 	// 临时目录
 	viper.BindPFlag("temp.base_path", flags.Lookup("temp-base-path"))
 
-	// Parser
-	viper.BindPFlag("parser.plugin_enable", flags.Lookup("parser-plugin-enable"))
-	viper.BindPFlag("parser.plugin_dirs", flags.Lookup("parser-plugin-dirs"))
-	viper.BindPFlag("parser.proxy", flags.Lookup("parser-proxy"))
 }
 
 func GetConfigFile(cmd *cobra.Command) string {

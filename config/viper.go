@@ -16,16 +16,16 @@ import (
 )
 
 type Config struct {
-	Lang         string      `toml:"lang" mapstructure:"lang" json:"lang"`
-	Workers      int         `toml:"workers" mapstructure:"workers"`
-	Retry        int         `toml:"retry" mapstructure:"retry"`
-	NoCleanCache bool        `toml:"no_clean_cache" mapstructure:"no_clean_cache" json:"no_clean_cache"`
-	Threads      int         `toml:"threads" mapstructure:"threads" json:"threads"`
-	Stream       bool        `toml:"stream" mapstructure:"stream" json:"stream"`
-	Proxy        string      `toml:"proxy" mapstructure:"proxy" json:"proxy"`
-	Log          logConfig   `toml:"log" mapstructure:"log" json:"log"`
-	Aria2        aria2Config `toml:"aria2" mapstructure:"aria2" json:"aria2"`
-	API          apiConfig   `toml:"api" mapstructure:"api" json:"api"`
+	Lang    string    `toml:"lang" mapstructure:"lang" json:"lang"`
+	Workers int       `toml:"workers" mapstructure:"workers"`
+	Retry   int       `toml:"retry" mapstructure:"retry"`
+	Threads int       `toml:"threads" mapstructure:"threads" json:"threads"`
+	Stream  bool      `toml:"stream" mapstructure:"stream" json:"stream"`
+	Proxy   string    `toml:"proxy" mapstructure:"proxy" json:"proxy"`
+	Log     logConfig `toml:"log" mapstructure:"log" json:"log"`
+
+	API   apiConfig   `toml:"api" mapstructure:"api" json:"api"`
+	Admin AdminConfig `toml:"admin" mapstructure:"admin" json:"-"`
 
 	Cache    cacheConfig             `toml:"cache" mapstructure:"cache" json:"cache"`
 	Users    []userConfig            `toml:"users" mapstructure:"users" json:"users"`
@@ -33,16 +33,8 @@ type Config struct {
 	DB       dbConfig                `toml:"db" mapstructure:"db"`
 	Telegram telegramConfig          `toml:"telegram" mapstructure:"telegram"`
 	Storages []storage.StorageConfig `toml:"-" mapstructure:"-" json:"storages"`
-	Parser   parserConfig            `toml:"parser" mapstructure:"parser" json:"parser"`
-	Hook     hookConfig              `toml:"hook" mapstructure:"hook" json:"hook"`
-	Ytdlp    YtdlpConfig             `toml:"ytdlp" mapstructure:"ytdlp" json:"ytdlp"`
-}
 
-type aria2Config struct {
-	Enable   bool   `toml:"enable" mapstructure:"enable" json:"enable"`
-	Url      string `toml:"url" mapstructure:"url" json:"url"`
-	Secret   string `toml:"secret" mapstructure:"secret" json:"secret"`
-	KeepFile bool   `toml:"keep_file" mapstructure:"keep_file" json:"keep_file"`
+	Hook hookConfig `toml:"hook" mapstructure:"hook" json:"hook"`
 }
 
 type apiConfig struct {
@@ -141,8 +133,13 @@ func Init(ctx context.Context, configFile ...string) error {
 		"api.port":   8080,
 		"api.token":  "",
 
-		// yt-dlp
-		"ytdlp.recode": "mp4",
+		"admin.enable":        false,
+		"admin.host":          "127.0.0.1",
+		"admin.port":          8081,
+		"admin.password":      "",
+		"admin.password_hash": "",
+		"admin.session_ttl":   "12h",
+		"admin.secure_cookie": false,
 	}
 
 	for key, value := range defaultConfigs {
@@ -155,6 +152,9 @@ func Init(ctx context.Context, configFile ...string) error {
 		}
 	}
 
+	if err := validateSupportedFeatures(viper.GetViper()); err != nil {
+		return err
+	}
 	next := &Config{}
 	if err := viper.Unmarshal(next); err != nil {
 		return fmt.Errorf("decode config: %w", err)
@@ -195,6 +195,13 @@ func Init(ctx context.Context, configFile ...string) error {
 	}
 	for _, user := range next.Users {
 		nextUserIDs = append(nextUserIDs, user.ID)
+		if !user.Blacklist {
+			for _, name := range user.Storages {
+				if _, exists := storageNames[name]; !exists {
+					return fmt.Errorf("user %d references unavailable storage %q", user.ID, name)
+				}
+			}
+		}
 		if user.Blacklist {
 			nextUserStorages[user.ID] = slice.Compact(slice.Difference(nextStorages, user.Storages))
 		} else {

@@ -1,77 +1,220 @@
-lifetime:
-  initing: Starting up
-  initfailed: Initialization failed
-  exiting: Shutting down
-  user_login_failed: "User login failed: {{.Error}}"
-  cleaning_cache: "Cleaning cache {{.Path}}"
-  bye: Exited
-config:
-  err:
-    invalid_cache_dir: "Invalid cache directory: {{.Path}}, please check the config file"
-    duplicate_storage_name: "Storage name '{{.Name}}' is duplicated, please check the config file"
-err:
-  get_workdir_failed: "Failed to get working directory: {{.Error}}"
-  get_cache_abs_path_failed: "Failed to get absolute cache path: {{.Error}}"
-  clean_cache_failed: "Failed to clean cache: {{.Error}}"
-parser:
-  plugin:
-    load_failed: Failed to load parser plugins
-    loaded_dir: Parser plugins loaded
 bot:
   msg:
-    help_text_fmt: |
-      Save Any Bot - Save your Telegram files
-      Version: %s , Commit: %s
-
-      Commands:
-      /start - Start using the bot
-      /help - Show help
-      /silent - Toggle silent mode
-      /storage - Set default storage
-      /save [custom filename] - Save file
-      /dir - Manage storage directories
-      /rule - Manage rules
-      /config - Modify configuration
-      /fnametmpl - Set custom filename template
-      /parser - Manage parser plugins
-      /task - Manage task queue
-      /watch - Watch chats and auto save (UserBot)
-      /copy - Copy history messages to a target chat (UserBot)
-      /unwatch - Stop watching chats (UserBot)
-      /lswatch - List watched chats (UserBot)
-      /lschannel - List channels (UserBot)
-      /lsgroup - List groups (UserBot)
-      /lstopic - List forum topics (UserBot)
-      /syncpeers - Sync peer chats (UserBot)
-      /update - Check and upgrade to latest version
-
-      Usage guide: https://sabot.unv.app/usage
+    cancel:
+      error_cancel_failed: "Failed to cancel task: {{.Error}}"
+      info_cancel_requested: "Cancel requested for task: {{.TaskID}}"
+      info_cancelling_task: Cancelling task...
+      usage: "Usage: /cancel <task_id>"
     cmd:
-      start: "Start using"
-      silent: "Toggle silent mode"
-      storage: "Set default storage"
-      dir: "Manage storage directories"
-      rule: "Manage auto-save rules"
-      save: "Save files"
-      dl: "Download files from given links"
-      aria2dl: "Download files using Aria2"
-      ytdlp: "Download video/audio using yt-dlp"
-      transfer: "Transfer files between storages"
-      task: "Manage task queue"
-      cancel: "Cancel task"
-      watch: "Watch chats (UserBot)"
-      copy: "Copy history messages to a target chat (UserBot)"
-      unwatch: "Stop watching chats (UserBot)"
-      lswatch: "List watched chats (UserBot)"
-      lschannel: "List channels (UserBot)"
-      lsgroup: "List groups (UserBot)"
-      lstopic: "List forum topics (UserBot)"
-      config: "Modify configuration"
-      fnametmpl: "Set filename template"
-      help: "Show help"
-      parser: "Manage parsers"
-      update: "Check for updates"
-      syncpeers: "Sync peer chats (UserBot)"
+      cancel: Cancel task
+      config: Modify configuration
+      copy: Copy history messages to a target chat (UserBot)
+      dir: Manage storage directories
+      fnametmpl: Set filename template
+      help: Show help
+      lschannel: List channels (UserBot)
+      lsgroup: List groups (UserBot)
+      lstopic: List forum topics (UserBot)
+      lswatch: List watched chats (UserBot)
+      rule: Manage auto-save rules
+      save: Save files
+      silent: Toggle silent mode
+      start: Start using
+      storage: Set default storage
+      syncpeers: Sync peer chats (UserBot)
+      task: Manage task queue
+      unwatch: Stop watching chats (UserBot)
+      watch: Watch chats (UserBot)
+    common:
+      button_conflict_overwrite: Overwrite
+      button_conflict_rename: Rename
+      button_conflict_skip: Skip
+      cancel_button_text: Cancel
+      error_build_dir_select_keyboard_failed: "Failed to build directory selection keyboard: {{.Error}}"
+      error_build_storage_select_keyboard_failed: "Failed to build storage selection keyboard: {{.Error}}"
+      error_build_storage_select_message_failed: "Failed to build storage selection message: {{.Error}}"
+      error_data_expired: Data has expired or is invalid
+      error_default_storage_not_set: Please set a default storage first with /storage
+      error_get_dir_failed: "Failed to get directory: {{.Error}}"
+      error_get_file_failed: "Failed to get file: {{.Error}}"
+      error_get_messages_failed: "Failed to get messages: {{.Error}}"
+      error_get_storage_failed: "Failed to get storage: {{.Error}}"
+      error_get_user_failed: Failed to get user
+      error_get_user_info_failed: "Failed to get user info: {{.Error}}"
+      error_get_user_with_err_failed: "Failed to get user: {{.Error}}"
+      error_invalid_id_or_username: "Invalid ID or username: {{.Error}}"
+      error_invalid_msg_id_range: "Invalid message ID range: {{.Error}}"
+      error_invalid_regex: "Invalid filter expression: {{.Error}}"
+      error_no_available_storage: No available storage
+      error_no_messages_in_range: No messages found in the specified range
+      error_no_permission: "You are not in the whitelist and cannot use this bot.\nYou can deploy your own instance: https://github.com/krau/SaveAny-Bot\n"
+      error_no_savable_files_found: No savable files found
+      error_no_savable_messages_in_range: No savable messages found in the specified range
+      error_task_add_failed: "Failed to add task: {{.Error}}"
+      error_task_create_failed: "Failed to create task: {{.Error}}"
+      error_update_user_info_failed: "Failed to update user info: {{.Error}}"
+      info_all_conflict_files_skipped: |-
+        All conflicting files were skipped:
+        {{.Skipped}}
+      info_batch_tasks_added: Batch tasks added, total {{.Count}} files
+      info_batch_tasks_added_with_skipped: |-
+        Batch tasks added, total {{.Count}} files
+        Skipped conflicting files:
+        {{.Skipped}}
+      info_conflict_files_skipped: |-
+        Skipped conflicting files:
+        {{.Skipped}}
+      info_default_storage_set: "Default storage set to: {{.Name}}"
+      info_default_storage_with_dir_set: "Default storage set to: {{.Name}}:/{{.Dir}}"
+      info_fetching_file_info: Fetching file info...
+      info_fetching_messages: Fetching messages...
+      info_found_files_select_storage: Found {{.Count}} files, please select storage
+      info_silent_mode_off: Silent mode disabled
+      info_silent_mode_on: Silent mode enabled
+      prompt_conflict_more_files: ...and {{.Count}} more files
+      prompt_select_conflict_strategy: |-
+        Files with the same name already exist. Please select a save strategy:
+        {{.Files}}
+      prompt_select_default_dir: Please select a default directory to save to
+      prompt_select_default_storage: Please select a storage to set as default
+      prompt_select_dir: Please select a directory to store to
+    config:
+      button_conflict_strategy: Duplicate file strategy
+      button_filename_strategy: Filename strategy
+      conflict_strategy_ask: Ask every time
+      conflict_strategy_overwrite: Always overwrite
+      conflict_strategy_rename: Always rename
+      conflict_strategy_skip: Always skip
+      error_invalid_callback_data: Invalid callback data
+      error_invalid_template: |-
+        Invalid template, please check syntax
+        {{.Error}}
+      fnametmpl_help: "Use this command to set filename template, for example:\n/fnametmpl Image_{{\"{{.msgid}}\"}}_{{\"{{.msgdate}}\"}}.jpg\n\nAvailable variables:\n- {{\"{{.msgid}}\"}}: Message ID\n- {{\"{{.msgtags}}\"}}: Tags in the message, joined with underscore\n- {{\"{{.msggen}}\"}}: Generated filename from the message\n- {{\"{{.msgdate}}\"}}: Message date, format YYYY-MM-DD_HH-MM-SS\n- {{\"{{.msgraw}}\"}}: Raw message text (unprocessed)\n- {{\"{{.origname}}\"}}: Original media filename (if any)\n- {{\"{{.chatid}}\"}}: Chat ID of the message\n\nTemplate only takes effect when filename strategy is set to 'Custom template'.\nIf template parsing fails, it will fall back to default filename."
+      info_conflict_strategy_set: "Duplicate file strategy set to: {{.Strategy}}"
+      info_current_template_prefix: "Current template: {{.Template}}"
+      info_filename_strategy_set: "Filename strategy set to: {{.Strategy}}"
+      info_template_updated: Filename template updated
+      prompt_select_conflict_strategy: "Please select duplicate file strategy, current strategy: {{.Strategy}}"
+      prompt_select_filename_strategy: "Please select filename strategy, current strategy: {{.Strategy}}"
+      prompt_select_option: Please select an option to configure
+    copy:
+      error_already_running: A copy task is already running; cancel it or wait until it finishes
+      error_count_too_large: count is too large; maximum is {{.Max}}
+      error_target_forbidden: copy does not support local save; please specify a target chat
+    copy_help_text: "Use /copy to copy historical messages to a target chat via UserBot DropAuthor with a clickable [转] link at the start (source deletion does not affect the copy; no local storage). Requires UserBot. Use target:topicId for a forum topic. target=0 is not supported.\n\nSyntax:\n/copy <source_id> <target_id[:topicId]> [filter] [count]\n\nParameters:\n- <source_id>: Source chat ID or username\n- <target_id[:topicId]>: Target chat ID (required, cannot be 0); :topicId is forum topic ID (from /lstopic)\n- [filter]: Optional msgre:<boolean expression> (& | ! () keywords, case-insensitive)\n- [count]: Optional hit count, default 500, max 5000\n\nExamples:\n/copy -1002229835658 -1003333444555\n/copy -1002229835658 -1003333444555:12345 msgre:plana|planb\n/copy -1002229835658 -1003333444555 msgre:plana&(planb|planc) 100\n/copy -1002229835658 -1003333444555 50\n"
+    dir:
+      button_default: Default
+      error_create_dir_failed: Failed to create directory
+      error_delete_dir_failed: Failed to delete directory
+      error_get_user_dirs_failed: Failed to get user directories
+      error_get_user_failed: Failed to get user
+      error_invalid_dir_id: Invalid directory ID
+      error_unknown_operation: Unknown operation
+      help_add_example_cmd: /dir add local1 path/to/dir
+      help_add_example_prefix: |
+
+        Add path example:
+      help_add_suffix: " <storage_name> <path> - Add path\n"
+      help_available_ops: |
+
+
+        Available operations:
+      help_del_example_cmd: /dir del 3
+      help_del_example_prefix: |
+
+
+        Delete path example:
+      help_del_suffix: " <path_id> - Delete path\n"
+      help_existing_dirs_prefix: |
+
+
+        Current paths:
+      help_usage: "Usage: /dir <op> <args...>"
+      info_create_dir_success: Directory created successfully
+      info_delete_dir_success: Directory deleted successfully
+    help_text_fmt: "Save Any Bot - Save your Telegram files\nVersion: %s , Commit: %s\n\nCommands:\n/start - Start using the bot\n/help - Show help\n/silent - Toggle silent mode\n/storage - Set default storage\n/save [custom filename] - Save file\n/dir - Manage storage directories\n/rule - Manage rules\n/config - Modify configuration\n/fnametmpl - Set custom filename template\n/task - Manage task queue\n/cancel - Cancel a task\n/watch - Watch chats and auto save (UserBot)\n/copy - Copy history messages to a target chat (UserBot)\n/unwatch - Stop watching chats (UserBot)\n/lswatch - List watched chats (UserBot)\n/lschannel - List channels (UserBot)\n/lsgroup - List groups (UserBot)\n/lstopic - List forum topics (UserBot)\n/syncpeers - Sync peer chats (UserBot)\n\nUsage guide: https://sabot.unv.app/usage\n"
+    lschannel:
+      error_list_failed: "Failed to list channels: {{.Error}}"
+      info_list_empty: No channels to list
+      info_list_header: |
+        Channels:
+    lsgroup:
+      error_list_failed: "Failed to list groups: {{.Error}}"
+      info_list_empty: No groups to list
+      info_list_header: |
+        Groups:
+    lstopic:
+      error_list_failed: "Failed to list topics: {{.Error}}"
+      error_not_forum: Group {{.Group}} is not a forum group
+      help_text: "Usage: /lstopic <group_id>\nLists all forum topics as: topic name -> topicId\ntopicId is the forum topic ID from /lstopic, used in /watch target:topicId syntax.\n"
+      info_list_empty: No topics to list in this group
+      info_list_header: |
+        Topics:
+    media_group:
+      error_build_storage_select_keyboard_failed: "Failed to build storage selection keyboard: {{.Error}}"
+      info_group_found_files_select_storage: Total {{.Count}} files, please select storage
+      info_saving_files: Saving files...
+    progress:
+      avg_speed_prefix: "\nAverage speed: "
+      batch_done_prefix: "Completed\nFile count: "
+      batch_processing_prefix: "Processing batch download task\nTotal size: "
+      batch_start_prefix: "Starting batch download task\nTotal size: "
+      copy_canceled: Copy task canceled
+      copy_done: "Done: ok {{.OK}}, fail {{.Fail}}"
+      copy_forwarding: Sending {{.Done}}/{{.Total}}
+      copy_scanning: "Scanning {{.Matched}}/{{.Count}} (msg#{{.At}})"
+      current_progress_prefix: "\nCurrent progress: "
+      download_done_prefix: "Download completed\nFilename: "
+      download_failed_prefix: "Download failed\nFilename: "
+      error_prefix: "\nError: "
+      file_name_prefix: "Filename: "
+      file_processing_prefix: "Processing download task\nFilename: "
+      file_size_prefix: "\nFile size: "
+      file_skipped_with_reason: "Not saved: {{.Name}}\nSkip reason: {{.Error}}"
+      file_start_prefix: "Starting download\nFilename: "
+      processing_list_prefix: |
+
+        Processing:
+      processing_none: "  - None"
+      save_path_prefix: "\nSave path: "
+      storage_files_skipped: |-
+        Not saved (skipped by storage policy):
+        {{.Skipped}}
+      task_canceled: Task canceled
+      task_failed_with_error: "Processing failed: {{.Error}}"
+      total_size_prefix: "\nTotal size: "
+    rule:
+      error_create_rule_failed: Failed to create rule
+      error_delete_rule_failed: Failed to delete rule
+      error_get_user_rules_failed: Failed to get user rules
+      error_invalid_rule_id: Invalid rule ID
+      error_invalid_rule_type: "Invalid rule type: {{.Type}}\nAvailable: {{.Available}}"
+      error_storage_not_found: "Storage not found: {{.Storage}}"
+      error_update_user_failed: Failed to update user
+      help_add_suffix: " <type> <data> <storage_name> <path> - Add rule\n"
+      help_available_ops: |
+
+
+        Available operations:
+      help_current_mode_disabled: |-
+
+        Rule mode is currently disabled
+      help_current_mode_enabled: |-
+
+        Rule mode is currently enabled
+      help_del_suffix: " <rule_id> - Delete rule\n"
+      help_existing_rules_prefix: |
+
+        Current rules:
+      help_preset_suffix: " <storage_name> [base_path] - Import built-in filetype rules (video/image/audio/document/archive)\n"
+      help_switch_suffix: " - Toggle rule mode\n"
+      help_usage: "Usage: /rule <op> <args...>"
+      info_create_rule_success: Rule created successfully
+      info_delete_rule_success: Rule deleted successfully
+      info_preset_imported: Imported {{.Count}} built-in classification rules into storage {{.Storage}}
+      info_rule_mode_disabled: Rule mode disabled
+      info_rule_mode_enabled: Rule mode enabled
+      prompt_provide_rule_id: Please provide rule ID
     save_help_text: |
       Usage:
 
@@ -82,400 +225,58 @@ bot:
       2. After setting default storage, send /save <channel_id/username> <message_id_range> to batch save files. Rules will be applied; if no rule matches, default storage will be used.
       Example:
       /save @acherkrau 114-514
-    watch_help_text: |
-      Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target is copied via UserBot DropAuthor with a clickable [转] link at the start (source deletion does not affect the copy). Use target:topicId for a forum topic.
-
-      Syntax:
-      /watch <source_id> [target_id[:topicId]] [filter]
-      /lswatch
-      /unwatch <id>
-      /lschannel
-      /lsgroup
-      /lstopic <group_id>
-
-      Parameters:
-      - <source_id>: Source chat ID or username
-      - [target_id[:topicId]]: Target chat ID; 0 means save to default storage; :topicId is forum topic ID (from /lstopic)
-      - [filter]: Optional msgre:<boolean expression> (& | ! () keywords, case-insensitive)
-
-      Examples:
-      /watch -1002229835658
-      /watch -1002229835658 0 msgre:plana|planb
-      /watch -1002229835658 -1003333444555
-      /watch -1002229835658 -1003333444555:12345
-      /watch -1002229835658 -1003333444555:12345 msgre:plana&(planb|planc)
-    copy_help_text: |
-      Use /copy to copy historical messages to a target chat via UserBot DropAuthor with a clickable [转] link at the start (source deletion does not affect the copy; no local storage). Requires UserBot. Use target:topicId for a forum topic. target=0 is not supported.
-
-      Syntax:
-      /copy <source_id> <target_id[:topicId]> [filter] [count]
-
-      Parameters:
-      - <source_id>: Source chat ID or username
-      - <target_id[:topicId]>: Target chat ID (required, cannot be 0); :topicId is forum topic ID (from /lstopic)
-      - [filter]: Optional msgre:<boolean expression> (& | ! () keywords, case-insensitive)
-      - [count]: Optional hit count, default 500, max 5000
-
-      Examples:
-      /copy -1002229835658 -1003333444555
-      /copy -1002229835658 -1003333444555:12345 msgre:plana|planb
-      /copy -1002229835658 -1003333444555 msgre:plana&(planb|planc) 100
-      /copy -1002229835658 -1003333444555 50
-    common:
-      cancel_button_text: "Cancel"
-      error_invalid_regex: "Invalid filter expression: {{.Error}}"
-      error_invalid_msg_id_range: "Invalid message ID range: {{.Error}}"
-      error_invalid_id_or_username: "Invalid ID or username: {{.Error}}"
-      error_get_messages_failed: "Failed to get messages: {{.Error}}"
-      info_fetching_messages: "Fetching messages..."
-      error_no_messages_in_range: "No messages found in the specified range"
-      error_no_savable_messages_in_range: "No savable messages found in the specified range"
-      error_build_storage_select_message_failed: "Failed to build storage selection message: {{.Error}}"
-      error_build_storage_select_keyboard_failed: "Failed to build storage selection keyboard: {{.Error}}"
-      info_found_files_select_storage: "Found {{.Count}} files, please select storage"
-      error_get_user_failed: "Failed to get user"
-      error_get_user_with_err_failed: "Failed to get user: {{.Error}}"
-      error_default_storage_not_set: "Please set a default storage first with /storage"
-      error_no_available_storage: "No available storage"
-      error_get_storage_failed: "Failed to get storage: {{.Error}}"
-      prompt_select_default_storage: "Please select a storage to set as default"
-      error_data_expired: "Data has expired or is invalid"
-      error_task_add_failed: "Failed to add task: {{.Error}}"
-      info_task_added: "Task added"
-      info_batch_tasks_added: "Batch tasks added, total {{.Count}} files"
-      info_batch_tasks_added_with_skipped: "Batch tasks added, total {{.Count}} files\nSkipped conflicting files:\n{{.Skipped}}"
-      info_all_conflict_files_skipped: "All conflicting files were skipped:\n{{.Skipped}}"
-      info_conflict_files_skipped: "Skipped conflicting files:\n{{.Skipped}}"
-      error_task_create_failed: "Failed to create task: {{.Error}}"
-      error_get_dir_failed: "Failed to get directory: {{.Error}}"
-      prompt_select_dir: "Please select a directory to store to"
-      prompt_select_conflict_strategy: "Files with the same name already exist. Please select a save strategy:\n{{.Files}}"
-      prompt_conflict_more_files: "...and {{.Count}} more files"
-      button_conflict_rename: "Rename"
-      button_conflict_overwrite: "Overwrite"
-      button_conflict_skip: "Skip"
-      prompt_select_default_dir: "Please select a default directory to save to"
-      info_default_storage_set: "Default storage set to: {{.Name}}"
-      info_default_storage_with_dir_set: "Default storage set to: {{.Name}}:/{{.Dir}}"
-      error_get_user_info_failed: "Failed to get user info: {{.Error}}"
-      error_update_user_info_failed: "Failed to update user info: {{.Error}}"
-      info_silent_mode_on: "Silent mode enabled"
-      info_silent_mode_off: "Silent mode disabled"
-      error_get_file_failed: "Failed to get file: {{.Error}}"
-      info_fetching_file_info: "Fetching file info..."
-      error_no_savable_files_found: "No savable files found"
-      error_parse_telegraph_path_failed: "Failed to parse telegraph path: {{.Error}}"
-      info_fetching_telegraph_page: "Fetching telegraph page..."
-      error_get_telegraph_page_failed: "Failed to get telegraph page: {{.Error}}"
-      error_no_images_in_telegraph_page: "No images found in telegraph page"
-      error_build_dir_select_keyboard_failed: "Failed to build directory selection keyboard: {{.Error}}"
-      error_no_permission: |
-        You are not in the whitelist and cannot use this bot.
-        You can deploy your own instance: https://github.com/krau/SaveAny-Bot
-    save:
-      error_invalid_id_or_username: "Invalid ID or username: {{.Error}}"
-    watch:
-      error_filter_format_invalid: "Invalid filter format, please use <type>:<expression>"
-      error_filter_type_unsupported: "Unsupported filter type, please see the docs"
-      error_watch_chat_failed: "Failed to watch chat: {{.Error}}"
-      error_userbot_unavailable: "UserBot is not available for forward routes"
-      error_source_unreachable: "UserBot cannot access source chat {{.Source}}: {{.Error}}"
-      error_target_unreachable: "UserBot cannot access target chat {{.Target}}: {{.Error}}"
-      error_topic_invalid: "Invalid topic ID; use /lstopic to list topics"
-      error_target_not_forum: "Target {{.Target}} is not a forum group; cannot specify a topic"
-      error_topic_not_found: "Topic {{.TopicID}} not found in {{.Target}}"
-      error_topic_resolve_failed: "Failed to resolve forum topic: {{.Error}}"
-      target_local: "Local"
-      info_watch_route_started: "Started watching: {{.Source}} → {{.Target}}"
-      info_already_watching_route: "Already watching this route"
-      info_watch_list_empty: "No chats are being watched currently"
-      info_watch_list_header: "Current watches:\n"
-      error_unwatch_no_id_provided: "Please provide a watch ID to unwatch"
-      error_unwatch_invalid_id: "Invalid watch ID"
-      error_unwatch_chat_failed: "Failed to unwatch: {{.Error}}"
-      info_watch_route_stopped: "Stopped watching: [{{.ID}}]"
-    copy:
-      error_target_forbidden: "copy does not support local save; please specify a target chat"
-      error_already_running: "A copy task is already running; cancel it or wait until it finishes"
-      error_count_too_large: "count is too large; maximum is {{.Max}}"
-    lschannel:
-      info_list_empty: "No channels to list"
-      info_list_header: "Channels:\n"
-      error_list_failed: "Failed to list channels: {{.Error}}"
-    lsgroup:
-      info_list_empty: "No groups to list"
-      info_list_header: "Groups:\n"
-      error_list_failed: "Failed to list groups: {{.Error}}"
-    lstopic:
-      help_text: |
-        Usage: /lstopic <group_id>
-        Lists all forum topics as: topic name -> topicId
-        topicId is the forum topic ID from /lstopic, used in /watch target:topicId syntax.
-      info_list_empty: "No topics to list in this group"
-      info_list_header: "Topics:\n"
-      error_list_failed: "Failed to list topics: {{.Error}}"
-      error_not_forum: "Group {{.Group}} is not a forum group"
-    tasks:
-      usage_cancel: "Usage: /tasks cancel <task_id>"
-      usage: "Usage: /tasks [running|queued|cancel <task_id>]"
-      cancel_failed: "Failed to cancel task: {{.Error}}"
-      cancel_requested_prefix: "Cancel requested for task: "
-      running_empty: "No running tasks"
-      running_title: "Currently running tasks:"
-      total_prefix: "Total: {{.Count}}\n"
-      field_id: "ID: "
-      field_title: "Title: "
-      field_created: "Created at: "
-      field_status: "Status: "
-      status_running: "Running"
-      status_queued: "Queued"
-      status_cancel_requested: "Cancel requested"
-      queued_empty: "No queued tasks"
-      queued_title: "Currently queued tasks:"
-      truncated_note: "...\nShowing first 10 tasks, total {{.Count}} tasks"
-      info_added_to_queue_full: "Added to task queue\nFilename: {{.Filename}}\nCurrent queued tasks: {{.QueueLength}}"
-      info_added_to_queue_prefix: "Added to task queue\n"
-      info_filename_prefix: "Filename: "
-      info_queue_length_prefix: "\nCurrent queued tasks: "
-    rule:
-      error_get_user_rules_failed: "Failed to get user rules"
-      error_update_user_failed: "Failed to update user"
-      info_rule_mode_enabled: "Rule mode enabled"
-      info_rule_mode_disabled: "Rule mode disabled"
-      error_invalid_rule_type: "Invalid rule type: {{.Type}}\nAvailable: {{.Available}}"
-      error_create_rule_failed: "Failed to create rule"
-      info_create_rule_success: "Rule created successfully"
-      prompt_provide_rule_id: "Please provide rule ID"
-      error_invalid_rule_id: "Invalid rule ID"
-      error_delete_rule_failed: "Failed to delete rule"
-      info_delete_rule_success: "Rule deleted successfully"
-      help_usage: "Usage: /rule <op> <args...>"
-      help_current_mode_enabled: "\nRule mode is currently enabled"
-      help_current_mode_disabled: "\nRule mode is currently disabled"
-      help_available_ops: "\n\nAvailable operations:\n"
-      help_switch_suffix: " - Toggle rule mode\n"
-      help_add_suffix: " <type> <data> <storage_name> <path> - Add rule\n"
-      help_del_suffix: " <rule_id> - Delete rule\n"
-      help_preset_suffix: " <storage_name> [base_path] - Import built-in filetype rules (video/image/audio/document/archive)\n"
-      help_existing_rules_prefix: "\nCurrent rules:\n"
-      prompt_provide_storage_name: "Please provide a storage name"
-      error_storage_not_found: "Storage not found: {{.Storage}}"
-      info_preset_imported: "Imported {{.Count}} built-in classification rules into storage {{.Storage}}"
-    dir:
-      error_get_user_dirs_failed: "Failed to get user directories"
-      error_get_user_failed: "Failed to get user"
-      error_create_dir_failed: "Failed to create directory"
-      info_create_dir_success: "Directory created successfully"
-      error_invalid_dir_id: "Invalid directory ID"
-      error_delete_dir_failed: "Failed to delete directory"
-      info_delete_dir_success: "Directory deleted successfully"
-      error_unknown_operation: "Unknown operation"
-      help_usage: "Usage: /dir <op> <args...>"
-      help_available_ops: "\n\nAvailable operations:\n"
-      help_add_suffix: " <storage_name> <path> - Add path\n"
-      help_del_suffix: " <path_id> - Delete path\n"
-      help_add_example_prefix: "\nAdd path example:\n"
-      help_add_example_cmd: "/dir add local1 path/to/dir"
-      help_del_example_prefix: "\n\nDelete path example:\n"
-      help_del_example_cmd: "/dir del 3"
-      help_existing_dirs_prefix: "\n\nCurrent paths:\n"
-      button_default: "Default"
-    parser:
-      help_text: |
-        Usage:
-
-        /parser install <reply a file> - Install parser
-      plugin_not_enabled: "Parser plugin feature is not enabled"
-      prompt_reply_with_parser_file: "Please reply with a message containing the parser file"
-      error_no_valid_file_in_reply: "The replied message does not contain a valid file"
-      error_wrong_file_type: "Wrong file type"
-      error_file_too_large: "File too large"
-      error_get_filename_failed: "Failed to get filename"
-      error_only_js_supported: "Only .js files are supported as parsers"
-      error_download_file_failed: "Failed to download file: {{.Error}}"
-      error_install_plugin_failed: "Failed to install plugin: {{.Error}}"
-      info_install_plugin_success: "Plugin installed: {{.Name}}"
-    parse:
-      info_parsing: "Parsing..."
-      error_parse_text_failed: "Failed to parse text: {{.Error}}"
-      error_build_storage_select_keyboard_failed: "Failed to build storage selection keyboard: {{.Error}}"
-      error_build_parsed_text_entity_failed: "Failed to build parsed text entity: {{.Error}}"
-      info_link_prefix: "\nLink: "
-      info_author_prefix: "\nAuthor: "
-      info_description_prefix: "\nDescription: "
-      info_file_count_prefix: "\nFile count: "
-      info_total_size_prefix: "\nEstimated total size: "
-      info_prompt_select_storage: "\nPlease select storage"
-    telegraph:
-      error_build_storage_select_keyboard_failed: "Failed to build storage selection keyboard: {{.Error}}"
-      info_title_prefix: "Title: "
-      info_pic_count_prefix: "\nImage count: "
-      info_prompt_select_storage: "\nPlease select storage"
-    update:
-      error_version_var_invalid: "Currently in development version or version info injection failed: {{.Error}}"
-      error_check_latest_failed: "Failed to check latest version: {{.Error}}"
-      error_no_release_found: "No release found"
-      error_release_changed: "This update button has expired. Run /update again to check the release."
-      info_manual_upgrade_required: "This build or release requires a manual update. Back up configuration and data, stop the service, and replace the binary; for Docker, update the image."
-      info_major_upgrade_required: "Major upgrade detected: {{.Current}} -> {{.Latest}} , please download the latest version from GitHub and check the migration guide"
-      info_already_latest: "Already on latest version: {{.Version}}"
-      info_new_version_in_docker: |-
-        New version found: {{.Latest}}
-        Current version: {{.Current}}
-        Published at: {{.PublishedAt}}
-        Since you are using Docker, please update it on your deployment platform
-      info_new_version_prompt_upgrade: |-
-        New version found: {{.Latest}}
-        Current version: {{.Current}}
-
-        File size: {{.SizeMB}} MB
-        Download URL: {{.URL}}
-        Published at: {{.PublishedAt}}
-
-        Upgrading will restart the bot. Proceed?
-      info_upgrading_with_version: "Upgrading, current version: {{.Current}}"
-      error_upgrade_failed: "Upgrade failed: {{.Error}}"
-      info_upgrade_success: "Upgraded to version {{.Version}}\nPrevious binary: {{.Backup}}\nIf the bot did not restart automatically, please start it manually"
-      button_upgrade: "Upgrade"
-    config:
-      prompt_select_option: "Please select an option to configure"
-      button_filename_strategy: "Filename strategy"
-      button_conflict_strategy: "Duplicate file strategy"
-      error_invalid_callback_data: "Invalid callback data"
-      error_invalid_template: "Invalid template, please check syntax\n{{.Error}}"
-      info_filename_strategy_set: "Filename strategy set to: {{.Strategy}}"
-      info_conflict_strategy_set: "Duplicate file strategy set to: {{.Strategy}}"
-      prompt_select_filename_strategy: "Please select filename strategy, current strategy: {{.Strategy}}"
-      prompt_select_conflict_strategy: "Please select duplicate file strategy, current strategy: {{.Strategy}}"
-      conflict_strategy_rename: "Always rename"
-      conflict_strategy_ask: "Ask every time"
-      conflict_strategy_overwrite: "Always overwrite"
-      conflict_strategy_skip: "Always skip"
-      fnametmpl_help: |-
-        Use this command to set filename template, for example:
-        /fnametmpl Image_{{"{{.msgid}}"}}_{{"{{.msgdate}}"}}.jpg
-
-        Available variables:
-        - {{"{{.msgid}}"}}: Message ID
-        - {{"{{.msgtags}}"}}: Tags in the message, joined with underscore
-        - {{"{{.msggen}}"}}: Generated filename from the message
-        - {{"{{.msgdate}}"}}: Message date, format YYYY-MM-DD_HH-MM-SS
-        - {{"{{.msgraw}}"}}: Raw message text (unprocessed)
-        - {{"{{.origname}}"}}: Original media filename (if any)
-        - {{"{{.chatid}}"}}: Chat ID of the message
-
-        Template only takes effect when filename strategy is set to 'Custom template'.
-        If template parsing fails, it will fall back to default filename.
-      info_template_updated: "Filename template updated"
-      info_current_template_prefix: "Current template: {{.Template}}"
-    dl:
-      usage: "Usage: /dl <url1> <url2> ..."
-      error_no_valid_links: "No valid links to download"
-      info_files_select_storage: "Total {{.Count}} files, please select storage"
-    ytdlp:
-      usage: "Usage: /ytdlp [OPTIONS] <URL1> [URL2] ...\nExamples:\n  /ytdlp https://example.com/video\n  /ytdlp --format best https://example.com/video\n  /ytdlp --extract-audio --audio-format mp3 https://example.com/video"
-      error_no_valid_urls: "No valid URLs"
-      info_urls_select_storage: "Found {{.Count}} links, please select storage"
-      info_downloading: "Downloading via yt-dlp..."
-      error_download_failed: "yt-dlp download failed: {{.Error}}"
-    transfer:
-      usage: |
-        Usage: /transfer <source_storage>:/<source_path> [filter]
-        Examples:
-        /transfer local1:/downloads
-        /transfer alist1:/media/photos
-        /transfer webdav1:/files ".*\.mp4$"
-      error_invalid_source: "Invalid source path format, should be: storage_name:/path"
-      error_invalid_target: "Invalid target path format, should be: storage_name:/path"
-      error_storage_not_found: "Storage '{{.StorageName}}' not found or access denied: {{.Error}}"
-      error_storage_not_listable: "Storage '{{.StorageName}}' does not support listing files"
-      error_storage_not_readable: "Storage '{{.StorageName}}' does not support reading files"
-      error_target_not_found: "Target storage '{{.StorageName}}' not found or access denied: {{.Error}}"
-      info_fetching_files: "Fetching file list..."
-      error_list_files_failed: "Failed to list files: {{.Error}}"
-      error_invalid_regex: "Invalid regular expression: {{.Error}}"
-      error_no_files_to_transfer: "No files to transfer in directory"
-      error_add_task_failed: "Failed to add task: {{.Error}}"
-      info_task_added: "Added {{.Count}} files to transfer queue\nTotal size: {{.SizeMB}} MB\nTask ID: {{.TaskID}}"
-      start_stats: "Total files: {{.Count}}\nTotal size: {{.SizeMB}} MB"
-      info_files_select_storage: "Total {{.Count}} files ({{.SizeMB}} MB), please select target storage"
-      error_build_storage_select_keyboard_failed: "Failed to build storage selection keyboard: {{.Error}}"
-    cancel:
-      usage: "Usage: /cancel <task_id>"
-      error_cancel_failed: "Failed to cancel task: {{.Error}}"
-      info_cancel_requested: "Cancel requested for task: {{.TaskID}}"
-      info_cancelling_task: "Cancelling task..."
-    media_group:
-      info_saving_files: "Saving files..."
-      error_build_storage_select_keyboard_failed: "Failed to build storage selection keyboard: {{.Error}}"
-      info_group_found_files_select_storage: "Total {{.Count}} files, please select storage"
     storage:
       info_filename_prefix: "Filename: "
-      info_prompt_select_storage: "\nPlease select storage"
-    progress:
-      batch_start_prefix: "Starting batch download task\nTotal size: "
-      batch_processing_prefix: "Processing batch download task\nTotal size: "
-      downloading_prefix: "Downloading\nTotal size: "
-      processing_list_prefix: "\nProcessing:\n"
-      processing_none: "  - None"
-      avg_speed_prefix: "\nAverage speed: "
-      current_progress_prefix: "\nCurrent progress: "
-      task_canceled: "Task canceled"
-      task_canceled_with_id: "Processing canceled: {{.TaskID}}"
-      task_failed_with_error: "Processing failed: {{.Error}}"
-      batch_done_prefix: "Completed\nFile count: "
-      storage_files_skipped: "Not saved (skipped by storage policy):\n{{.Skipped}}"
-      file_skipped_with_reason: "Not saved: {{.Name}}\nSkip reason: {{.Error}}"
-      direct_done_prefix: "Completed, file count: "
-      parsed_start_prefix: "Starting download from {{.Site}}\nTotal size: "
-      parsed_done_prefix: "Completed, resource count: "
-      telegraph_start_prefix: "Starting Telegraph download\nImage count: "
-      telegraph_progress_prefix: "Downloading\nCurrent progress: "
-      telegraph_done_prefix: "Completed\nImage count: "
-      file_start_prefix: "Starting download\nFilename: "
-      file_processing_prefix: "Processing download task\nFilename: "
-      download_failed_prefix: "Download failed\nFilename: "
-      download_done_prefix: "Download completed\nFilename: "
-      file_size_prefix: "\nFile size: "
-      save_path_prefix: "\nSave path: "
-      total_size_prefix: "\nTotal size: "
-      direct_start: "Starting download, total size: {{.SizeMB}} MB ({{.Count}} files)"
-      file_name_prefix: "Filename: "
-      error_prefix: "\nError: "
-      aria2_start: "Waiting for Aria2 to complete download (GID: {{.GID}})..."
-      aria2_downloading: "Aria2 downloading (GID: {{.GID}})\n"
-      aria2_done: "Aria2 download completed and transferred (GID: {{.GID}})\n"
-      ytdlp_start: "Starting yt-dlp download ({{.Count}} links)..."
-      ytdlp_downloading: "yt-dlp downloading ({{.Count}} links)\n"
-      ytdlp_done: "yt-dlp download completed and transferred ({{.Count}} files)\n"
-      downloaded_prefix: "\nDownloaded: "
-      current_speed_prefix: "\nCurrent speed: "
-      transfer_start_prefix: "Transfering: "
-      transfer_progress_prefix: "Transfer progress: "
-      transfer_uploaded_prefix: "\nUploaded: "
-      transfer_speed_prefix: "\nSpeed: "
-      transfer_remaining_time_prefix: "\nRemaining time: "
-      transfer_processing_prefix: "\nProcessing:\n"
-      transfer_processing_more: "...and {{.Count}} more files\n"
-      transfer_failed_prefix: "Transfer failed\n"
-      transfer_success_prefix: "Transfer completed\n"
-      transfer_total_files_prefix: "\nTotal files: "
-      transfer_total_size_prefix: "\nTotal size: "
-      transfer_elapsed_time_prefix: "\nElapsed time: "
-      transfer_avg_speed_prefix: "\nAverage speed: "
-      transfer_failed_files_prefix: "\nFailed files: "
-      copy_scanning: "Scanning {{.Matched}}/{{.Count}} (msg#{{.At}})"
-      copy_forwarding: "Sending {{.Done}}/{{.Total}}"
-      copy_done: "Done: ok {{.OK}}, fail {{.Fail}}"
-      copy_canceled: "Copy task canceled"
+      info_prompt_select_storage: |-
+
+        Please select storage
     syncpeers:
-      start: "Starting to sync peers..."
-      done: "Peer sync completed, total {{.Count}} chats synced"
       failed: "Peer sync failed: {{.Error}}"
-    aria2:
-      error_aria2_not_enabled: "Aria2 feature is not enabled in the configuration"
-      error_aria2_client_init_failed: "Aria2 client initialization failed: {{.Error}}"
-      info_adding_aria2_download: "Adding Aria2 download task..."
-      error_adding_aria2_download: "Failed to add Aria2 download task: {{.Error}}"
-      info_aria2_download_added: "Aria2 download task added, GID: {{.GID}}"
-      info_select_storage: "Please select storage, the task will be added to Aria2 download queue after selection"
+      start: Starting to sync peers...
+    tasks:
+      cancel_failed: "Failed to cancel task: {{.Error}}"
+      cancel_requested_prefix: "Cancel requested for task: "
+      field_created: "Created at: "
+      field_id: "ID: "
+      field_status: "Status: "
+      field_title: "Title: "
+      info_added_to_queue_full: "Added to task queue\nFilename: {{.Filename}}\nCurrent queued tasks: {{.QueueLength}}"
+      info_added_to_queue_prefix: |
+        Added to task queue
+      info_filename_prefix: "Filename: "
+      info_queue_length_prefix: "\nCurrent queued tasks: "
+      queued_empty: No queued tasks
+      queued_title: "Currently queued tasks:"
+      running_empty: No running tasks
+      running_title: "Currently running tasks:"
+      status_cancel_requested: Cancel requested
+      status_queued: Queued
+      status_running: Running
+      total_prefix: "Total: {{.Count}}\n"
+      truncated_note: |-
+        ...
+        Showing first 10 tasks, total {{.Count}} tasks
+      usage: "Usage: /task [running|queued|cancel <task_id>]"
+      usage_cancel: "Usage: /task cancel <task_id>"
+    watch:
+      error_filter_format_invalid: Invalid filter format, please use <type>:<expression>
+      error_filter_type_unsupported: Unsupported filter type, please see the docs
+      error_source_unreachable: "UserBot cannot access source chat {{.Source}}: {{.Error}}"
+      error_target_not_forum: Target {{.Target}} is not a forum group; cannot specify a topic
+      error_target_unreachable: "UserBot cannot access target chat {{.Target}}: {{.Error}}"
+      error_topic_invalid: Invalid topic ID; use /lstopic to list topics
+      error_topic_not_found: Topic {{.TopicID}} not found in {{.Target}}
+      error_topic_resolve_failed: "Failed to resolve forum topic: {{.Error}}"
+      error_unwatch_chat_failed: "Failed to unwatch: {{.Error}}"
+      error_unwatch_invalid_id: Invalid watch ID
+      error_unwatch_no_id_provided: Please provide a watch ID to unwatch
+      error_userbot_unavailable: UserBot is not available for forward routes
+      error_watch_chat_failed: "Failed to watch chat: {{.Error}}"
+      info_already_watching_route: Already watching this route
+      info_watch_list_empty: No chats are being watched currently
+      info_watch_list_header: |
+        Current watches:
+      info_watch_route_started: "Started watching: {{.Source}} → {{.Target}}"
+      info_watch_route_stopped: "Stopped watching: [{{.ID}}]"
+      target_local: Local
+    watch_help_text: "Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target is copied via UserBot DropAuthor with a clickable [转] link at the start (source deletion does not affect the copy). Use target:topicId for a forum topic.\n\nSyntax:\n/watch <source_id> [target_id[:topicId]] [filter]\n/lswatch\n/unwatch <id>\n/lschannel\n/lsgroup\n/lstopic <group_id>\n\nParameters:\n- <source_id>: Source chat ID or username\n- [target_id[:topicId]]: Target chat ID; 0 means save to default storage; :topicId is forum topic ID (from /lstopic)\n- [filter]: Optional msgre:<boolean expression> (& | ! () keywords, case-insensitive)\n\nExamples:\n/watch -1002229835658\n/watch -1002229835658 0 msgre:plana|planb\n/watch -1002229835658 -1003333444555\n/watch -1002229835658 -1003333444555:12345\n/watch -1002229835658 -1003333444555:12345 msgre:plana&(planb|planc)\n"

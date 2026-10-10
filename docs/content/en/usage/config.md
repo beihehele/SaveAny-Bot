@@ -14,7 +14,7 @@ The `/config` command opens an inline menu where you can change two per-user set
 - **Filename strategy** — how the saved file is named
 - **Duplicate file strategy** — what happens when a file with the same name already exists in the target storage
 
-Settings are stored per user and apply to all of that user's subsequent save/transfer tasks.
+Settings are stored per user and apply to all of that user's subsequent save tasks.
 
 ### Filename strategy
 

@@ -17,12 +17,3 @@ func TestTelegramMessageLinkDomains(t *testing.T) {
 		}
 	}
 }
-
-func TestTelegraphURLStopsAtWhitespace(t *testing.T) {
-	if got := TelegraphUrlRegexp.FindString("https://telegra.ph/Article https://example.com/"); got != "https://telegra.ph/Article" {
-		t.Fatalf("matched %q", got)
-	}
-	if TelegraphUrlRegexp.MatchString("https://telegraXph/Article") {
-		t.Fatal("matched an unrelated host")
-	}
-}

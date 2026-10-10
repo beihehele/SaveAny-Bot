@@ -11,7 +11,6 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/krau/SaveAny-Bot/config"
-	storenum "github.com/krau/SaveAny-Bot/pkg/enums/storage"
 )
 
 var (
@@ -156,15 +155,4 @@ func LoadStorages(ctx context.Context) {
 	for _, userID := range config.C().GetUsersID() {
 		GetUserStorages(ctx, userID)
 	}
-}
-
-// GetTelegramStorageByUserID returns the first enabled Telegram storage for the user
-func GetTelegramStorageByUserID(ctx context.Context, chatID int64) (Storage, error) {
-	storages := GetUserStorages(ctx, chatID)
-	for _, stor := range storages {
-		if stor.Type() == storenum.Telegram {
-			return stor, nil
-		}
-	}
-	return nil, fmt.Errorf("no telegram storage found for user %d", chatID)
 }

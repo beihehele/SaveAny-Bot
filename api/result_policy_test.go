@@ -22,9 +22,9 @@ func TestResultPolicyValidationPrecedesStorageAndTaskCreation(t *testing.T) {
 		policy taskresult.Policy
 		want   string
 	}{
-		{name: "unknown policy", typ: tasktype.TaskTypeTransfer, policy: "typo", want: "unsupported result_policy"},
-		{name: "tgfiles strict stays unavailable", typ: tasktype.TaskTypeTgfiles, policy: taskresult.Strict, want: "only for transfer"},
-		{name: "other types reject explicit legacy", typ: tasktype.TaskTypeAria2, policy: taskresult.Legacy, want: "only for transfer"},
+		{name: "unknown policy", typ: tasktype.TaskTypeTgfiles, policy: "typo", want: "result_policy is not supported"},
+		{name: "tgfiles strict stays unavailable", typ: tasktype.TaskTypeTgfiles, policy: taskresult.Strict, want: "result_policy is not supported"},
+		{name: "other types reject explicit legacy", typ: tasktype.TaskTypeTgfiles, policy: taskresult.Legacy, want: "result_policy is not supported"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			factory := NewTaskFactory(t.Context())

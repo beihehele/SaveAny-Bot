@@ -29,7 +29,7 @@ type cancellationTask struct {
 
 func (t cancellationTask) TaskID() string                    { return t.id }
 func (t cancellationTask) Title() string                     { return t.id }
-func (t cancellationTask) Type() tasktype.TaskType           { return tasktype.TaskTypeDirectlinks }
+func (t cancellationTask) Type() tasktype.TaskType           { return tasktype.TaskTypeTgfiles }
 func (t cancellationTask) Execute(ctx context.Context) error { return t.run(ctx) }
 
 // A separate process owns the real global queue, hooks, API store and webhook.
@@ -99,7 +99,7 @@ func TestCancellationDecisionEndToEnd(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(serviceCtx)
 			defer cancel()
-			info := RegisterTask(tc.name, "directlinks", "local", "", tc.name, server.URL)
+			info := RegisterTask(tc.name, "tgfiles", "local", "", tc.name, server.URL)
 			defer DeleteTask(tc.name)
 			info.webhookContext = serviceCtx
 			finished := make(chan taskevent.Event, 1)

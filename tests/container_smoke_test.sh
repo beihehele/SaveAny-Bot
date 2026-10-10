@@ -34,10 +34,8 @@ docker run --rm --network none --entrypoint sh "$builder" -ec \
 docker run --rm --network none --entrypoint /app/saveany-bot "$image" version > "$fixture/version"
 grep -F "Commit: $commit" "$fixture/version"
 grep -F 'linux/amd64' "$fixture/version"
-for tool in ffmpeg ffprobe; do
-    docker run --rm --network none --entrypoint "$tool" "$image" -version > "$fixture/$tool"
-done
-docker run --rm --network none --entrypoint yt-dlp "$image" --version
+docker run --rm --network none --entrypoint sh "$image" -ec \
+    'for tool in ffmpeg ffprobe yt-dlp; do if command -v "$tool" >/dev/null 2>&1; then echo "unexpected removed executable: $tool" >&2; exit 1; fi; done'
 
 printf 'mounted original configuration\n' > "$fixture/config.toml"
 cp "$fixture/config.toml" "$fixture/expected-config"

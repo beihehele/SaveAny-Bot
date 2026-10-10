@@ -22,7 +22,7 @@ weight: 3
 注意空格的使用, 语法正确 bot 才能解析, 以下是一条合法的添加规则命令:
 
 ```
-/rule add FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ MyAlist /视频
+/rule add FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ archive /视频
 ```
 
 此外, 规则中的存储名若使用 "CHOSEN" , 则表示存储到点击按钮选择的存储端的路径下
@@ -45,11 +45,11 @@ weight: 3
 示例:
 
 ```
-# 导入预设规则到 "MyAlist", 使用默认目录布局
-/rule preset MyAlist
+# 导入预设规则到 "archive", 使用默认目录布局
+/rule preset archive
 
 # 在自定义基础路径 "downloads/sorted" 下导入预设规则
-/rule preset MyAlist downloads/sorted
+/rule preset archive downloads/sorted
 ```
 
 此命令会为每个分类创建 `FILENAME-REGEX` 规则, 将匹配的文件路由到 `基础路径` 下对应的子目录:
@@ -73,10 +73,10 @@ weight: 3
 根据文件名正则匹配, 规则内容要求为一个合法的正则表达式, 如
 
 ```
-FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ MyAlist /视频
+FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ archive /视频
 ```
 
-表示将文件名后缀为 mp4,mkv,ts,avi,flv 的文件放到名为 MyAlist 存储下的 /视频 目录内 (同时受配置文件中的 `base_path` 影响)
+表示将文件名后缀为 mp4,mkv,ts,avi,flv 的文件放到名为 archive 存储下的 /视频 目录内 (同时受配置文件中的 `base_path` 影响)
 
 ## MESSAGE-REGEX
 
@@ -91,7 +91,7 @@ FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ MyAlist /视频
 例如:
 
 ```
-IS-ALBUM true MyWebdav NEW-FOR-ALBUM
+IS-ALBUM true archive NEW-FOR-ALBUM
 ```
 
-这将会把以 media group 形式发送的消息保存到名为 MyWebdav 的存储下, 并为每个相册新建一个文件夹(由第一个文件生成)来存储它们.
+这将会把以 media group 形式发送的消息保存到名为 archive 的存储下, 并为每个相册新建一个文件夹(由第一个文件生成)来存储它们.

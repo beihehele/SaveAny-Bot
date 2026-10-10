@@ -8,7 +8,3 @@ var (
 	GitCommit string = "unknown"
 	Docker    string = "false" // whether built inside Docker
 )
-
-const (
-	GitRepo = "beihehele/SaveAny-Bot"
-)

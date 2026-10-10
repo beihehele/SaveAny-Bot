@@ -110,6 +110,16 @@ Usage: <code>sudo sabot start|stop|restart|status|enable|disable</code>
 
 ## Deploy Using Docker
 
+### Build an image from source
+
+Run `docker build -t saveany-bot:local .` from the repository root. The default uses the official Go module proxy. If it is unreachable, select an accessible proxy explicitly, for example:
+
+```bash
+docker build --build-arg GOPROXY=https://goproxy.cn,direct -t saveany-bot:local .
+```
+
+This build argument controls dependency downloads and does not change the runtime Telegram proxy.
+
 ### Docker Compose
 
 Download the [docker-compose.yml](https://github.com/beihehele/SaveAny-Bot/blob/main/docker-compose.yml) file, create a new `config.toml` file in the same directory, refer to [config.example.toml](https://github.com/beihehele/SaveAny-Bot/blob/main/config.example.toml) to edit the configuration file.
@@ -132,7 +142,7 @@ docker run -d --name saveany-bot --restart unless-stopped \
 ```
 
 {{< hint info >}}
-The default image includes the full program, FFmpeg, and yt-dlp. Rclone requires separate installation and configuration; Playwright plugins need a compatible browser environment. Pin stable deployments to a verified image version or digest and validate the features you use in an isolated environment.
+This branch image contains the program and its configuration fetch tool. Pin a verified image version or digest and validate it in isolation.
 {{< /hint >}}
 
 `data` stores the database and Telegram sessions and must survive container recreation. Use a dedicated `cache` directory for temporary files; do not share it with `data` or `downloads`.
@@ -143,17 +153,15 @@ When the container environment variable `CONFIG_URL` is set to an HTTP(S) URL, t
 
 ## Updates
 
-Before upgrading, stop the service and copy the configuration, the entire `data` directory and custom plugins to a separate backup directory, including database and Bot/UserBot sessions. Retain the old binary or image digest. Do not delete the database to bypass migration failures. Roll back while stopped using a verified complete backup and the old program; a migrated database is not guaranteed to work with an older version. Removing users from configuration still invokes the existing user synchronization and associated-data deletion, so check the user list first.
+Before upgrading, stop the service and copy the configuration, the entire `data` directory and private deployment files to a separate backup directory, including database and Bot/UserBot sessions. Retain the old binary or image digest. Do not delete the database to bypass migration failures. Roll back while stopped using a verified complete backup and the old program; a migrated database is not guaranteed to work with an older version. Removing users from configuration still invokes the existing user synchronization and associated-data deletion, so check the user list first.
 
-For binary deployments, back up the configuration and `data`, stop the service, replace the binary with a verified release from this repository, then restart it. `up` / `upgrade` and in-bot `/update` check releases from `beihehele/SaveAny-Bot`. Development builds cannot self-update. Prefer a stopped-service update until in-bot update shutdown and recovery have been validated.
+For binary deployments, back up configuration and data, stop the service, replace the binary with a verified release, and restart. Read the migration guide first and retain the previous binary and data backup.
 
-Self-update accepts newer stable releases within the same major version and uses default-build assets from this repository's workflow. Docker and builds with tags, including micro/pico, require manual updates. Release checks have a 30-second deadline; download and preparation have a 5-minute deadline. Assets and total decompressed tar data are each limited to 512 MiB; executable extraction has the same limit. Downloads use the selected asset ID and check size, SHA-256, program module and platform build information. Missing both the GitHub asset digest and a release `.sha256` file prevents self-update. CLI failures return a nonzero exit code; expired Bot buttons or changed assets require another `/update`.
-
-Cancellation is checked before commit; once commit starts, replacement or rollback finishes. Successful replacement retains the previous binary as `.saveany-update-old-*` in the same directory and reports its path. This backup excludes configuration, database and sessions. Stop the service and check the complete backup before recovery; remove the corresponding old binary manually after validating the new version. SHA-256 checks still trust this repository's publisher; independent signature verification is not implemented.
+This version has no Bot or CLI self-update. Replace binaries or Docker images manually with a verified version.
 
 If you deployed with Docker, use the following commands to update:
 
-Before updating Docker deployments, verify that `data` is persistent and backed up. If the old container has no `/app/data` mount, stop it and export that directory with `docker cp saveany-bot:/app/data /path/to/data-backup`, then mount this exported data at `/app/data` in the replacement container. Preserve your existing plugin, proxy, and other runtime options.
+Before updating Docker deployments, verify that `data` is persistent and backed up. If the old container has no `/app/data` mount, stop it and export that directory with `docker cp saveany-bot:/app/data /path/to/data-backup`, then mount this exported data at `/app/data` in the replacement container. Preserve your existing proxy and other applicable runtime options.
 
 For deployments using the mounts shown above:
 

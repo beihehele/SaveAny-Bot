@@ -8,13 +8,7 @@ import (
 	storcfg "github.com/krau/SaveAny-Bot/config/storage"
 	storenum "github.com/krau/SaveAny-Bot/pkg/enums/storage"
 	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
-	"github.com/krau/SaveAny-Bot/storage/alist"
 	"github.com/krau/SaveAny-Bot/storage/local"
-	"github.com/krau/SaveAny-Bot/storage/minio"
-	"github.com/krau/SaveAny-Bot/storage/rclone"
-	"github.com/krau/SaveAny-Bot/storage/s3"
-	"github.com/krau/SaveAny-Bot/storage/telegram"
-	"github.com/krau/SaveAny-Bot/storage/webdav"
 )
 
 type Storage interface {
@@ -32,7 +26,7 @@ type StorageCannotStream interface {
 }
 
 // StorageCannotDetectExistence marks storages where Exists() is not meaningful
-// (e.g. Telegram re-upload paths). Conflict strategies ask/skip cannot work there.
+// Conflict strategies ask/skip cannot work on those backends.
 type StorageCannotDetectExistence interface {
 	Storage
 	CannotDetectExistence() string
@@ -59,13 +53,7 @@ type StorageReadable interface {
 type StorageConstructor func() Storage
 
 var storageConstructors = map[storenum.StorageType]StorageConstructor{
-	storenum.Alist:    func() Storage { return new(alist.Alist) },
-	storenum.Local:    func() Storage { return new(local.Local) },
-	storenum.Webdav:   func() Storage { return new(webdav.Webdav) },
-	storenum.Minio:    func() Storage { return new(minio.Minio) },
-	storenum.S3:       func() Storage { return new(s3.S3) },
-	storenum.Telegram: func() Storage { return new(telegram.Telegram) },
-	storenum.Rclone:   func() Storage { return new(rclone.Rclone) },
+	storenum.Local: func() Storage { return new(local.Local) },
 }
 
 // NewStorage creates a new storage instance based on the provided config and initializes it

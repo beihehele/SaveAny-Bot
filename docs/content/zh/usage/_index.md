@@ -5,12 +5,11 @@ weight: 10
 
 # 使用帮助
 
-这里介绍 Save Any Bot 的一些功能和使用方法, 如果你没有在这里找到你需要的内容, 另请参阅 [配置说明](../deployment/configuration) 或前往 Github [Discussions](https://github.com/krau/SaveAny-Bot/discussions) 提问.
+向 Bot 发送或转发媒体消息，或发送 Telegram 消息链接，即可选择本地存储保存。`/save` 支持回复媒体保存及历史范围批量下载；静默模式使用默认存储和目录。
 
-## 转存文件
+- [监听聊天](watch)：自动保存到本地或复制到目标聊天/Topic。
+- [复制历史消息](copy)：按过滤条件复制历史消息。
+- [存储规则](rules)、[命名设置](config)、[静默保存](silent)。
+- [网页管理](admin)、[HTTP API](api)、[命令行](cli)。
 
-要使用 Bot 的转存 Telegram 文件功能, 需要向 Bot 发送或转发以下类型的消息.
-
-1. 文件或媒体消息, 如图片, 视频, 文档等
-2. Telegram 消息链接, 例如: `https://t.me/acherkrau/1097`. **即使频道禁止了转发和保存, Bot 依然可以下载其文件.**
-3. Telegra.ph 的文章链接, Bot 将下载其中的所有图片
+用 `/task` 查看任务，`/cancel` 取消任务。文件保存目录相对于配置的本地存储根目录。

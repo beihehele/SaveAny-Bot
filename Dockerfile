@@ -3,6 +3,7 @@ FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f
 ARG VERSION="dev"
 ARG GitCommit="Unknown"
 ARG BuildTime="Unknown"
+ARG GOPROXY="https://proxy.golang.org,direct"
 
 WORKDIR /app
 
@@ -12,7 +13,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg \
+    --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 \
     go build -trimpath \
     -ldflags=" \
@@ -26,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
-RUN apk add --no-cache curl ffmpeg yt-dlp
+RUN apk add --no-cache curl
 
 WORKDIR /app
 
