@@ -26,6 +26,16 @@ bot:
       unwatch: 取消监听聊天(UserBot)
       watch: 监听聊天(UserBot)
     common:
+      input_result_header: "链接选取提示（序号按消息中识别的链接顺序；选入不代表下载完成）："
+      input_result_line: "第 {{.Index}} 项：{{.Reason}}；新增选入 {{.NewFiles}} 个文件"
+      input_result_omitted: "另有 {{.Count}} 项结果未展示。"
+      link_result_resolution_failed: "无法解析链接或访问聊天"
+      link_result_message_unavailable: "无法获取消息"
+      link_result_no_media: "没有可保存媒体"
+      link_result_unsupported_media: "存在不支持的媒体"
+      link_result_album_unavailable: "无法获取媒体组"
+      link_result_duplicate: "已被前面的链接选入，跳过重复"
+      link_result_ready: "已选入"
       button_conflict_overwrite: 覆盖
       button_conflict_rename: 重命名
       button_conflict_skip: 跳过

@@ -14,8 +14,11 @@ import (
 	"github.com/charmbracelet/log"
 
 	"github.com/krau/SaveAny-Bot/api"
+	"github.com/krau/SaveAny-Bot/client/bot"
+	userclient "github.com/krau/SaveAny-Bot/client/user"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/adminauth"
+	"github.com/krau/SaveAny-Bot/pkg/taskhistory"
 )
 
 //go:embed static
@@ -23,15 +26,17 @@ var assets embed.FS
 
 // Server owns the console listener, bounded sessions and audit records.
 type Server struct {
-	httpServer *http.Server
-	cfg        config.AdminConfig
-	auth       *authentication
-	factory    *api.TaskFactory
-	handlers   *api.Handlers
-	started    time.Time
-	audit      auditLog
-	secrets    []string
-	protected  []string
+	httpServer         *http.Server
+	cfg                config.AdminConfig
+	auth               *authentication
+	factory            *api.TaskFactory
+	handlers           *api.Handlers
+	started            time.Time
+	audit              auditLog
+	secrets            []string
+	protected          []string
+	botInitialized     bool
+	userbotInitialized bool
 }
 
 // NewServer constructs a console without starting it or changing bot behavior.
@@ -53,9 +58,11 @@ func NewServer(ctx context.Context, cfg config.AdminConfig) (*Server, error) {
 	}
 	s := &Server{
 		cfg: cfg, auth: newAuthentication(verifier, cfg.SessionTTL),
-		factory: api.NewTaskFactory(ctx), started: time.Now(),
+		factory: api.NewTaskFactory(taskhistory.WithSource(ctx, "admin")), started: time.Now(),
 		secrets: configSecrets(config.C()), protected: protectedPaths(),
 	}
+	s.botInitialized = bot.ExtContext() != nil
+	s.userbotInitialized = config.C().Telegram.Userbot.Enable && userclient.GetCtx() != nil
 	s.cfg.Password, s.cfg.PasswordHash = "", ""
 	s.handlers = api.NewHandlers(s.factory)
 	mux := http.NewServeMux()

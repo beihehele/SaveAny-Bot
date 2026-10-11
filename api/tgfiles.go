@@ -13,6 +13,7 @@ import (
 	"github.com/krau/SaveAny-Bot/client/bot"
 	userclient "github.com/krau/SaveAny-Bot/client/user"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
 )
 
@@ -204,94 +205,90 @@ func extractFilesFromLinks(ctx context.Context, links []string,
 	parseLink func(context.Context, string) (int64, int, error),
 	getMessage func(context.Context, int64, int) (*MessageContext, error),
 ) ([]tfile.TGFileMessage, error) {
+	files, _, err := extractFilesFromLinksReport(ctx, links, parseLink, getMessage)
+	return files, err
+}
+
+func extractFilesFromLinksReport(ctx context.Context, links []string,
+	parseLink func(context.Context, string) (int64, int, error),
+	getMessage func(context.Context, int64, int) (*MessageContext, error),
+) ([]tfile.TGFileMessage, inputresult.Report, error) {
+	var report inputresult.Report
 	logger := log.FromContext(ctx)
 	var files tfile.LinkedFiles
-
-	for _, link := range links {
+	for index, link := range links {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, report, err
 		}
 		link = strings.TrimSpace(link)
-		if link == "" {
-			continue
-		}
-
-		// 验证链接格式
 		if !isValidMessageLink(link) {
-			logger.Errorf("Invalid message link format: %s", link)
+			report.Add(index+1, "invalid_link", 0)
 			continue
 		}
-
 		chatID, msgID, err := parseLink(ctx, link)
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, report, ctx.Err()
 		}
 		if err != nil {
 			logger.Errorf("Failed to parse message link %s: %v", link, err)
+			report.Add(index+1, "resolution_failed", 0)
 			continue
 		}
-
-		// 解析链接 URL 检查是否有 single 参数
 		u, _ := url.Parse(link)
 		single := u != nil && u.Query().Has("single")
-
-		// 获取消息和使用的 context（Bot 优先，失败回退 Userbot）
 		msgCtx, err := getMessage(ctx, chatID, msgID)
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, report, ctx.Err()
 		}
-		if err != nil {
+		if err != nil || msgCtx == nil || msgCtx.Message == nil || msgCtx.Client == nil {
 			logger.Errorf("Failed to get message %d from chat %d: %v", msgID, chatID, err)
+			report.Add(index+1, "message_unavailable", 0)
 			continue
 		}
-
-		msg := msgCtx.Message
-		clientCtx := msgCtx.Client
-
+		msg, clientCtx := msgCtx.Message, msgCtx.Client
 		if msg.Media == nil {
-			logger.Warnf("Message %d has no media", msgID)
+			report.Add(index+1, "no_media", 0)
 			continue
 		}
-
-		// 检查是否是媒体组
+		before := len(files.Files())
+		code := "ready"
+		add := func(message *tg.Message) {
+			if message == nil || message.Media == nil {
+				code = "no_media"
+				return
+			}
+			if err := files.Add(chatID, clientCtx.Raw, message); err != nil {
+				logger.Errorf("Failed to create file from media: %v", err)
+				code = "unsupported_media"
+			}
+		}
 		groupID, isGroup := msg.GetGroupedID()
 		if isGroup && groupID != 0 && !single {
-			// 使用同一个 client context 获取媒体组
 			groupMsgs, err := getGroupedMessagesWithContext(ctx, msgCtx, chatID)
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return nil, report, ctx.Err()
 			}
-			if err != nil {
-				logger.Errorf("Failed to get grouped messages: %v", err)
-			} else {
+			if err == nil {
 				for _, gmsg := range groupMsgs {
-					// 使用获取消息时使用的同一个 client context 创建文件
-					err := files.Add(chatID, clientCtx.Raw, gmsg)
-					if err != nil {
-						logger.Errorf("Failed to create file from media: %v", err)
-						continue
-					}
+					add(gmsg)
 				}
+				report.Add(index+1, code, len(files.Files())-before)
 				continue
 			}
+			// Preserve the existing single-message fallback.
+			logger.Errorf("Failed to get grouped messages: %v", err)
+			code = "album_unavailable"
 		}
-
-		// 单个文件 - 使用获取消息时使用的同一个 client context 创建文件
-		err = files.Add(chatID, clientCtx.Raw, msg)
-		if err != nil {
-			logger.Errorf("Failed to create file from media: %v", err)
-			continue
-		}
+		add(msg)
+		report.Add(index+1, code, len(files.Files())-before)
 	}
-
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, report, err
 	}
 	if len(files.Files()) == 0 {
-		return nil, fmt.Errorf("no files found in provided links")
+		return nil, report, &inputresult.Error{Report: report, Cause: fmt.Errorf("no files found in provided links")}
 	}
-
-	return files.Files(), nil
+	return files.Files(), report, nil
 }
 
 // isValidMessageLink 检查是否是有效的 Telegram 消息链接

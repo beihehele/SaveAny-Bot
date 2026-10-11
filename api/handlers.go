@@ -12,6 +12,7 @@ import (
 
 	"github.com/krau/SaveAny-Bot/core/taskcontrol"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/storage"
 )
 
@@ -65,7 +66,12 @@ func (h *Handlers) CreateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	resp, err := h.factory.CreateTaskWithContext(prepareCtx, &req)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "task_creation_failed", err.Error())
+		var selection *inputresult.Error
+		if errors.As(err, &selection) {
+			WriteJSON(w, http.StatusBadRequest, ErrorResponse{Error: "task_creation_failed", Message: err.Error(), Report: selection.Report.Clone()})
+		} else {
+			WriteError(w, http.StatusBadRequest, "task_creation_failed", err.Error())
+		}
 		return
 	}
 
@@ -235,6 +241,7 @@ func convertTaskProgressToResponse(task *TaskProgressInfo) TaskInfoResponse {
 		CreatedAt:     task.CreatedAt,
 		UpdatedAt:     updatedAt,
 		ResultSummary: s.resultSummary,
+		Report:        s.report,
 	}
 
 	var percent float64

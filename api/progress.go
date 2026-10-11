@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
@@ -14,7 +15,8 @@ import (
 // guarded by mu. It implements taskevent.Sink so the task layer can update it
 // without knowing about the API.
 type TaskProgressInfo struct {
-	mu              sync.Mutex
+	mu sync.Mutex
+	inputresult.Report
 	TaskID          string
 	Type            string
 	Status          TaskStatus
@@ -172,6 +174,7 @@ func (t *TaskProgressInfo) snapshot() (status TaskStatus, total, downloaded int6
 }
 
 type taskProgressSnapshot struct {
+	report                      inputresult.Report
 	status                      TaskStatus
 	total, downloaded           int64
 	totalFiles, downloadedFiles int
@@ -185,7 +188,7 @@ func (t *TaskProgressInfo) responseSnapshot() taskProgressSnapshot {
 	defer t.mu.Unlock()
 	return taskProgressSnapshot{status: t.Status, total: t.TotalBytes, downloaded: t.DownloadedBytes,
 		totalFiles: t.TotalFiles, downloadedFiles: t.DownloadedFiles, startedAt: t.StartedAt, err: t.Error,
-		updatedAt: t.UpdatedAt, resultSummary: cloneResultSummary(t.ResultSummary)}
+		updatedAt: t.UpdatedAt, resultSummary: cloneResultSummary(t.ResultSummary), report: t.Report.Clone()}
 }
 
 // Emit implements taskevent.Sink. It translates task lifecycle events into

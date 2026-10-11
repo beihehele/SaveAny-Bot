@@ -231,11 +231,36 @@ blacklist=true
 	if err != nil {
 		t.Fatal(err)
 	}
+	defaultFactory := s.factory
 	s.factory = api.NewTaskFactoryWithExtractor(t.Context(), func(ctx context.Context, links []string) ([]filemodel.TGFileMessage, error) {
 		file, err := filemodel.FromMediaMessage(&tg.MessageMediaDocument{Document: &tg.Document{ID: 1, Size: 4, Attributes: []tg.DocumentAttributeClass{&tg.DocumentAttributeFilename{FileName: "fixture.txt"}}}}, consoleDownloadClient{}, &tg.Message{ID: 1})
 		return []filemodel.TGFileMessage{file}, err
 	})
 	cookie, csrf := signIn(t, s)
+	injectedFactory := s.factory
+	s.factory = defaultFactory
+	queuedBefore, trackedBefore := core.GetLength(t.Context()), len(api.TaskSnapshots())
+	invalidInput := `{"type":"tgfiles","storage":"console-local","params":{"message_links":["not-a-link","private-test-bot-token"]}}`
+	rejected := perform(s, "POST", "/admin/api/v1/tasks", invalidInput, cookie, csrf, "http://console.test")
+	var invalidResult api.ErrorResponse
+	if err := json.Unmarshal(rejected.Body.Bytes(), &invalidResult); err != nil {
+		t.Fatal(err)
+	}
+	if rejected.Code != 400 || len(invalidResult.InputResults) != 2 || invalidResult.InputResults[1].Index != 2 || invalidResult.InputResults[1].Code != "invalid_link" || strings.Contains(rejected.Body.String(), "private-test-bot-token") {
+		t.Fatalf("all-failed selection lost safe indexed response: %d %s", rejected.Code, rejected.Body.String())
+	}
+	if core.GetLength(t.Context()) != queuedBefore || len(api.TaskSnapshots()) != trackedBefore {
+		t.Fatal("all-failed input admitted a task")
+	}
+	apiRejected := httptest.NewRecorder()
+	api.NewHandlers(defaultFactory).CreateTaskHandler(apiRejected, httptest.NewRequest("POST", "/api/v1/tasks", strings.NewReader(invalidInput)))
+	if err := json.Unmarshal(apiRejected.Body.Bytes(), &invalidResult); err != nil {
+		t.Fatal(err)
+	}
+	if apiRejected.Code != 400 || len(invalidResult.InputResults) != 2 || strings.Contains(apiRejected.Body.String(), "private-test-bot-token") {
+		t.Fatal("API lost safe all-failed results")
+	}
+	s.factory = injectedFactory
 	if err := core.AddTask(t.Context(), waitingTask{"console-bot-task", "<img src=x onerror=alert(1)>"}); err != nil {
 		t.Fatal(err)
 	}

@@ -11,12 +11,17 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/queue"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
+	"github.com/krau/SaveAny-Bot/pkg/taskhistory"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 var queueInstance *queue.TaskQueue[Executable]
 
 var queueMu sync.RWMutex
+
+// admissionMu keeps an observation reservation owned by the submission that
+// wins queue admission when identical IDs race. It never covers execution.
+var admissionMu sync.Mutex
 
 // Prepare initializes the queue before Bot/UserBot/API can submit tasks. Workers
 // still start in Run, after the Telegram client is ready.
@@ -166,11 +171,29 @@ func AddTasks(ctx context.Context, tasks ...Executable) error {
 			return errors.New("cannot add nil task")
 		}
 	}
+	observe := config.C().Admin.Enable
+	if observe {
+		admissionMu.Lock()
+		defer admissionMu.Unlock()
+	}
 	wrappers := make([]*queue.Task[Executable], 0, len(tasks))
+	rollbacks := make([]func(), 0, len(tasks))
 	for _, task := range tasks {
-		wrappers = append(wrappers, queue.NewTask(ctx, task.TaskID(), task.Title(), task))
+		taskCtx := ctx
+		rollback := func() {}
+		watch := func(context.Context) {}
+		if observe {
+			taskCtx, rollback, watch = taskhistory.Default.Track(ctx, task.TaskID(), string(task.Type()), task.Title())
+		}
+		wrapper := queue.NewTask(taskCtx, task.TaskID(), task.Title(), task)
+		watch(wrapper.Context())
+		wrappers = append(wrappers, wrapper)
+		rollbacks = append(rollbacks, rollback)
 	}
 	if err := qe.AddBatch(wrappers...); err != nil {
+		for _, rollback := range rollbacks {
+			rollback()
+		}
 		for _, wrapper := range wrappers {
 			wrapper.Cancel()
 		}

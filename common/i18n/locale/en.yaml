@@ -26,6 +26,16 @@ bot:
       unwatch: Stop watching chats (UserBot)
       watch: Watch chats (UserBot)
     common:
+      input_result_header: "Link selection notes (positions follow matched links; selection is not download completion):"
+      input_result_line: "Link {{.Index}}: {{.Reason}}; {{.NewFiles}} new files selected"
+      input_result_omitted: "{{.Count}} additional results are not shown."
+      link_result_resolution_failed: "Link or chat could not be resolved"
+      link_result_message_unavailable: "Message could not be fetched"
+      link_result_no_media: "No savable media"
+      link_result_unsupported_media: "Contains unsupported media"
+      link_result_album_unavailable: "Media group could not be fetched"
+      link_result_duplicate: "Already selected by an earlier link; duplicate skipped"
+      link_result_ready: "Selected"
       button_conflict_overwrite: Overwrite
       button_conflict_rename: Rename
       button_conflict_skip: Skip

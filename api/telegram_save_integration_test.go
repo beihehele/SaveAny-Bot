@@ -17,6 +17,7 @@ import (
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	filemodel "github.com/krau/SaveAny-Bot/pkg/tfile"
 	"github.com/krau/SaveAny-Bot/storage"
 )
@@ -60,7 +61,7 @@ func TestTelegramSaveEndToEnd(t *testing.T) {
 	const modeEnv = "SAVEANY_LOCAL_SAVE_TEST_MODE"
 	mode := os.Getenv(modeEnv)
 	if mode == "" {
-		for _, scenario := range []string{"single-buffered", "album-buffered", "single-stream", "album-stream", "failure", "cancel"} {
+		for _, scenario := range []string{"single-buffered", "album-buffered", "single-stream", "album-stream", "failure", "cancel", "mixed-input-results"} {
 			t.Run(scenario, func(t *testing.T) {
 				binary, err := os.Executable()
 				if err != nil {
@@ -112,9 +113,39 @@ func TestTelegramSaveEndToEnd(t *testing.T) {
 		}
 		return files, nil
 	})
+	var prepared inputresult.Report
+	if mode == "mixed-input-results" {
+		prepared.Add(1, "ready", 1)
+		prepared.Add(2, "message_unavailable", 0)
+		prepared.Add(3, "ready", 0)
+		extractor := factory.extractFiles
+		factory.extractReport = func(ctx context.Context, links []string) ([]filemodel.TGFileMessage, inputresult.Report, error) {
+			files, err := extractor(ctx, links)
+			return files, prepared, err
+		}
+	}
 	response, err := factory.CreateTaskWithContext(requestCtx, &CreateTaskRequest{Type: tasktype.TaskTypeTgfiles, Storage: "archive", Path: "albums", Params: json.RawMessage(`{"message_links":["https://t.me/c/123/1"]}`)})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if mode == "mixed-input-results" {
+		if len(response.InputResults) != 3 {
+			t.Fatal("CREATE lost source results")
+		}
+		response.InputResults[0].NewFiles = 99
+		prepared.InputResults[0].NewFiles = 98
+		info, ok := GetTask(response.TaskID)
+		if !ok {
+			t.Fatal("accepted task not tracked")
+		}
+		rendered := convertTaskProgressToResponse(info)
+		if len(rendered.InputResults) != 3 || rendered.InputResults[0].NewFiles != 1 || rendered.InputResults[1].Status != "failed" || rendered.InputResults[2].Status != "duplicate" {
+			t.Fatalf("GET lost or aliased metadata: %+v", rendered)
+		}
+		rendered.InputResults[0].NewFiles = 97
+		if convertTaskProgressToResponse(info).InputResults[0].NewFiles != 1 {
+			t.Fatal("GET mutated stored metadata")
+		}
 	}
 	defer DeleteTask(response.TaskID)
 	// An accepted save must survive the HTTP request ending.

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
@@ -33,6 +34,7 @@ type CreateTaskRequest struct {
 
 // CreateTaskResponse 创建任务响应
 type CreateTaskResponse struct {
+	inputresult.Report
 	TaskID    string            `json:"task_id"`
 	Type      tasktype.TaskType `json:"type"`
 	Status    TaskStatus        `json:"status"`
@@ -51,6 +53,7 @@ type TaskProgress struct {
 
 // TaskInfoResponse 任务信息响应
 type TaskInfoResponse struct {
+	inputresult.Report
 	TaskID        string             `json:"task_id"`
 	Type          tasktype.TaskType  `json:"type"`
 	Status        TaskStatus         `json:"status"`
@@ -106,6 +109,7 @@ type WebhookPayload struct {
 
 // ErrorResponse 错误响应
 type ErrorResponse struct {
+	inputresult.Report
 	Error   string `json:"error"`
 	Message string `json:"message,omitempty"`
 }

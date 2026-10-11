@@ -47,6 +47,7 @@
     $("login-error").textContent = message;
     $("login-error").hidden = !message;
     $("task-dialog").close();
+    $("input-dialog").close();
     $("password").focus();
   }
   async function request(path, options = {}) {
@@ -57,7 +58,9 @@
     const data = await response.json();
     if (!response.ok) {
       if (response.status === 401 && path !== "login") showLogin(t("sessionExpired"));
-      throw new Error(t(data.error || "internal_error"));
+      const error = new Error(t(data.error || "internal_error"));
+      error.selection = data;
+      throw error;
     }
     return data;
   }
@@ -118,13 +121,28 @@
     next.disabled = offset + 100 >= total;
     target.append(previous, next);
   }
+  function scopeLabel(task) { return t(task.scope === "tracked" ? "trackedScope" : task.scope === "history" ? "historyScope" : "queueScope"); }
+  function inputLines(report) {
+    const lines = (report.input_results || []).map((result) =>
+      '#' + result.index + ' · ' + t('input_status_' + result.status) + ' · ' + t('input_code_' + result.code) + ' · ' + t("inputNewFiles") + ': ' + result.new_files);
+    if (report.input_results_omitted) lines.push(t("inputOmitted") + ': ' + report.input_results_omitted);
+    return lines;
+  }
+  function selectionDetails(report, heading) {
+    const lines = inputLines(report);
+    if (!lines.length) return;
+    $("input-heading").textContent = heading;
+    $("input-details").textContent = t("inputSelectionNote") + "\n\n" + lines.join("\n");
+    if (!$("input-dialog").open) $("input-dialog").showModal();
+  }
   function taskDetails(task) {
     const values = [[t("taskID"), task.task_id], [t("title"), task.title], [t("status"), t(task.status)],
-      [t("scope"), t(task.scope === "tracked" ? "trackedScope" : "queueScope")], [t("taskType"), t(task.type || "unknownType")],
-      [t("storage"), task.storage], [t("path"), task.path], [t("createdAt"), date(task.created_at)]];
+      [t("scope"), scopeLabel(task)], [t("taskType"), t(task.type || "unknownType")],
+      [t("source"), t(`source_${task.source || "unknown"}`)], [t("storage"), task.storage], [t("path"), task.path], [t("createdAt"), date(task.created_at)]];
     if (task.progress) values.push([t("progress"), `${Number(task.progress.percent || 0).toFixed(1)}%`],
       [t("downloaded"), `${bytes(task.progress.downloaded_bytes)} / ${bytes(task.progress.total_bytes)}`],
       [t("fileCount"), `${task.progress.downloaded_files || 0} / ${task.progress.total_files || 0}`]);
+    for (const line of inputLines(task)) values.push([t("inputResults"), line]);
     if (task.result_summary) values.push([t("resultSummary"), JSON.stringify(task.result_summary)]);
     definitions($("task-details"), values);
     $("task-detail-error").textContent = task.error || "";
@@ -143,7 +161,7 @@
   function tasksTable(target, tasks) {
     table(target, ["task", "status", "progress", "storage", "createdAt", "actions"], tasks.map((task) => {
       const title = node("div");
-      title.append(node("div", task.title || task.task_id, "cell-title"), node("div", `${task.task_id} · ${t(task.scope === "tracked" ? "trackedScope" : "queueScope")}`, "cell-subtitle"));
+      title.append(node("div", task.title || task.task_id, "cell-title"), node("div", `${task.task_id} · ${t(`source_${task.source || "unknown"}`)} · ${scopeLabel(task)}`, "cell-subtitle"));
       const progress = node("div", null, "progress");
       if (task.progress && (task.progress.total_bytes || task.progress.total_files)) {
         const percent = Math.min(100, Math.max(0, Number(task.progress.percent || 0)));
@@ -313,6 +331,8 @@
         const data = await request("diagnostics", { signal });
         if (sequence !== state.sequence) return;
         definitions($("runtime-settings"), Object.entries(data.settings).map(([key, value]) => [t(`setting_${key}`), value]));
+        definitions($("watch-health"), [[t("watchPending"), data.watch?.Pending], [t("watchBuffered"), data.watch?.Buffered], [t("watchCapacity"), data.watch?.Capacity], [t("watchEnqueued"), data.watch?.Enqueued], [t("watchDropped"), data.watch?.Dropped], [t("botInitialized"), data.telegram?.bot_initialized], [t("userbotInitialized"), data.telegram?.userbot_initialized]]);
+        table($("disk-health"), ["storage", "availableDisk"], (data.disks || []).map((disk) => [disk.storage, disk.available ? bytes(disk.available_bytes) : t("unavailable")]));
         table($("audit-table"), ["time", "operation", "object", "result"], data.audit.map((entry) => [date(entry.time), t(`audit_${entry.action}`), entry.object || "—", t(entry.result)]));
       }
       if (sequence === state.sequence) $("last-refresh").textContent = `${t("lastRefreshed")} ${new Date().toLocaleTimeString(state.language)}`;
@@ -352,7 +372,8 @@
       toast(`${t("taskAccepted")} · ${response.task_id}`); $("task-urls").value = "";
       state.taskOffset = 0; $("task-search").value = ""; $("task-status").value = "";
       if (location.hash === "#tasks") await loadPage(); else location.hash = "tasks";
-    } catch (error) { toast(error.message); }
+      if ((response.input_results || []).some((item) => item.status !== "ready") || response.input_results_omitted) selectionDetails(response, t("taskAccepted") + " · " + response.task_id);
+    } catch (error) { toast(error.message); if (state.authenticated && error.selection) selectionDetails(error.selection, error.message); }
     finally { state.submitting = false; typeFields(); }
   });
   $("task-type").addEventListener("change", typeFields);
@@ -361,6 +382,7 @@
   $("file-form").addEventListener("submit", (event) => { event.preventDefault(); state.fileOffset = 0; loadPage(); });
   $("file-storage").addEventListener("change", () => { $("file-path").value = "/"; state.fileOffset = 0; loadPage(); });
   $("file-up").addEventListener("click", () => { const segments = $("file-path").value.replace(/\\/g, "/").split("/").filter(Boolean); segments.pop(); $("file-path").value = `/${segments.join("/")}`; state.fileOffset = 0; loadPage(); });
+  $("close-input-dialog").addEventListener("click", () => $("input-dialog").close());
   $("close-dialog").addEventListener("click", () => $("task-dialog").close());
   $("refresh").addEventListener("click", () => { state.metadata = false; loadPage(); });
   $("language").addEventListener("change", () => language($("language").value).catch((error) => toast(error.message)));

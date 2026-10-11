@@ -14,16 +14,19 @@ import (
 	"github.com/krau/SaveAny-Bot/core/tasks/batchtfile"
 	"github.com/krau/SaveAny-Bot/core/tasks/tfile"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
+	"github.com/krau/SaveAny-Bot/pkg/taskhistory"
 	filemodel "github.com/krau/SaveAny-Bot/pkg/tfile"
 	"github.com/krau/SaveAny-Bot/storage"
 )
 
 // TaskFactory prepares Telegram saves and hands accepted tasks to the service queue.
 type TaskFactory struct {
-	ctx          context.Context
-	prepareCtx   context.Context
-	extractFiles TelegramFileExtractor
+	ctx           context.Context
+	prepareCtx    context.Context
+	extractFiles  TelegramFileExtractor
+	extractReport func(context.Context, []string) ([]filemodel.TGFileMessage, inputresult.Report, error)
 }
 
 // TelegramFileExtractor resolves Telegram links into downloadable media.
@@ -46,16 +49,23 @@ func (f *TaskFactory) preprocessingContext() context.Context {
 
 // NewTaskFactory uses the instance's Telegram clients to resolve source media.
 func NewTaskFactory(ctx context.Context) *TaskFactory {
-	return NewTaskFactoryWithExtractor(ctx, ExtractFilesFromLinks)
+	return NewTaskFactoryWithExtractor(ctx, nil)
 }
 
 // NewTaskFactoryWithExtractor supplies a source adapter while retaining the
 // production queue, local writes, progress reporting and cancellation.
 func NewTaskFactoryWithExtractor(ctx context.Context, extractor TelegramFileExtractor) *TaskFactory {
+	var detailed func(context.Context, []string) ([]filemodel.TGFileMessage, inputresult.Report, error)
 	if extractor == nil {
 		extractor = ExtractFilesFromLinks
+		detailed = func(ctx context.Context, links []string) ([]filemodel.TGFileMessage, inputresult.Report, error) {
+			return extractFilesFromLinksReport(ctx, links, ParseMessageLink, getMessageWithContext)
+		}
 	}
-	return &TaskFactory{ctx: ctx, extractFiles: extractor}
+	if taskhistory.Source(ctx) == "bot" {
+		ctx = taskhistory.WithSource(ctx, "api")
+	}
+	return &TaskFactory{ctx: ctx, extractFiles: extractor, extractReport: detailed}
 }
 
 // CreateTask validates and prepares a Telegram save before handing it to workers.
@@ -80,7 +90,7 @@ func (f *TaskFactory) createTask(req *CreateTaskRequest) (*CreateTaskResponse, e
 	return f.createTGFilesTask(xid.New().String(), time.Now(), req, stor)
 }
 
-func (f *TaskFactory) registerAndEnqueueTask(task core.Executable, taskType tasktype.TaskType, storageName, path, webhook string) error {
+func (f *TaskFactory) registerAndEnqueueTask(task core.Executable, taskType tasktype.TaskType, storageName, path, webhook string, report inputresult.Report) error {
 	if err := f.preprocessingContext().Err(); err != nil {
 		return err
 	}
@@ -89,6 +99,7 @@ func (f *TaskFactory) registerAndEnqueueTask(task core.Executable, taskType task
 	info := RegisterTask(taskID, string(taskType), storageName, path, task.Title(), webhook)
 	info.mu.Lock()
 	info.webhookContext = f.ctx
+	info.Report = report.Clone()
 	info.mu.Unlock()
 
 	// Inject the progress sink into the context so the task's Emit calls update
@@ -115,7 +126,14 @@ func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req 
 		return nil, fmt.Errorf("no message links provided")
 	}
 
-	files, err := f.extractFiles(f.preprocessingContext(), params.MessageLinks)
+	var files []filemodel.TGFileMessage
+	var report inputresult.Report
+	var err error
+	if f.extractReport != nil {
+		files, report, err = f.extractReport(f.preprocessingContext(), params.MessageLinks)
+	} else {
+		files, err = f.extractFiles(f.preprocessingContext(), params.MessageLinks)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract files: %w", err)
 	}
@@ -150,7 +168,7 @@ func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req 
 		task = batchtfile.NewBatchTGFileTask(taskID, f.ctx, elems, nil)
 	}
 
-	err = f.registerAndEnqueueTask(task, tasktype.TaskTypeTgfiles, req.Storage, req.Path, req.Webhook)
+	err = f.registerAndEnqueueTask(task, tasktype.TaskTypeTgfiles, req.Storage, req.Path, req.Webhook, report)
 	if err != nil {
 		return nil, err
 	}
@@ -160,5 +178,6 @@ func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req 
 		Type:      tasktype.TaskTypeTgfiles,
 		Status:    TaskStatusQueued,
 		CreatedAt: createdAt,
+		Report:    report.Clone(),
 	}, nil
 }

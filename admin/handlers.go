@@ -13,17 +13,22 @@ import (
 	"github.com/charmbracelet/log"
 
 	"github.com/krau/SaveAny-Bot/api"
+	userclient "github.com/krau/SaveAny-Bot/client/user"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
 	"github.com/krau/SaveAny-Bot/core/taskcontrol"
 	"github.com/krau/SaveAny-Bot/database"
+	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/queue"
+	"github.com/krau/SaveAny-Bot/pkg/taskhistory"
 	"github.com/krau/SaveAny-Bot/storage"
 )
 
 type taskRow struct {
 	api.TaskInfoResponse
 	Scope     string `json:"scope"`
+	Source    string `json:"source,omitempty"`
 	Executing bool   `json:"executing"`
 	CanCancel bool   `json:"can_cancel"`
 }
@@ -45,12 +50,32 @@ func (s *Server) taskRows(ctx context.Context) []taskRow {
 		info.Title, info.Error = s.redact(info.Title), s.redact(info.Error)
 		byID[info.TaskID] = taskRow{TaskInfoResponse: info, Scope: "tracked"}
 	}
+	for _, record := range taskhistory.Default.Snapshots() {
+		row, exists := byID[record.ID]
+		if !exists {
+			row = taskRow{TaskInfoResponse: api.TaskInfoResponse{TaskID: record.ID, Type: tasktype.TaskType(record.Type), Title: s.redact(record.Title), Status: api.TaskStatus(record.Status), Error: s.redact(record.Error), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, ResultSummary: record.ResultSummary}, Scope: "history"}
+			if record.TotalBytes > 0 || record.TotalFiles > 0 {
+				progress := &api.TaskProgress{TotalBytes: record.TotalBytes, DownloadedBytes: record.DownloadedBytes, TotalFiles: record.TotalFiles, DownloadedFiles: record.DownloadedFiles}
+				if record.TotalBytes > 0 {
+					progress.Percent = 100 * float64(record.DownloadedBytes) / float64(record.TotalBytes)
+				} else {
+					progress.Percent = 100 * float64(record.DownloadedFiles) / float64(record.TotalFiles)
+				}
+				row.Progress = progress
+			}
+		}
+		row.Source = record.Source
+		byID[record.ID] = row
+	}
 	add := func(info queue.TaskInfo, running bool) {
 		row, exists := byID[info.ID]
 		if !exists {
 			row = taskRow{TaskInfoResponse: api.TaskInfoResponse{
 				TaskID: info.ID, Title: s.redact(info.Title), CreatedAt: info.Created,
 			}, Scope: "queue"}
+		}
+		if row.Scope == "history" {
+			row.Scope = "queue"
 		}
 		row.Executing, row.CanCancel = running, !info.Cancelled
 		if running {
@@ -150,7 +175,12 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.FromContext(r.Context()).Warn("Admin task preparation failed", "error", s.redact(err.Error()))
 		s.audit.add("create_task", s.redact(string(request.Type)), "failed")
-		s.fail(w, http.StatusBadRequest, "task_creation_failed")
+		var selection *inputresult.Error
+		if errors.As(err, &selection) {
+			s.write(w, http.StatusBadRequest, api.ErrorResponse{Error: "task_creation_failed", Report: selection.Report.Clone()})
+		} else {
+			s.fail(w, http.StatusBadRequest, "task_creation_failed")
+		}
 		return
 	}
 	s.audit.add("create_task", response.TaskID, "ok")
@@ -251,5 +281,8 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			"api_enabled":   cfg.API.Enable,
 			"secure_cookie": s.cfg.SecureCookie, "session_ttl": s.cfg.SessionTTL.String(),
 		}, "audit": s.audit.snapshot(),
+		"watch":    userclient.GetMediaMessageStats(),
+		"disks":    localDiskObservations(),
+		"telegram": map[string]bool{"bot_initialized": s.botInitialized, "userbot_initialized": s.userbotInitialized},
 	})
 }

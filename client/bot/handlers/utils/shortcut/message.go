@@ -2,7 +2,9 @@
 package shortcut
 
 import (
+	"context"
 	"net/url"
+	"time"
 
 	"github.com/celestix/gotgproto/dispatcher"
 	"github.com/celestix/gotgproto/ext"
@@ -20,6 +22,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/database"
+	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
 )
 
@@ -83,17 +86,19 @@ func GetFilesFromUpdateLinkMessageWithReplyEdit(ctx *ext.Context, update *ext.Up
 		return nil, nil, nil, dispatcher.EndGroups
 	}
 	var selected tfile.LinkedFiles
-	addFile := func(chatID int64, client downloader.Client, msg *tg.Message) {
+	var report inputresult.Report
+	addFile := func(chatID int64, client downloader.Client, msg *tg.Message) string {
 		if msg == nil || msg.Media == nil {
 			logger.Warn("message is nil, skipping")
-			return
+			return "no_media"
 		}
 		opts := mediautil.TfileOptions(ctx, user, msg)
 		err := selected.Add(chatID, client, msg, opts...)
 		if err != nil {
 			logger.Errorf("failed to create file from media: %s", err)
-			return
+			return "unsupported_media"
 		}
+		return "ready"
 	}
 
 	tctx := ctx
@@ -103,34 +108,55 @@ func GetFilesFromUpdateLinkMessageWithReplyEdit(ctx *ext.Context, update *ext.Up
 		}
 	}
 
-	for _, link := range msgLinks {
+	for index, link := range msgLinks {
 		linkUrl, err := url.Parse(link)
 		if err != nil {
 			logger.Errorf("failed to parse message link %s: %s", link, err)
+			report.Add(index+1, "resolution_failed", 0)
 			continue
 		}
 		chatId, msgId, err := tgutil.ParseMessageLink(tctx, link)
 		if err != nil {
 			logger.Errorf("failed to parse message link %s: %s", link, err)
+			report.Add(index+1, "resolution_failed", 0)
 			continue
 		}
 		msg, err := tgutil.GetMessageByID(tctx, chatId, msgId)
-		if err != nil {
+		if err != nil || msg == nil {
 			logger.Error(err)
+			report.Add(index+1, "message_unavailable", 0)
 			continue
 		}
+		before := len(selected.Files())
+		code := "ready"
 		groupID, isGroup := msg.GetGroupedID()
 		if isGroup && groupID != 0 && !linkUrl.Query().Has("single") {
 			gmsgs, err := tgutil.GetGroupedMessages(tctx, chatId, msg)
 			if err != nil {
 				logger.Errorf("failed to get grouped messages: %s", err)
+				code = "album_unavailable"
 			} else {
+				if len(gmsgs) == 0 {
+					code = "no_media"
+				}
 				for _, gmsg := range gmsgs {
-					addFile(chatId, tctx.Raw, gmsg)
+					if result := addFile(chatId, tctx.Raw, gmsg); result != "ready" {
+						code = result
+					}
 				}
 			}
 		} else {
-			addFile(chatId, tctx.Raw, msg)
+			code = addFile(chatId, tctx.Raw, msg)
+		}
+		report.Add(index+1, code, len(selected.Files())-before)
+	}
+	// This separate message leaves selection keyboards, entities and captions untouched.
+	if text := inputWarnings(report); text != "" {
+		notifyCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+		_, notifyErr := tgutil.ClientWithContext(notifyCtx, ctx).Reply(update, ext.ReplyTextString(text), nil)
+		stop()
+		if notifyErr != nil {
+			logger.Warn("Failed to report link selection warnings", "error", notifyErr)
 		}
 	}
 	files = selected.Files()
