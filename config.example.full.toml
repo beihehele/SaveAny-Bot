@@ -30,6 +30,8 @@ token = "YOUR_BOT_TOKEN"
 # app_id = 12345678
 # app_hash = "YOUR_APP_HASH"
 rpc_retry = 5
+# /copy 每页扫描时限，包含断线恢复和限流等待；超时不转发部分结果。
+scan_timeout = "5m"
 media_group_timeout = 5
 
 [telegram.proxy]

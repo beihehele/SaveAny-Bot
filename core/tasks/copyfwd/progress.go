@@ -115,7 +115,8 @@ func (p *Progress) edit(ctx context.Context, text string, withCancel bool, force
 		// Empty inline keyboard clears the cancel button (nil Rows, not Rows: []).
 		req.SetReplyMarkup(&tg.ReplyInlineMarkup{})
 	}
-	ext := tgutil.ExtFromContext(ctx)
+	ext, cancel := tgutil.ProgressClient(ctx, !withCancel)
+	defer cancel()
 	if ext == nil {
 		return
 	}

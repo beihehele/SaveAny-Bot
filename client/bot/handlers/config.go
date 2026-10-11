@@ -80,6 +80,7 @@ func handleConfigFnameSTCallback(ctx *ext.Context, update *ext.Update) error {
 		if err := database.UpdateUser(ctx, user); err != nil {
 			return err
 		}
+		acknowledgeCallback(ctx, update.CallbackQuery.GetQueryID())
 		ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
 			ID: update.CallbackQuery.GetMsgID(),
 			Message: i18n.T(i18nk.BotMsgConfigInfoFilenameStrategySet, map[string]any{
@@ -107,6 +108,7 @@ func handleConfigFnameSTCallback(ctx *ext.Context, update *ext.Update) error {
 	if err != nil {
 		currentSt = fnamest.Default
 	}
+	acknowledgeCallback(ctx, update.CallbackQuery.GetQueryID())
 	ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
 		ID: update.CallbackQuery.GetMsgID(),
 		Message: i18n.T(i18nk.BotMsgConfigPromptSelectFilenameStrategy, map[string]any{
@@ -133,6 +135,7 @@ func handleConfigConflictSTCallback(ctx *ext.Context, update *ext.Update) error 
 		if err := database.UpdateUser(ctx, user); err != nil {
 			return err
 		}
+		acknowledgeCallback(ctx, update.CallbackQuery.GetQueryID())
 		ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
 			ID: update.CallbackQuery.GetMsgID(),
 			Message: i18n.T(i18nk.BotMsgConfigInfoConflictStrategySet, map[string]any{
@@ -156,6 +159,7 @@ func handleConfigConflictSTCallback(ctx *ext.Context, update *ext.Update) error 
 	}
 	markup := &tg.ReplyInlineMarkup{Rows: rows}
 	currentSt := conflictutil.EffectiveStrategy(user)
+	acknowledgeCallback(ctx, update.CallbackQuery.GetQueryID())
 	ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
 		ID: update.CallbackQuery.GetMsgID(),
 		Message: i18n.T(i18nk.BotMsgConfigPromptSelectConflictStrategy, map[string]any{

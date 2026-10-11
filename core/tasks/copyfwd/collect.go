@@ -2,17 +2,53 @@ package copyfwd
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/celestix/gotgproto/ext"
+	"github.com/charmbracelet/log"
 	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/client/user"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/msgfilter"
 )
 
 type scanProgressFn func(matched, atMsgID int)
+
+func scanPage(ctx context.Context, uctx *ext.Context, sourceID int64, offsetID int, search bool, query string) ([]*tg.Message, error) {
+	timeout := config.C().Telegram.ScanTimeout
+	if timeout <= 0 {
+		timeout = config.DefaultTelegramScanTimeout
+	}
+	pageCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	client := tgutil.ClientWithContext(pageCtx, uctx)
+	mode := "history"
+	if search {
+		mode = "search"
+	}
+	started := time.Now()
+	logger := log.FromContext(ctx)
+	logger.Debug("Copy scan page started", "mode", mode, "source", sourceID, "offset_id", offsetID, "timeout", timeout)
+	var msgs []*tg.Message
+	var err error
+	if search {
+		msgs, err = user.SearchMessages(client, sourceID, query, offsetID)
+	} else {
+		msgs, err = user.HistoryMessages(client, sourceID, offsetID)
+	}
+	if err == nil {
+		err = pageCtx.Err()
+	}
+	logger.Debug("Copy scan page finished", "mode", mode, "source", sourceID, "offset_id", offsetID, "messages", len(msgs), "duration", time.Since(started), "error", err)
+	if err != nil {
+		return nil, fmt.Errorf("copy %s page (source %d offset %d): %w", mode, sourceID, offsetID, err)
+	}
+	return msgs, nil
+}
 
 func collectMatchedIDs(ctx context.Context, uctx *ext.Context, sourceID int64, filter string, count int, onProgress scanProgressFn) ([]int, error) {
 	uctx = tgutil.ClientWithContext(ctx, uctx)
@@ -38,7 +74,7 @@ func collectFromHistory(ctx context.Context, uctx *ext.Context, sourceID int64, 
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		msgs, err := user.HistoryMessages(uctx, sourceID, offsetID)
+		msgs, err := scanPage(ctx, uctx, sourceID, offsetID, false, "")
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +122,7 @@ func collectFromSearch(ctx context.Context, uctx *ext.Context, sourceID int64, c
 			if exhausted[seed] {
 				continue
 			}
-			msgs, err := user.SearchMessages(uctx, sourceID, seed, offsets[seed])
+			msgs, err := scanPage(ctx, uctx, sourceID, offsets[seed], true, seed)
 			if err != nil {
 				return nil, err
 			}

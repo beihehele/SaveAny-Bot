@@ -117,6 +117,7 @@ func Init(ctx context.Context, configFile ...string) error {
 		"telegram.app_id":          1025907,
 		"telegram.app_hash":        "452b0359b988148995f22ff0f4229750",
 		"telegram.rpc_retry":       5,
+		"telegram.scan_timeout":    DefaultTelegramScanTimeout.String(),
 		"telegram.userbot.enable":  false,
 		"telegram.userbot.session": "data/usersession.db",
 
@@ -161,6 +162,9 @@ func Init(ctx context.Context, configFile ...string) error {
 	}
 	if next.Hook.Exec.Timeout <= 0 {
 		return fmt.Errorf("hook.exec.timeout must be a positive duration")
+	}
+	if next.Telegram.ScanTimeout <= 0 {
+		return fmt.Errorf("telegram.scan_timeout must be a positive duration")
 	}
 
 	storagesConfig, err := storage.LoadStorageConfigs(viper.GetViper())

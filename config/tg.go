@@ -1,5 +1,11 @@
 package config
 
+import "time"
+
+// DefaultTelegramScanTimeout bounds each read-only /copy history/search page,
+// including connection recovery and server-requested FLOOD_WAIT.
+const DefaultTelegramScanTimeout = 5 * time.Minute
+
 type telegramConfig struct {
 	Token             string        `toml:"token" mapstructure:"token"`
 	AppID             int           `toml:"app_id" mapstructure:"app_id" json:"app_id"`
@@ -8,6 +14,7 @@ type telegramConfig struct {
 	RpcRetry          int           `toml:"rpc_retry" mapstructure:"rpc_retry" json:"rpc_retry"`
 	Userbot           userbotConfig `toml:"userbot" mapstructure:"userbot" json:"userbot"`
 	MediaGroupTimeout int           `toml:"media_group_timeout" mapstructure:"media_group_timeout" json:"media_group_timeout"`
+	ScanTimeout       time.Duration `toml:"scan_timeout" mapstructure:"scan_timeout" json:"scan_timeout"`
 }
 
 type userbotConfig struct {

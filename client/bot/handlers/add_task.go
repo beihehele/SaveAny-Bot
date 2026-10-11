@@ -57,6 +57,7 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 			})))
 			return dispatcher.EndGroups
 		}
+		acknowledgeCallback(ctx, queryID)
 		ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
 			ID:          update.CallbackQuery.GetMsgID(),
 			Message:     i18n.T(i18nk.BotMsgCommonPromptSelectDir, nil),
@@ -81,6 +82,10 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 
 	switch data.TaskType {
 	case tasktype.TaskTypeTgfiles:
+		if len(data.Files) == 0 {
+			return fmt.Errorf("callback contains no Telegram files")
+		}
+		acknowledgeCallback(ctx, queryID)
 		if data.AsBatch {
 			return shortcut.CreateAndAddBatchTGFileTaskWithEdit(ctx, userID, selectedStorage, dirPath, data.Files, msgID, data.ConflictStrategy)
 		}

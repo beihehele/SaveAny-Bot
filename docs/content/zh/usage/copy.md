@@ -56,7 +56,9 @@ msgre:plana&vip&(!spam)
 
 - 扫描使用 Telegram 服务端搜索（有关键词时）或历史分页（无 filter）
 - 进度分两阶段：扫描 → 发送，可点取消按钮或用 `/cancel` 停止
+- 进度消息编辑最多等待 5 秒；更新失败不会阻塞复制。取消后的终态反馈也有独立的 5 秒时限。
 - 同一用户同时只能有一个进行中的 `/copy` 任务
+- 每页扫描默认最多等待 5 分钟（含断线恢复及 `FLOOD_WAIT`）。通过 `[telegram] scan_timeout = "10m"` 或 `SAVEANY_TELEGRAM_SCAN_TIMEOUT=10m` 调整；超时明确失败，不发送部分扫描结果，也不会取消共享 Userbot 客户端。
 - 命中后 `forwardMessages`（DropAuthor）；相册整组转发，再编辑 caption 在开头加上可点击 `[转]`
 - `count` 按命中条数计（相册整组算 1 次命中）
 - 由 **UserBot 个人账号** 执行；原文字样式随转发保留

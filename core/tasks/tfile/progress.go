@@ -64,11 +64,7 @@ func (p *Progress) OnStart(ctx context.Context, info TaskInfo) {
 			},
 		}},
 	)
-	ext := tgutil.ExtFromContext(ctx)
-	if ext != nil {
-		ext.EditMessage(p.ChatID, req)
-		return
-	}
+	tgutil.EditProgress(ctx, p.ChatID, req, false)
 }
 
 func (p *Progress) OnProgress(ctx context.Context, info TaskInfo, downloaded, total int64) {
@@ -113,11 +109,7 @@ func (p *Progress) OnProgress(ctx context.Context, info TaskInfo, downloaded, to
 			},
 		}},
 	)
-	ext := tgutil.ExtFromContext(ctx)
-	if ext != nil {
-		ext.EditMessage(p.ChatID, req)
-		return
-	}
+	tgutil.EditProgress(ctx, p.ChatID, req, false)
 
 }
 
@@ -137,10 +129,7 @@ func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 	req.SetMessage(text)
 	req.SetEntities(entities)
 
-	ext := tgutil.ExtFromContext(ctx)
-	if ext != nil {
-		ext.EditMessage(p.ChatID, req)
-	}
+	tgutil.EditProgress(ctx, p.ChatID, req, true)
 }
 
 func completionMessage(ctx context.Context, info TaskInfo, err error) (string, []tg.MessageEntityClass, error) {

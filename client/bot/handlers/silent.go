@@ -104,6 +104,7 @@ func handleSetDefaultCallback(ctx *ext.Context, update *ext.Update) error {
 					"Error": err.Error(),
 				}))
 			}
+			acknowledgeCallback(ctx, update.CallbackQuery.GetQueryID())
 			ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
 				ID:          update.CallbackQuery.GetMsgID(),
 				Message:     i18n.T(i18nk.BotMsgCommonPromptSelectDefaultDir, nil),
@@ -127,6 +128,7 @@ func handleSetDefaultCallback(ctx *ext.Context, update *ext.Update) error {
 			"Dir":  strings.TrimPrefix(dir.Path, "/"),
 		})
 	}
+	acknowledgeCallback(ctx, update.CallbackQuery.GetQueryID())
 	ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
 		ID:      update.CallbackQuery.GetMsgID(),
 		Message: msg,

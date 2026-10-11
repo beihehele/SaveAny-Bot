@@ -56,7 +56,9 @@ Examples:
 
 - With keywords: Telegram server search (`messages.search`); without filter: history pagination
 - Two-phase progress: scanning → sending; cancel via the button or `/cancel`
+- Progress edits have a 5-second budget and do not block copying on failure. Terminal feedback after cancellation also has its own 5-second budget.
 - Only one running `/copy` task per user at a time
+- Each scan page waits at most 5 minutes by default, including reconnection and `FLOOD_WAIT`. Set `[telegram] scan_timeout = "10m"` or `SAVEANY_TELEGRAM_SCAN_TIMEOUT=10m` to adjust. A timeout fails the task without sending partial scan results or cancelling the shared Userbot client.
 - Matched messages are forwarded with `DropAuthor`; albums stay as one group; `[转]` is prepended by editing the caption
 - `count` is per hit (an album counts as one hit)
 - Performed by the **UserBot account**; original text formatting is preserved by forward

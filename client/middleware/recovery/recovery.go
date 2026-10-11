@@ -35,11 +35,23 @@ func New(ctx context.Context, newBackoff func() backoff.BackOff) telegram.Middle
 
 func (r *recovery) Handle(next tg.Invoker) telegram.InvokeFunc {
 	return func(ctx context.Context, input bin.Encoder, output bin.Decoder) error {
-		b := r.newBackoff()
+		// Cancellation must interrupt both an in-flight RPC and the backoff
+		// timer, including service shutdown while the caller is still alive.
+		rpcCtx, cancel := context.WithCancel(ctx)
+		stop := context.AfterFunc(r.ctx, cancel)
+		defer stop()
+		defer cancel()
+		if err := r.ctx.Err(); err != nil {
+			return err
+		}
+		b := backoff.WithContext(r.newBackoff(), rpcCtx)
 
 		return backoff.RetryNotify(func() error {
-			if err := next.Invoke(ctx, input, output); err != nil {
-				if r.shouldRecover(ctx, err) {
+			if err := rpcCtx.Err(); err != nil {
+				return backoff.Permanent(err)
+			}
+			if err := next.Invoke(rpcCtx, input, output); err != nil {
+				if r.shouldRecover(rpcCtx, err) {
 					return fmt.Errorf("recovery: %w", err)
 				}
 
