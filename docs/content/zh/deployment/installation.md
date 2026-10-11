@@ -135,3 +135,5 @@ docker compose up -d
 ```
 
 仅重启已有容器不会切换到刚拉取的新镜像. Compose 的 `up -d` 会根据镜像变化重建容器并保留挂载数据, 见 [Docker 官方说明](https://docs.docker.com/reference/cli/docker/compose/up/). 更新前将 `SAVEANY_IMAGE` 改为此次已验收的版本或 digest，并核对匹配的配置。
+
+日常启动、状态检查、停机备份及回退流程见[运维模板](../operations/)。

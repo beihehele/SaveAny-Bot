@@ -135,3 +135,5 @@ docker compose up -d
 ```
 
 Restarting an existing container does not select the newly pulled image. Compose `up -d` recreates containers when their image changes and preserves mounted data; see the [Docker reference](https://docs.docker.com/reference/cli/docker/compose/up/). Set `SAVEANY_IMAGE` to the verified version or digest for this update and check its matching configuration first.
+
+See the [operations template](../operations/) for startup, checks, stopped backups, and rollback.
