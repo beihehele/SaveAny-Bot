@@ -15,6 +15,8 @@ Endpoints: `POST /api/v1/tasks`, `GET /api/v1/tasks`, `GET /api/v1/tasks/{id}`, 
 
 `path` is a destination directory for both single files and albums. Bot/Userbot must have source access. Album links expand to the whole group unless `?single` is present. The API does not create watch/copy routes.
 
+Overlapping links within one submission are deduplicated by chat and message ID; identical message IDs in different chats stay independent. `?single` does not expand an album, while another link without it can still select that whole album. Deduplication does not affect later independent saves. Source queries honor HTTP request cancellation, discard partial selections on cancellation and preserve shared Bot/Userbot clients.
+
 An optional `webhook` receives terminal events. `result_policy` is unsupported for Telegram saves. Task records live in memory and disappear on restart; terminal records are retained for about 24 hours. Accepted tasks survive the originating HTTP request ending.
 
 

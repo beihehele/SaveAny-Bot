@@ -82,24 +82,18 @@ func GetFilesFromUpdateLinkMessageWithReplyEdit(ctx *ext.Context, update *ext.Up
 		}), nil)
 		return nil, nil, nil, dispatcher.EndGroups
 	}
-	files = make([]tfile.TGFileMessage, 0, len(msgLinks))
-	addFile := func(client downloader.Client, msg *tg.Message) {
+	var selected tfile.LinkedFiles
+	addFile := func(chatID int64, client downloader.Client, msg *tg.Message) {
 		if msg == nil || msg.Media == nil {
 			logger.Warn("message is nil, skipping")
 			return
 		}
-		media, ok := msg.GetMedia()
-		if !ok {
-			logger.Debugf("message %d has no media", msg.GetID())
-			return
-		}
 		opts := mediautil.TfileOptions(ctx, user, msg)
-		file, err := tfile.FromMediaMessage(media, client, msg, opts...)
+		err := selected.Add(chatID, client, msg, opts...)
 		if err != nil {
 			logger.Errorf("failed to create file from media: %s", err)
 			return
 		}
-		files = append(files, file)
 	}
 
 	tctx := ctx
@@ -132,13 +126,14 @@ func GetFilesFromUpdateLinkMessageWithReplyEdit(ctx *ext.Context, update *ext.Up
 				logger.Errorf("failed to get grouped messages: %s", err)
 			} else {
 				for _, gmsg := range gmsgs {
-					addFile(tctx.Raw, gmsg)
+					addFile(chatId, tctx.Raw, gmsg)
 				}
 			}
 		} else {
-			addFile(tctx.Raw, msg)
+			addFile(chatId, tctx.Raw, msg)
 		}
 	}
+	files = selected.Files()
 	if len(files) == 0 {
 		editReplied(i18n.T(i18nk.BotMsgCommonErrorNoSavableFilesFound, nil), nil)
 		return nil, nil, nil, dispatcher.EndGroups

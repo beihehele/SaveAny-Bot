@@ -39,7 +39,10 @@ func getClientContext() (*ext.Context, error) {
 }
 
 // resolveChatID 解析聊天 ID
-func resolveChatID(_ context.Context, idOrUsername string) (int64, error) {
+func resolveChatID(ctx context.Context, idOrUsername string) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	// 如果是数字 ID
 	if id, err := strconv.ParseInt(idOrUsername, 10, 64); err == nil {
 		// 私有频道 ID 需要加上 -100 前缀
@@ -56,7 +59,7 @@ func resolveChatID(_ context.Context, idOrUsername string) (int64, error) {
 	}
 
 	// 使用 tgutil 的 ParseChatID
-	return tgutil.ParseChatID(clientCtx, idOrUsername)
+	return tgutil.ParseChatID(tgutil.ClientWithContext(ctx, clientCtx), idOrUsername)
 }
 
 // ParseMessageLink 解析 Telegram 消息链接
@@ -128,22 +131,34 @@ func ParseMessageLink(ctx context.Context, link string) (int64, int, error) {
 
 // getMessageWithContext 通过 ID 获取消息，返回消息和使用的 context
 // 确保消息获取和后续文件创建使用同一个 context
-func getMessageWithContext(_ context.Context, chatID int64, msgID int) (*MessageContext, error) {
+func getMessageWithContext(ctx context.Context, chatID int64, msgID int) (*MessageContext, error) {
+	return getMessageFromClients(ctx, chatID, msgID, bot.ExtContext(), userclient.GetCtx())
+}
+
+func getMessageFromClients(ctx context.Context, chatID int64, msgID int, botCtx, uc *ext.Context) (*MessageContext, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// 首先尝试使用 Bot
-	if botCtx := bot.ExtContext(); botCtx != nil {
-		msg, err := tgutil.GetMessageByID(botCtx, chatID, msgID)
+	if botCtx != nil {
+		msg, err := tgutil.GetMessageByID(tgutil.ClientWithContext(ctx, botCtx), chatID, msgID)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if err == nil {
 			return &MessageContext{Message: msg, Client: botCtx}, nil
 		}
 	}
 
 	// 回退到 Userbot
-	uc := userclient.GetCtx()
 	if uc == nil {
 		return nil, fmt.Errorf("userbot not initialized and bot cannot access this message")
 	}
 
-	msg, err := tgutil.GetMessageByID(uc, chatID, msgID)
+	msg, err := tgutil.GetMessageByID(tgutil.ClientWithContext(ctx, uc), chatID, msgID)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -153,9 +168,12 @@ func getMessageWithContext(_ context.Context, chatID int64, msgID int) (*Message
 
 // getGroupedMessagesWithContext 获取媒体组消息，返回消息列表和使用的 context
 // 确保消息获取和后续文件创建使用同一个 context
-func getGroupedMessagesWithContext(ctx *MessageContext, chatID int64) ([]*tg.Message, error) {
-	msg := ctx.Message
-	clientCtx := ctx.Client
+func getGroupedMessagesWithContext(ctx context.Context, source *MessageContext, chatID int64) ([]*tg.Message, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	msg := source.Message
+	clientCtx := tgutil.ClientWithContext(ctx, source.Client)
 
 	groupID, ok := msg.GetGroupedID()
 	if !ok || groupID == 0 {
@@ -164,6 +182,9 @@ func getGroupedMessagesWithContext(ctx *MessageContext, chatID int64) ([]*tg.Mes
 
 	// 使用获取原始消息的同一个 client 获取媒体组
 	msgs, err := tgutil.GetGroupedMessages(clientCtx, chatID, msg)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if err != nil || len(msgs) == 0 {
 		// 如果获取失败，至少返回原始消息
 		return []*tg.Message{msg}, nil
@@ -176,10 +197,20 @@ func getGroupedMessagesWithContext(ctx *MessageContext, chatID int64) ([]*tg.Mes
 // 每个文件的处理流程：解析链接 -> 获取消息 -> 获取媒体组 -> 创建文件对象
 // 对于单个文件，全程使用同一个 client context，不会交叉
 func ExtractFilesFromLinks(ctx context.Context, links []string) ([]tfile.TGFileMessage, error) {
+	return extractFilesFromLinks(ctx, links, ParseMessageLink, getMessageWithContext)
+}
+
+func extractFilesFromLinks(ctx context.Context, links []string,
+	parseLink func(context.Context, string) (int64, int, error),
+	getMessage func(context.Context, int64, int) (*MessageContext, error),
+) ([]tfile.TGFileMessage, error) {
 	logger := log.FromContext(ctx)
-	var files []tfile.TGFileMessage
+	var files tfile.LinkedFiles
 
 	for _, link := range links {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		link = strings.TrimSpace(link)
 		if link == "" {
 			continue
@@ -191,7 +222,10 @@ func ExtractFilesFromLinks(ctx context.Context, links []string) ([]tfile.TGFileM
 			continue
 		}
 
-		chatID, msgID, err := ParseMessageLink(ctx, link)
+		chatID, msgID, err := parseLink(ctx, link)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if err != nil {
 			logger.Errorf("Failed to parse message link %s: %v", link, err)
 			continue
@@ -202,7 +236,10 @@ func ExtractFilesFromLinks(ctx context.Context, links []string) ([]tfile.TGFileM
 		single := u != nil && u.Query().Has("single")
 
 		// 获取消息和使用的 context（Bot 优先，失败回退 Userbot）
-		msgCtx, err := getMessageWithContext(ctx, chatID, msgID)
+		msgCtx, err := getMessage(ctx, chatID, msgID)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if err != nil {
 			logger.Errorf("Failed to get message %d from chat %d: %v", msgID, chatID, err)
 			continue
@@ -216,54 +253,45 @@ func ExtractFilesFromLinks(ctx context.Context, links []string) ([]tfile.TGFileM
 			continue
 		}
 
-		media, ok := msg.GetMedia()
-		if !ok {
-			logger.Warnf("Failed to get media from message %d", msgID)
-			continue
-		}
-
 		// 检查是否是媒体组
 		groupID, isGroup := msg.GetGroupedID()
 		if isGroup && groupID != 0 && !single {
 			// 使用同一个 client context 获取媒体组
-			groupMsgs, err := getGroupedMessagesWithContext(msgCtx, chatID)
+			groupMsgs, err := getGroupedMessagesWithContext(ctx, msgCtx, chatID)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			if err != nil {
 				logger.Errorf("Failed to get grouped messages: %v", err)
 			} else {
 				for _, gmsg := range groupMsgs {
-					if gmsg.Media == nil {
-						continue
-					}
-					gmedia, ok := gmsg.GetMedia()
-					if !ok {
-						continue
-					}
 					// 使用获取消息时使用的同一个 client context 创建文件
-					file, err := tfile.FromMediaMessage(gmedia, clientCtx.Raw, gmsg)
+					err := files.Add(chatID, clientCtx.Raw, gmsg)
 					if err != nil {
 						logger.Errorf("Failed to create file from media: %v", err)
 						continue
 					}
-					files = append(files, file)
 				}
 				continue
 			}
 		}
 
 		// 单个文件 - 使用获取消息时使用的同一个 client context 创建文件
-		file, err := tfile.FromMediaMessage(media, clientCtx.Raw, msg)
+		err = files.Add(chatID, clientCtx.Raw, msg)
 		if err != nil {
 			logger.Errorf("Failed to create file from media: %v", err)
 			continue
 		}
-		files = append(files, file)
 	}
 
-	if len(files) == 0 {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(files.Files()) == 0 {
 		return nil, fmt.Errorf("no files found in provided links")
 	}
 
-	return files, nil
+	return files.Files(), nil
 }
 
 // isValidMessageLink 检查是否是有效的 Telegram 消息链接
