@@ -43,7 +43,9 @@ func scanPage(ctx context.Context, uctx *ext.Context, sourceID int64, offsetID i
 	if err == nil {
 		err = pageCtx.Err()
 	}
-	logger.Debug("Copy scan page finished", "mode", mode, "source", sourceID, "offset_id", offsetID, "messages", len(msgs), "duration", time.Since(started), "error", err)
+	elapsed := time.Since(started)
+	scanStats.record(search, elapsed, err)
+	logger.Debug("Copy scan page finished", "mode", mode, "source", sourceID, "offset_id", offsetID, "messages", len(msgs), "duration", elapsed, "error", err)
 	if err != nil {
 		return nil, fmt.Errorf("copy %s page (source %d offset %d): %w", mode, sourceID, offsetID, err)
 	}

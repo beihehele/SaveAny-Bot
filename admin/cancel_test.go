@@ -19,7 +19,7 @@ func TestAdminQueuedCopyCancellationReleasesOwnership(t *testing.T) {
 		t.Fatal("cannot acquire slot")
 	}
 	t.Cleanup(func() { copyfwd.End(user, id); copyfwd.End(user, id+"-next") })
-	task := copyfwd.NewTask(id, user, 100, 200, 0, "", 1, 0, 0, nil)
+	task := copyfwd.NewTask(id, user, 100, 200, 0, "", 1, nil)
 	if err := core.AddTask(t.Context(), task); err != nil {
 		t.Fatal(err)
 	}

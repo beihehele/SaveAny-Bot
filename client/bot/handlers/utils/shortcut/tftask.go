@@ -90,7 +90,7 @@ startCreateTask:
 		injectCtx = storage.WithOverwrite(injectCtx)
 	}
 	taskid := xid.New().String()
-	task, err := tftask.NewTGFileTask(taskid, injectCtx, file, stor, storagePath,
+	task, err := tftask.NewTGFileTask(taskid, file, stor, storagePath,
 		tftask.NewProgressTrack(
 			trackMsgID,
 			userID))
@@ -283,7 +283,7 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 		return dispatcher.EndGroups
 	}
 	taskid := xid.New().String()
-	task := batchtfile.NewBatchTGFileTask(taskid, injectCtx, elems, batchtfile.NewProgressTrackerWithSkipped(trackMsgID, userID, skipped))
+	task := batchtfile.NewBatchTGFileTask(taskid, elems, batchtfile.NewProgressTrackerWithSkipped(trackMsgID, userID, skipped))
 	if err := core.AddTask(injectCtx, task); err != nil {
 		logger.Errorf("Failed to add batch task: %s", err)
 		ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{

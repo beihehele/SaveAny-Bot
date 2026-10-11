@@ -107,7 +107,7 @@ func TestStreamTerminatesAndPreservesErrors(t *testing.T) {
 				}
 			}}
 			file := filepkg.NewTGFile(&tg.InputDocumentFileLocation{}, client, 4, "file.bin")
-			task := &Task{ID: "stream-test", Ctx: ctx, Storage: stor, Path: "file.bin",
+			task := &Task{ID: "stream-test", Storage: stor, Path: "file.bin",
 				File: file, stream: true}
 			run := func() error { return task.Execute(ctx) }
 			done := make(chan error, 1)

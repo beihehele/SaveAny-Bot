@@ -58,7 +58,7 @@ func TestConcurrentSameIDAndNameOwnDistinctCacheFiles(t *testing.T) {
 			}
 			return err
 		}}
-		task, err := NewTGFileTask("same-id", ctx, file, stor, "same.bin", nil)
+		task, err := NewTGFileTask("same-id", file, stor, "same.bin", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +115,7 @@ func TestCacheDoesNotUseResourceNameOrTaskID(t *testing.T) {
 	for index, name := range []string{"../../../sentinel.bin", `..\..\..\sentinel.bin`, sentinel, strings.Repeat("a", 400) + ".bin", "normal.bin"} {
 		t.Run(fmt.Sprint(index), func(t *testing.T) {
 			p := fmt.Sprintf("file-%d.bin", index)
-			task, err := NewTGFileTask("../../../task-id", t.Context(), fixtureFile(name, nil), stor, p, nil)
+			task, err := NewTGFileTask("../../../task-id", fixtureFile(name, nil), stor, p, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

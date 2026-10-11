@@ -52,7 +52,7 @@ func TestBatchSkipDoesNotCancelRemainingFilesOrRetry(t *testing.T) {
 					cacheDir: t.TempDir(),
 					File:     filepkg.NewTGFile(&tg.InputDocumentFileLocation{}, downloadClient{}, 4, name)}
 			}
-			task := NewBatchTGFileTask("skip-test", t.Context(), elems, nil)
+			task := NewBatchTGFileTask("skip-test", elems, nil)
 			if err := task.Execute(t.Context()); err != nil {
 				t.Fatal(err)
 			}

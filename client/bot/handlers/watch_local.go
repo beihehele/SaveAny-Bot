@@ -203,9 +203,8 @@ func buildWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Sto
 		}
 	}
 	storagePath := path.Join(dirPath, file.Name())
-	injectCtx := tgutil.ExtWithContext(ctx.Context, ctx)
 	taskid := xid.New().String()
-	return coretfile.NewTGFileTask(taskid, injectCtx, file, fileStor, storagePath, nil)
+	return coretfile.NewTGFileTask(taskid, file, fileStor, storagePath, nil)
 }
 
 func createWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Storage, defaultDirPath string, file tfile.TGFileMessage) {
@@ -359,7 +358,6 @@ func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.
 	}
 
 	// Process album files with folder creation
-	injectCtx := tgutil.ExtWithContext(ctx.Context, ctx)
 	totalTasks := 0
 	for groupID, afiles := range albumFiles {
 		if len(afiles) <= 1 {
@@ -376,7 +374,7 @@ func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.
 		for _, af := range afiles {
 			afstorPath := path.Join(af.dirPath, albumDir, af.file.Name())
 			taskid := xid.New().String()
-			task, err := coretfile.NewTGFileTask(taskid, injectCtx, af.file, albumStor, afstorPath, nil)
+			task, err := coretfile.NewTGFileTask(taskid, af.file, albumStor, afstorPath, nil)
 			if err != nil {
 				logger.Errorf("create task failed for album file: %s", err)
 				continue

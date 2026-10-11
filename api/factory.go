@@ -150,7 +150,7 @@ func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req 
 	var task core.Executable
 
 	if len(files) == 1 {
-		tfileTask, err := tfile.NewTGFileTask(taskID, f.ctx, files[0], stor, path.Join(req.Path, files[0].Name()), nil)
+		tfileTask, err := tfile.NewTGFileTask(taskID, files[0], stor, path.Join(req.Path, files[0].Name()), nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tfile task: %w", err)
 		}
@@ -165,7 +165,7 @@ func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req 
 			elems = append(elems, *elem)
 		}
 
-		task = batchtfile.NewBatchTGFileTask(taskID, f.ctx, elems, nil)
+		task = batchtfile.NewBatchTGFileTask(taskID, elems, nil)
 	}
 
 	err = f.registerAndEnqueueTask(task, tasktype.TaskTypeTgfiles, req.Storage, req.Path, req.Webhook, report)

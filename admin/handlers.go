@@ -17,6 +17,7 @@ import (
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
 	"github.com/krau/SaveAny-Bot/core/taskcontrol"
+	"github.com/krau/SaveAny-Bot/core/tasks/copyfwd"
 	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/inputresult"
@@ -283,6 +284,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		}, "audit": s.audit.snapshot(),
 		"watch":    userclient.GetMediaMessageStats(),
 		"disks":    localDiskObservations(),
+		"scans":    copyfwd.GetScanStats(),
 		"telegram": map[string]bool{"bot_initialized": s.botInitialized, "userbot_initialized": s.userbotInitialized},
 	})
 }

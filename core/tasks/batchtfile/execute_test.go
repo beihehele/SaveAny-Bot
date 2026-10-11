@@ -47,7 +47,7 @@ func TestExecuteWithoutProgress(t *testing.T) {
 			elem := TaskElement{ID: "file", Storage: &executionStorage{}, Path: "file.bin", stream: tc.stream,
 				cacheDir: t.TempDir(),
 				File:     tfile.NewTGFile(&tg.InputDocumentFileLocation{}, downloadClient{}, 4, "file.bin")}
-			task := NewBatchTGFileTask("test", t.Context(), []TaskElement{elem}, nil)
+			task := NewBatchTGFileTask("test", []TaskElement{elem}, nil)
 			if tc.duplicate {
 				task.processing[elem.ID] = &elem
 			}

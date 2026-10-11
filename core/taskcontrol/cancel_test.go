@@ -76,7 +76,7 @@ func TestCancelCopyOwnership(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("worker did not start")
 	}
-	queued := copyfwd.NewTask("queued-copy", 91002, 100, 200, 0, "", 1, 0, 0, nil)
+	queued := copyfwd.NewTask("queued-copy", 91002, 100, 200, 0, "", 1, nil)
 	if !copyfwd.TryBegin(91002, queued.TaskID()) {
 		t.Fatal("cannot acquire queued slot")
 	}

@@ -1,7 +1,6 @@
 package batchtfile
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -29,7 +28,6 @@ type TaskElement struct {
 
 type Task struct {
 	ID           string
-	ctx          context.Context
 	elems        []TaskElement
 	Progress     ProgressTracker
 	downloaded   atomic.Int64
@@ -79,13 +77,11 @@ func NewTaskElement(
 
 func NewBatchTGFileTask(
 	id string,
-	ctx context.Context,
 	files []TaskElement,
 	progress ProgressTracker,
 ) *Task {
 	task := &Task{
 		ID:         id,
-		ctx:        ctx,
 		elems:      files,
 		Progress:   progress,
 		downloaded: atomic.Int64{},

@@ -154,8 +154,6 @@ func handleCopyCmd(ctx *ext.Context, update *ext.Update) error {
 		targetTopicID,
 		filter,
 		parsed.Count,
-		userChatID,
-		msg.ID,
 		progress,
 	)
 	injectCtx := tgutil.ExtWithContext(ctx.Context, ctx)

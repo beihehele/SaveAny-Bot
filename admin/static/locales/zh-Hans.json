@@ -201,5 +201,18 @@
   "input_code_message_unavailable": "无法获取消息",
   "input_code_no_media": "没有可保存媒体",
   "input_code_unsupported_media": "存在不支持的媒体",
-  "input_code_album_unavailable": "无法获取媒体组"
+  "input_code_album_unavailable": "无法获取媒体组",
+  "scanHealth": "历史复制扫描",
+  "scanHealthNote": "自本次启动累计的扫描页统计。超时与取消计入失败；耗时不是整项任务耗时，未扫描时显示暂无记录。",
+  "scanMode": "扫描方式",
+  "scan_history": "历史遍历",
+  "scan_search": "关键词搜索",
+  "scanPages": "扫描页数",
+  "scanSucceeded": "成功页",
+  "scanFailed": "失败页",
+  "scanTimedOut": "超时页",
+  "scanCancelled": "取消页",
+  "scanLastDuration": "最近耗时",
+  "scanMaxDuration": "最长耗时",
+  "scanNoSamples": "暂无记录"
 }

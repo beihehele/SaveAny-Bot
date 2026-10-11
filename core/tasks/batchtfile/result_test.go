@@ -52,7 +52,7 @@ func TestResultSummaryPreservesBatchFailurePolicy(t *testing.T) {
 			}
 			// Sequential processing lets duplicate IDs finish one at a time;
 			// results must still account for each distinct submitted element.
-			task := NewBatchTGFileTask("summary-test", t.Context(), elems, nil)
+			task := NewBatchTGFileTask("summary-test", elems, nil)
 			if task.ResultSummary().Pending != 2 {
 				t.Fatal("constructor counted unprocessed files as successful")
 			}

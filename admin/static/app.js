@@ -333,6 +333,7 @@
         definitions($("runtime-settings"), Object.entries(data.settings).map(([key, value]) => [t(`setting_${key}`), value]));
         definitions($("watch-health"), [[t("watchPending"), data.watch?.Pending], [t("watchBuffered"), data.watch?.Buffered], [t("watchCapacity"), data.watch?.Capacity], [t("watchEnqueued"), data.watch?.Enqueued], [t("watchDropped"), data.watch?.Dropped], [t("botInitialized"), data.telegram?.bot_initialized], [t("userbotInitialized"), data.telegram?.userbot_initialized]]);
         table($("disk-health"), ["storage", "availableDisk"], (data.disks || []).map((disk) => [disk.storage, disk.available ? bytes(disk.available_bytes) : t("unavailable")]));
+        table($("scan-health"), ["scanMode", "scanPages", "scanSucceeded", "scanFailed", "scanTimedOut", "scanCancelled", "scanLastDuration", "scanMaxDuration"], (data.scans || []).map((scan) => [t(`scan_${scan.mode}`), scan.pages, scan.succeeded, scan.failed, scan.timed_out, scan.cancelled, scan.pages ? Number(scan.last_duration_ms).toFixed(1) + " ms" : t("scanNoSamples"), scan.pages ? Number(scan.max_duration_ms).toFixed(1) + " ms" : t("scanNoSamples")]));
         table($("audit-table"), ["time", "operation", "object", "result"], data.audit.map((entry) => [date(entry.time), t(`audit_${entry.action}`), entry.object || "—", t(entry.result)]));
       }
       if (sequence === state.sequence) $("last-refresh").textContent = `${t("lastRefreshed")} ${new Date().toLocaleTimeString(state.language)}`;

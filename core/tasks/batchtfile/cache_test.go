@@ -46,7 +46,7 @@ func TestAlbumCacheIgnoresFilenamesAndCleansOwnedFiles(t *testing.T) {
 	if _, err := os.Stat(cacheDir); !os.IsNotExist(err) {
 		t.Fatalf("constructor allocated cache: %v", err)
 	}
-	task := NewBatchTGFileTask("album", t.Context(), elems, nil)
+	task := NewBatchTGFileTask("album", elems, nil)
 	if err := task.Execute(t.Context()); err != nil {
 		t.Fatal(err)
 	}

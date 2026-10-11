@@ -201,5 +201,18 @@
   "input_code_message_unavailable": "Message could not be fetched",
   "input_code_no_media": "No savable media",
   "input_code_unsupported_media": "Contains unsupported media",
-  "input_code_album_unavailable": "Media group could not be fetched"
+  "input_code_album_unavailable": "Media group could not be fetched",
+  "scanHealth": "History copy scans",
+  "scanHealthNote": "Completed scan pages since startup. Timeouts and cancellations are failures; durations are per page, not per task. No samples means no scans have completed.",
+  "scanMode": "Scan mode",
+  "scan_history": "History",
+  "scan_search": "Keyword search",
+  "scanPages": "Pages",
+  "scanSucceeded": "Succeeded",
+  "scanFailed": "Failed",
+  "scanTimedOut": "Timed out",
+  "scanCancelled": "Cancelled",
+  "scanLastDuration": "Last duration",
+  "scanMaxDuration": "Maximum duration",
+  "scanNoSamples": "No samples"
 }

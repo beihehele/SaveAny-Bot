@@ -130,7 +130,7 @@ func TestWatchAlbumAdmissionPreservesCaptionNamingAndRules(t *testing.T) {
 				}
 				task := wrapped.Data.(*coretfile.Task)
 				if task.Path != want || task.Storage != stor || task.File != files[index] ||
-					tgutil.ExtFromContext(task.Ctx) != ctx || task.Ctx.Err() != nil {
+					tgutil.ExtFromContext(wrapped.Context()) != ctx || wrapped.Context().Err() != nil {
 					t.Fatalf("member %d lost naming, rules, storage, order, or context: %+v", index, task)
 				}
 				qe.Done(wrapped.ID)

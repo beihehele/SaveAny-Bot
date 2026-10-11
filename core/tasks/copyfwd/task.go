@@ -17,8 +17,6 @@ type Task struct {
 	TargetTopicID int
 	Filter        string
 	Count         int
-	ProgressChat  int64
-	ProgressMsgID int
 	Progress      ProgressTracker
 }
 
@@ -41,8 +39,6 @@ func NewTask(
 	targetTopicID int,
 	filter string,
 	count int,
-	progressChat int64,
-	progressMsgID int,
 	progress ProgressTracker,
 ) *Task {
 	return &Task{
@@ -53,8 +49,6 @@ func NewTask(
 		TargetTopicID: targetTopicID,
 		Filter:        filter,
 		Count:         count,
-		ProgressChat:  progressChat,
-		ProgressMsgID: progressMsgID,
 		Progress:      progress,
 	}
 }

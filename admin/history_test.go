@@ -33,7 +33,7 @@ func TestConsoleRetainsBotFailureAndRedactsIt(t *testing.T) {
 		t.Fatalf("invalid history projection: %d %s", response.Code, body)
 	}
 	diagnostics := perform(s, http.MethodGet, "/admin/api/v1/diagnostics", "", cookie, csrf, "")
-	if diagnostics.Code != 200 || !strings.Contains(diagnostics.Body.String(), "\"watch\":") || !strings.Contains(diagnostics.Body.String(), "\"disks\":") || strings.Contains(diagnostics.Body.String(), "sensitive-token") {
+	if diagnostics.Code != 200 || !strings.Contains(diagnostics.Body.String(), "\"watch\":") || !strings.Contains(diagnostics.Body.String(), "\"disks\":") || !strings.Contains(diagnostics.Body.String(), "\"scans\":") || strings.Contains(diagnostics.Body.String(), "sensitive-token") {
 		t.Fatal("diagnostic whitelist invalid")
 	}
 }

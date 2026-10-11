@@ -1,7 +1,6 @@
 package tfile
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 
@@ -16,7 +15,6 @@ var _ core.Executable = (*Task)(nil)
 
 type Task struct {
 	ID       string
-	Ctx      context.Context
 	File     tfile.TGFile
 	Storage  storage.Storage
 	Path     string
@@ -36,7 +34,6 @@ func (t *Task) Type() tasktype.TaskType {
 
 func NewTGFileTask(
 	id string,
-	ctx context.Context,
 	file tfile.TGFile,
 	stor storage.Storage,
 	path string,
@@ -50,7 +47,6 @@ func NewTGFileTask(
 		}
 		tfile := &Task{
 			ID:       id,
-			Ctx:      ctx,
 			File:     file,
 			Storage:  stor,
 			Path:     path,
@@ -61,7 +57,6 @@ func NewTGFileTask(
 	}
 	tfileTask := &Task{
 		ID:       id,
-		Ctx:      ctx,
 		File:     file,
 		Storage:  stor,
 		Path:     path,

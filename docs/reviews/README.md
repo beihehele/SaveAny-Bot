@@ -1,6 +1,6 @@
 # Review records
 
-The current remaining-work assessment is [2026-10-11-remaining-work.md](2026-10-11-remaining-work.md), based on local code commit `44c388b`. It separates completed checks, candidate release gates, server migration requirements, and optional improvements. Re-evaluate it when the candidate revision or deployment changes.
+The current follow-up is [2026-10-11-remaining-implementation.md](2026-10-11-remaining-implementation.md). It records implemented cleanup and scan observations, candidate validation gates, and the confirmed Linux/amd64 NAS target. The preceding [assessment](2026-10-11-remaining-work.md) preserves the state at local commit `44c388b`. Release readiness still requires the exact candidate revision and deployment evidence.
 
 Dated reports describe the code and checks at that point in time. Reports preceding the Telegram-only cleanup include features no longer supported and are historical evidence, not current setup instructions.
 
