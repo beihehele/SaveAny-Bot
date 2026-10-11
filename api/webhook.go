@@ -28,6 +28,15 @@ func SendWebhook(ctx context.Context, payload *WebhookPayload) {
 	}
 
 	webhookURL := info.Webhook
+	sendWebhook(ctx, webhookURL, payload)
+}
+
+// sendWebhook receives the destination captured with the terminal decision.
+// History eviction must not suppress delivery or change the retry destination.
+func sendWebhook(ctx context.Context, webhookURL string, payload *WebhookPayload) {
+	if payload == nil || payload.TaskID == "" || webhookURL == "" {
+		return
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}

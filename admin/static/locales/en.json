@@ -25,7 +25,7 @@
   "capabilityNote": "Checks local prerequisites. Availability does not guarantee network or remote service connectivity.",
   "recentTasks": "Recent tracked and active tasks",
   "viewAll": "View all",
-  "taskScopeNote": "Recent results cover Bot, web and API queue tasks. Records are in memory and reset at restart; Bot terminal records retain up to 1000 entries for 24 hours. Watch forwarding outside the queue is excluded.",
+  "taskScopeNote": "Recent results cover Bot, web and API queue tasks and reset at restart. Web/API history and Bot queue observations each retain up to 1000 terminal entries for about 24 hours, merged by task. Queued, executing and cancellation-cleanup tasks are exempt from history limits. Watch forwarding outside the queue is excluded.",
   "search": "Search",
   "searchTasks": "Search title, task ID, or storage",
   "status": "Status",

@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"time"
 
+	"github.com/krau/SaveAny-Bot/core"
 	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
@@ -15,7 +17,8 @@ import (
 // guarded by mu. It implements taskevent.Sink so the task layer can update it
 // without knowing about the API.
 type TaskProgressInfo struct {
-	mu sync.Mutex
+	mu    sync.Mutex
+	store *progressStore
 	inputresult.Report
 	TaskID          string
 	Type            string
@@ -37,22 +40,31 @@ type TaskProgressInfo struct {
 	ResultSummary   *taskresult.Counts
 }
 
-// progressStore holds all API tasks. Entries are removed a fixed duration after
-// they reach a terminal state to bound memory usage.
+// progressStore retains active API/web tasks and a bounded recent terminal history.
 type progressStore struct {
-	mu        sync.RWMutex
-	tasks     map[string]*TaskProgressInfo
-	retention time.Duration
+	mu            sync.RWMutex
+	tasks         map[string]*TaskProgressInfo
+	retention     time.Duration
+	terminalLimit int
 }
 
+// terminalHistoryLimit is the API/web history budget, independent of Bot history.
+const terminalHistoryLimit = 1000
+
 var store = &progressStore{
-	tasks:     make(map[string]*TaskProgressInfo),
-	retention: 24 * time.Hour,
+	tasks:         make(map[string]*TaskProgressInfo),
+	retention:     24 * time.Hour,
+	terminalLimit: terminalHistoryLimit,
 }
 
 // RegisterTask registers a new API task and returns its progress info.
 func RegisterTask(taskID, taskType, storage, path, title, webhook string) *TaskProgressInfo {
+	return store.register(taskID, taskType, storage, path, title, webhook)
+}
+
+func (s *progressStore) register(taskID, taskType, storage, path, title, webhook string) *TaskProgressInfo {
 	info := &TaskProgressInfo{
+		store:     s,
 		TaskID:    taskID,
 		Type:      taskType,
 		Status:    TaskStatusQueued,
@@ -64,9 +76,10 @@ func RegisterTask(taskID, taskType, storage, path, title, webhook string) *TaskP
 		Webhook:   webhook,
 	}
 
-	store.mu.Lock()
-	store.tasks[taskID] = info
-	store.mu.Unlock()
+	s.mu.Lock()
+	s.pruneLocked(time.Now())
+	s.tasks[taskID] = info
+	s.mu.Unlock()
 
 	return info
 }
@@ -81,8 +94,9 @@ func GetTask(taskID string) (*TaskProgressInfo, bool) {
 
 // GetAllTasks returns all tracked tasks.
 func GetAllTasks() []*TaskProgressInfo {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.pruneLocked(time.Now())
 
 	tasks := make([]*TaskProgressInfo, 0, len(store.tasks))
 	for _, info := range store.tasks {
@@ -98,20 +112,55 @@ func DeleteTask(taskID string) {
 	delete(store.tasks, taskID)
 }
 
-// CleanupExpired removes tasks that reached a terminal state more than the
-// store's retention duration ago. It is safe to call periodically.
+// CleanupExpired removes expired or surplus terminal records. Executing tasks,
+// including cancelled tasks awaiting final counts, are never evicted.
 func CleanupExpired() {
-	now := time.Now()
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	for id, info := range store.tasks {
+	store.prune(time.Now())
+}
+
+func (s *progressStore) prune(now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneLocked(now)
+}
+
+func (s *progressStore) pruneLocked(now time.Time) {
+	type terminalRecord struct {
+		id        string
+		updatedAt time.Time
+	}
+	var done []terminalRecord
+	for id, info := range s.tasks {
 		info.mu.Lock()
-		terminal := info.Status == TaskStatusCompleted || info.Status == TaskStatusFailed || info.Status == TaskStatusCancelled
-		stale := terminal && now.Sub(info.UpdatedAt) > store.retention
+		terminal, updatedAt := info.Status.terminal(), info.UpdatedAt
 		info.mu.Unlock()
-		if stale {
-			delete(store.tasks, id)
+		if !terminal || core.IsTaskExecuting(id) {
+			continue
 		}
+		if now.Sub(updatedAt) >= s.retention {
+			delete(s.tasks, id)
+			continue
+		}
+		done = append(done, terminalRecord{id: id, updatedAt: updatedAt})
+	}
+	limit := max(0, s.terminalLimit)
+	if len(done) <= limit {
+		return
+	}
+	sort.Slice(done, func(i, j int) bool {
+		if done[i].updatedAt.Equal(done[j].updatedAt) {
+			return done[i].id < done[j].id
+		}
+		return done[i].updatedAt.Before(done[j].updatedAt)
+	})
+	for _, record := range done[:len(done)-limit] {
+		delete(s.tasks, record.id)
+	}
+}
+
+func (t *TaskProgressInfo) pruneHistory(status TaskStatus) {
+	if status.terminal() && t.store != nil {
+		t.store.prune(time.Now())
 	}
 }
 
@@ -146,8 +195,10 @@ func (t *TaskProgressInfo) UpdateStatus(status TaskStatus) {
 	}
 	payload := t.notificationLocked()
 	ctx := t.webhookContext
+	webhook := t.Webhook
 	t.mu.Unlock()
-	SendWebhook(ctx, payload)
+	sendWebhook(ctx, webhook, payload)
+	t.pruneHistory(status)
 }
 
 // SetError marks the task failed with an error message.
@@ -162,8 +213,10 @@ func (t *TaskProgressInfo) SetError(err string) {
 	t.UpdatedAt = time.Now()
 	payload := t.notificationLocked()
 	ctx := t.webhookContext
+	webhook := t.Webhook
 	t.mu.Unlock()
-	SendWebhook(ctx, payload)
+	sendWebhook(ctx, webhook, payload)
+	t.pruneHistory(TaskStatusFailed)
 }
 
 // snapshot returns a point-in-time copy of the fields needed to render a
@@ -257,8 +310,10 @@ func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 	t.UpdatedAt = time.Now()
 	payload := t.notificationLocked()
 	ctx := t.webhookContext
+	webhook, status := t.Webhook, t.Status
 	t.mu.Unlock()
-	SendWebhook(ctx, payload)
+	sendWebhook(ctx, webhook, payload)
+	t.pruneHistory(status)
 }
 
 func (t *TaskProgressInfo) acceptResultSummaryLocked(summary *taskresult.Counts) bool {
