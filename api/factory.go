@@ -147,7 +147,7 @@ func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req 
 			elems = append(elems, *elem)
 		}
 
-		task = batchtfile.NewBatchTGFileTask(taskID, f.ctx, elems, nil, true)
+		task = batchtfile.NewBatchTGFileTask(taskID, f.ctx, elems, nil)
 	}
 
 	err = f.registerAndEnqueueTask(task, tasktype.TaskTypeTgfiles, req.Storage, req.Path, req.Webhook)

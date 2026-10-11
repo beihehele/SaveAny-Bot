@@ -1,4 +1,4 @@
-baseURL = 'https://sabot.unv.app/'
+baseURL = '/'
 title = 'Save Any Bot'
 disablePathToLower = true
 enableGitInfo = true
@@ -16,7 +16,7 @@ BookLogo = 'logo.png'
 BookSection = '*'
 BookRepo = 'https://github.com/beihehele/SaveAny-Bot'
 BookCommitPath = 'commit'
-BookEditPath = 'edit/main/docs'
+BookEditPath = 'edit/dev/docs'
 BookDateFormat = '2006/01/02'
 BookSearch = false
 

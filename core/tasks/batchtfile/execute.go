@@ -131,7 +131,7 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 		return nil
 	}
 	logger.Info("Starting file download")
-	localFile, err := fsutil.CreateFile(elem.localPath)
+	localFile, err := fsutil.CreateTempFile(elem.cacheDir, "telegram-*")
 	if err != nil {
 		return fmt.Errorf("failed to create local file: %w", err)
 	}
@@ -140,6 +140,7 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 			logger.Errorf("Failed to close local file: %v", err)
 		}
 	}()
+	localPath := localFile.Name()
 	wrAt := ioutil.NewProgressWriterAt(localFile, func(n int) {
 		downloaded := t.downloaded.Add(int64(n))
 		if t.Progress != nil {
@@ -158,20 +159,20 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 	}
 	logger.Info("File downloaded successfully")
 	if path.Ext(elem.FileName()) == "" {
-		ext := fsutil.DetectFileExt(elem.localPath)
+		ext := fsutil.DetectFileExt(localPath)
 		if ext != "" {
 			elem.Path = elem.Path + ext
 		}
 	}
 	var fileStat os.FileInfo
-	fileStat, err = os.Stat(elem.localPath)
+	fileStat, err = os.Stat(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to get file stat: %w", err)
 	}
 	vctx := context.WithValue(ctx, ctxkey.ContentLength, fileStat.Size())
 	err = retryutil.RetrySave(vctx, func() error {
 		var file *os.File
-		file, err = os.Open(elem.localPath)
+		file, err = os.Open(localPath)
 		if err != nil {
 			return fmt.Errorf("failed to open cache file: %w", err)
 		}

@@ -34,7 +34,7 @@ Settings are stored per user and apply to all of that user's subsequent save tas
 | `Always skip` | Do nothing for conflicting files |
 
 {{< hint info >}}
-The conflict strategy only kicks in for storage backends that can detect the existence of a file. Backends that do not support existence checks will fall back to overwriting.
+The supported Local backend detects existing files. These strategies apply to Telegram files saved locally, not message forwarding through `/watch` or `/copy`.
 {{< /hint >}}
 
 ## `/fnametmpl` — Custom Filename Template

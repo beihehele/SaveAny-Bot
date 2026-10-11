@@ -47,7 +47,13 @@ storages = []
 blacklist = true
 ```
 
-使用 Docker 运行 Save Any Bot:
+运行当前检出的代码前，先构建镜像：
+
+```bash
+docker build -t saveany-bot:local .
+```
+
+使用 Docker 运行：
 
 ```bash
 docker run -d --name saveany-bot --restart unless-stopped \
@@ -55,10 +61,13 @@ docker run -d --name saveany-bot --restart unless-stopped \
     -v ./data:/app/data \
     -v ./cache:/app/cache \
     -v ./downloads:/app/downloads \
-    ghcr.io/beihehele/saveany-bot:latest
+    saveany-bot:local
 ```
 
 `data` 保存数据库和 Telegram 会话, 重建容器时必须保留; `cache` 仅用于临时文件. 稳定部署应固定到已验收的镜像版本或 digest.
+
+
+使用远端镜像时，选择已验收的 tag 或 digest，并使用对应发布 tag/commit 的配置和示例。远端 Compose 示例要求设置 `SAVEANY_IMAGE`；`latest` 可能对应不同产品版本。尚未发布的本地修改需自行构建。
 
 请查看本分支的[安装与更新说明](docs/content/zh/deployment/installation.md)和[配置说明](docs/content/zh/deployment/configuration/_index.md). [上游文档网站](https://sabot.unv.app/)可能对应不同版本.
 

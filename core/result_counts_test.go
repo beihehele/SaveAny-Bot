@@ -27,33 +27,26 @@ func (t *resultLifecycleTask) ResultSummary() taskresult.Summary {
 	return t.summary
 }
 
-func TestWorkerResultPoliciesSelectHooksAndTerminalEvents(t *testing.T) {
+func TestWorkerResultCountsPreserveHooksAndTerminalEvents(t *testing.T) {
 	fileError := errors.New("storage unavailable")
 	engineError := fmt.Errorf("engine forcibly closed: %w", context.Canceled)
 	for _, tc := range []struct {
 		name                        string
-		policy                      taskresult.Policy
 		summary                     taskresult.Summary
 		err, want                   error
 		hook                        string
 		cancel, cancelBeforeExecute bool
 	}{
-		{name: "omitted retains success", summary: taskresult.Summary{Total: 2, Succeeded: 1, Failed: 1}, hook: "task_success"},
-		{name: "legacy reports partial without changing hook", policy: taskresult.Legacy, summary: taskresult.Summary{Total: 2, Succeeded: 1, Failed: 1}, hook: "task_success"},
-		{name: "strict partial fails", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Succeeded: 1, Failed: 1}, want: taskresult.ErrIncomplete, hook: "task_fail"},
-		{name: "strict all failed", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Failed: 2}, want: taskresult.ErrIncomplete, hook: "task_fail"},
-		{name: "strict all saved", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Succeeded: 2}, hook: "task_success"},
-		{name: "strict preserves error", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Failed: 2}, err: fileError, want: fileError, hook: "task_fail"},
-		{name: "active task internal cancellation fails", err: engineError, want: engineError, hook: "task_fail"},
-		{name: "strict internal cancellation preserves interrupted files", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Succeeded: 1, Interrupted: 1}, err: engineError, want: engineError, hook: "task_fail"},
-		{name: "parent cancellation with ordinary error", cancel: true, err: fileError, want: fileError, hook: "task_cancel"},
-		{name: "strict parent cancellation preserves successful and failed files", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Succeeded: 1, Failed: 1}, cancel: true, err: fileError, want: fileError, hook: "task_cancel"},
+		{name: "partial counts preserve nil success", summary: taskresult.Summary{Total: 2, Succeeded: 1, Failed: 1}, hook: "task_success"},
+		{name: "all saved", summary: taskresult.Summary{Total: 2, Succeeded: 2}, hook: "task_success"},
+		{name: "original failure", summary: taskresult.Summary{Total: 2, Failed: 2}, err: fileError, want: fileError, hook: "task_fail"},
+		{name: "internal cancellation is failure", summary: taskresult.Summary{Total: 2, Succeeded: 1, Interrupted: 1}, err: engineError, want: engineError, hook: "task_fail"},
+		{name: "parent cancellation preserves original error", summary: taskresult.Summary{Total: 2, Succeeded: 1, Failed: 1}, cancel: true, err: fileError, want: fileError, hook: "task_cancel"},
 		{name: "parent cancellation with wrapped cancel", cancel: true, err: engineError, want: engineError, hook: "task_cancel"},
-		{name: "default nil after cancellation remains successful", cancel: true, hook: "task_success"},
-		{name: "legacy nil after cancellation keeps saved files", policy: taskresult.Legacy, summary: taskresult.Summary{Total: 2, Succeeded: 2}, cancel: true, hook: "task_success"},
-		{name: "strict preserves deadline", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Cancelled: 2}, err: context.DeadlineExceeded, want: context.DeadlineExceeded, hook: "task_fail"},
-		{name: "strict nil after cancel", policy: taskresult.Strict, summary: taskresult.Summary{Total: 2, Succeeded: 2}, cancel: true, want: context.Canceled, hook: "task_cancel"},
-		{name: "strict cancellation before execute has no summary", policy: taskresult.Strict, cancelBeforeExecute: true, want: context.Canceled, hook: "task_cancel"},
+		{name: "nil after cancellation keeps success", summary: taskresult.Summary{Total: 2, Succeeded: 2}, cancel: true, hook: "task_success"},
+		{name: "deadline stays failure", summary: taskresult.Summary{Total: 2, Cancelled: 2}, err: context.DeadlineExceeded, want: context.DeadlineExceeded, hook: "task_fail"},
+		{name: "cancelled before execute has no summary", cancelBeforeExecute: true, want: context.Canceled, hook: "task_cancel"},
+		{name: "invalid counts omitted without changing error", summary: taskresult.Summary{Total: 1, Succeeded: 2}, err: fileError, want: fileError, hook: "task_fail"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			hookFile := filepath.Join(t.TempDir(), "hooks.txt")
@@ -61,12 +54,12 @@ func TestWorkerResultPoliciesSelectHooksAndTerminalEvents(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			sink := doneSink{done: make(chan taskevent.Event, 1)}
-			ctx = taskevent.WithSink(taskresult.WithPolicy(ctx, tc.policy), sink, taskevent.SinkFunc(func(e taskevent.Event) {
+			ctx = taskevent.WithSink(ctx, sink, taskevent.SinkFunc(func(e taskevent.Event) {
 				if tc.cancelBeforeExecute && e.Phase == taskevent.PhaseStart {
 					cancel()
 				}
 			}))
-			exe := &resultLifecycleTask{summary: tc.summary, lifecycleTask: lifecycleTask{id: "policy", run: func(context.Context) error {
+			exe := &resultLifecycleTask{summary: tc.summary, lifecycleTask: lifecycleTask{id: "results", run: func(context.Context) error {
 				if tc.cancelBeforeExecute {
 					t.Error("executed cancelled task")
 				}
@@ -101,15 +94,15 @@ func TestWorkerResultPoliciesSelectHooksAndTerminalEvents(t *testing.T) {
 			if e.Outcome != wantOutcome {
 				t.Fatalf("event outcome=%v disagrees with hook %s", e.Outcome, tc.hook)
 			}
-			wantSummary := tc.policy != "" && !tc.cancelBeforeExecute
+			wantSummary := !tc.cancelBeforeExecute && tc.summary.Counts().Valid()
 			if (e.ResultSummary != nil) != wantSummary {
 				t.Fatalf("unexpected summary presence: %+v", e)
 			}
 			if wantSummary && *e.ResultSummary != tc.summary.Counts() {
 				t.Fatal("terminal counts changed")
 			}
-			if !wantSummary && exe.reads.Load() != 0 {
-				t.Fatal("default/skipped task performed a new result read")
+			if tc.cancelBeforeExecute && exe.reads.Load() != 0 {
+				t.Fatal("skipped task performed a result read")
 			}
 			b, err := os.ReadFile(hookFile)
 			if err != nil {

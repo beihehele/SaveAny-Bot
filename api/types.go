@@ -22,21 +22,21 @@ const (
 
 // CreateTaskRequest 创建任务请求
 type CreateTaskRequest struct {
-	Type         tasktype.TaskType `json:"type"`
-	Storage      string            `json:"storage"`
-	Path         string            `json:"path"`
-	Webhook      string            `json:"webhook,omitempty"`
-	Params       json.RawMessage   `json:"params"`
-	ResultPolicy taskresult.Policy `json:"result_policy,omitempty"`
+	Type    tasktype.TaskType `json:"type"`
+	Storage string            `json:"storage"`
+	Path    string            `json:"path"`
+	Webhook string            `json:"webhook,omitempty"`
+	Params  json.RawMessage   `json:"params"`
+	// ResultPolicy is retained only to reject unsupported options explicitly.
+	ResultPolicy string `json:"result_policy,omitempty"`
 }
 
 // CreateTaskResponse 创建任务响应
 type CreateTaskResponse struct {
-	TaskID       string            `json:"task_id"`
-	Type         tasktype.TaskType `json:"type"`
-	Status       TaskStatus        `json:"status"`
-	CreatedAt    time.Time         `json:"created_at"`
-	ResultPolicy taskresult.Policy `json:"result_policy,omitempty"`
+	TaskID    string            `json:"task_id"`
+	Type      tasktype.TaskType `json:"type"`
+	Status    TaskStatus        `json:"status"`
+	CreatedAt time.Time         `json:"created_at"`
 }
 
 // TaskProgress 任务进度
@@ -61,7 +61,6 @@ type TaskInfoResponse struct {
 	Error         string             `json:"error,omitempty"`
 	CreatedAt     time.Time          `json:"created_at"`
 	UpdatedAt     time.Time          `json:"updated_at"`
-	ResultPolicy  taskresult.Policy  `json:"result_policy,omitempty"`
 	ResultSummary *taskresult.Counts `json:"result_summary,omitempty"`
 }
 
@@ -88,10 +87,9 @@ type StorageInfo struct {
 
 // TaskCapability describes local prerequisites, without probing external services.
 type TaskCapability struct {
-	Type           tasktype.TaskType   `json:"type"`
-	Available      bool                `json:"available"`
-	Reason         string              `json:"reason,omitempty"`
-	ResultPolicies []taskresult.Policy `json:"result_policies,omitempty"`
+	Type      tasktype.TaskType `json:"type"`
+	Available bool              `json:"available"`
+	Reason    string            `json:"reason,omitempty"`
 }
 
 // WebhookPayload Webhook 回调负载
@@ -103,7 +101,6 @@ type WebhookPayload struct {
 	Path          string             `json:"path"`
 	CompletedAt   *time.Time         `json:"completed_at,omitempty"`
 	Error         string             `json:"error,omitempty"`
-	ResultPolicy  taskresult.Policy  `json:"result_policy,omitempty"`
 	ResultSummary *taskresult.Counts `json:"result_summary,omitempty"`
 }
 

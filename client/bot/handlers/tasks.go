@@ -11,6 +11,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/core"
+	"github.com/krau/SaveAny-Bot/core/taskcontrol"
 )
 
 func handleTaskCmd(ctx *ext.Context, update *ext.Update) error {
@@ -32,12 +33,11 @@ func handleTaskCmd(ctx *ext.Context, update *ext.Update) error {
 			return dispatcher.EndGroups
 		}
 		taskID := args[2]
-		if err := core.CancelTask(ctx, taskID); err != nil {
+		if err := taskcontrol.CancelTask(ctx, taskID); err != nil {
 			logger.Errorf("Failed to cancel task %s: %v", taskID, err)
 			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgTasksCancelFailed, map[string]any{"Error": err.Error()})), nil)
 			return dispatcher.EndGroups
 		}
-		endCopySlotAfterCancel(taskID)
 		ctx.Reply(update, ext.ReplyTextStyledTextArray([]styling.StyledTextOption{
 			styling.Plain(i18n.T(i18nk.BotMsgTasksCancelRequestedPrefix)),
 			styling.Code(taskID),

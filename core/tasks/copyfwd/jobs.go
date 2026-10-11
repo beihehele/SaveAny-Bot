@@ -21,15 +21,11 @@ func TryBegin(userChatID int64, taskID string) bool {
 
 // End clears the running copy for the user if it matches taskID.
 func End(userChatID int64, taskID string) {
-	v, ok := activeByUser.Load(userChatID)
-	if !ok {
-		return
+	// Concurrent cancellation and Execute's deferred cleanup must not delete
+	// a newer task registered after the previous slot was released.
+	if activeByUser.CompareAndDelete(userChatID, taskID) {
+		userByTask.Delete(taskID)
 	}
-	if id, _ := v.(string); id != taskID {
-		return
-	}
-	activeByUser.Delete(userChatID)
-	userByTask.Delete(taskID)
 }
 
 // EndByTaskID releases the per-user slot when a copy task is cancelled

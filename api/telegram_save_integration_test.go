@@ -159,6 +159,9 @@ func TestTelegramSaveEndToEnd(t *testing.T) {
 			if snapshot.status != want {
 				t.Fatalf("status=%s want=%s error=%s", snapshot.status, want, snapshot.err)
 			}
+			if count > 1 && (snapshot.resultSummary == nil || !snapshot.resultSummary.Valid() || snapshot.resultSummary.Total != count || snapshot.resultSummary.Succeeded != count) {
+				t.Fatalf("completed album lost per-file counts: %+v", snapshot.resultSummary)
+			}
 			break
 		}
 		select {

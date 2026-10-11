@@ -32,7 +32,6 @@ type TaskProgressInfo struct {
 	Webhook         string
 	webhookNotified bool
 	webhookContext  context.Context
-	ResultPolicy    taskresult.Policy
 	ResultSummary   *taskresult.Counts
 }
 
@@ -178,7 +177,6 @@ type taskProgressSnapshot struct {
 	totalFiles, downloadedFiles int
 	startedAt, updatedAt        time.Time
 	err                         string
-	resultPolicy                taskresult.Policy
 	resultSummary               *taskresult.Counts
 }
 
@@ -187,7 +185,7 @@ func (t *TaskProgressInfo) responseSnapshot() taskProgressSnapshot {
 	defer t.mu.Unlock()
 	return taskProgressSnapshot{status: t.Status, total: t.TotalBytes, downloaded: t.DownloadedBytes,
 		totalFiles: t.TotalFiles, downloadedFiles: t.DownloadedFiles, startedAt: t.StartedAt, err: t.Error,
-		updatedAt: t.UpdatedAt, resultPolicy: t.ResultPolicy, resultSummary: cloneResultSummary(t.ResultSummary)}
+		updatedAt: t.UpdatedAt, resultSummary: cloneResultSummary(t.ResultSummary)}
 }
 
 // Emit implements taskevent.Sink. It translates task lifecycle events into
@@ -261,7 +259,7 @@ func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 }
 
 func (t *TaskProgressInfo) acceptResultSummaryLocked(summary *taskresult.Counts) bool {
-	if t.ResultPolicy != "" && summary != nil && summary.Valid() {
+	if summary != nil && summary.Valid() {
 		t.ResultSummary = cloneResultSummary(summary)
 		return true
 	}
@@ -284,7 +282,6 @@ func (t *TaskProgressInfo) notificationLocked() *WebhookPayload {
 		err = errors.New(t.Error)
 	}
 	payload := CreateWebhookPayload(t.TaskID, t.Type, t.Status, t.Storage, t.Path, err)
-	payload.ResultPolicy = t.ResultPolicy
 	payload.ResultSummary = cloneResultSummary(t.ResultSummary)
 	return payload
 }

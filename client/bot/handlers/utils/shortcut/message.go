@@ -39,14 +39,6 @@ func GetFileFromMessageWithReply(ctx *ext.Context, update *ext.Update, message *
 		logger.Errorf("Failed to reply: %s", err)
 		return nil, nil, dispatcher.EndGroups
 	}
-	// options := []tfile.TGFileOption{
-	// 	tfile.WithMessage(message),
-	// }
-	// if len(tfileopts) > 0 {
-	// 	options = append(options, tfileopts...)
-	// } else {
-	// 	options = append(options, tfile.WithNameIfEmpty(tgutil.GenFileNameFromMessage(*message)))
-	// }
 	file, err = tfile.FromMediaMessage(media, ctx.Raw, message, tfileopts...)
 	if err != nil {
 		logger.Errorf("Failed to get file from media: %s", err)

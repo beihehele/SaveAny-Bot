@@ -23,17 +23,3 @@ func WithNameIfEmpty(name string) TGFileOption {
 		}
 	}
 }
-
-func WithSize(size int64) TGFileOption {
-	return func(f *tgFile) {
-		f.size = size
-	}
-}
-
-func WithSizeIfZero(size int64) TGFileOption {
-	return func(f *tgFile) {
-		if f.size == 0 {
-			f.size = size
-		}
-	}
-}

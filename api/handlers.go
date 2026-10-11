@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/krau/SaveAny-Bot/core"
+	"github.com/krau/SaveAny-Bot/core/taskcontrol"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/storage"
 )
@@ -144,7 +144,7 @@ func (h *Handlers) CancelTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Cancel the task; the terminal status is set via the task event stream.
-	if err := core.CancelTask(r.Context(), taskID); err != nil {
+	if err := taskcontrol.CancelTask(r.Context(), taskID); err != nil {
 		WriteError(w, http.StatusInternalServerError, "cancel_failed", "failed to cancel task: "+err.Error())
 		return
 	}
@@ -234,7 +234,6 @@ func convertTaskProgressToResponse(task *TaskProgressInfo) TaskInfoResponse {
 		Error:         errMsg,
 		CreatedAt:     task.CreatedAt,
 		UpdatedAt:     updatedAt,
-		ResultPolicy:  s.resultPolicy,
 		ResultSummary: s.resultSummary,
 	}
 

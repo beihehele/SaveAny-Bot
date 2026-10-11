@@ -41,6 +41,12 @@ type Executable interface {
 	Execute(ctx context.Context) error
 }
 
+// TaskDiscarder releases resources when a worker checks out a task but skips
+// Execute because it was cancelled before starting. Discard must be idempotent.
+type TaskDiscarder interface {
+	Discard()
+}
+
 func worker(ctx context.Context, qe *queue.TaskQueue[Executable]) {
 	logger := log.FromContext(ctx)
 	execHooks := config.C().Hook.Exec
@@ -66,13 +72,19 @@ func worker(ctx context.Context, qe *queue.TaskQueue[Executable]) {
 				err = exe.Execute(taskCtx)
 			}
 		}
+		if !executed {
+			if discardable, ok := exe.(TaskDiscarder); ok {
+				discardable.Discard()
+			}
+		}
 		var resultSummary *taskresult.Counts
-		if executed && taskresult.PolicyFromContext(taskCtx) != "" {
+		if executed {
 			if provider, ok := exe.(taskresult.Provider); ok {
 				counts := provider.ResultSummary().Counts()
-				resultSummary = &counts
+				if counts.Valid() {
+					resultSummary = &counts
+				}
 			}
-			err = taskresult.CompletionError(taskCtx, err, resultSummary)
 		}
 		// Snapshot before hooks: a late cancellation must not make observers
 		// disagree with the hook selected for this execution result.

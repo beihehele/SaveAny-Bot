@@ -15,6 +15,7 @@ import (
 	"github.com/krau/SaveAny-Bot/api"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
+	"github.com/krau/SaveAny-Bot/core/taskcontrol"
 	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/queue"
 	"github.com/krau/SaveAny-Bot/storage"
@@ -158,7 +159,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) cancelTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if err := core.CancelTask(r.Context(), id); err != nil {
+	if err := taskcontrol.CancelTask(r.Context(), id); err != nil {
 		s.fail(w, http.StatusNotFound, "task_not_active")
 		return
 	}

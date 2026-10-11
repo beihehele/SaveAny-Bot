@@ -11,8 +11,7 @@ import (
 	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/msgelem"
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
-	"github.com/krau/SaveAny-Bot/core"
-	"github.com/krau/SaveAny-Bot/core/tasks/copyfwd"
+	"github.com/krau/SaveAny-Bot/core/taskcontrol"
 )
 
 func handleCancelCallback(ctx *ext.Context, update *ext.Update) error {
@@ -21,14 +20,13 @@ func handleCancelCallback(ctx *ext.Context, update *ext.Update) error {
 		return fmt.Errorf("invalid callback data: %q", update.CallbackQuery.Data)
 	}
 	taskid := dataParts[1]
-	if err := core.CancelTask(ctx, taskid); err != nil {
+	if err := taskcontrol.CancelTask(ctx, taskid); err != nil {
 		log.FromContext(ctx).Errorf("Failed to cancel task %s: %v", taskid, err)
 		ctx.AnswerCallback(msgelem.AlertCallbackAnswer(update.CallbackQuery.GetQueryID(), i18n.T(i18nk.BotMsgCancelErrorCancelFailed, map[string]any{
 			"Error": err.Error(),
 		})))
 		return dispatcher.EndGroups
 	}
-	endCopySlotAfterCancel(taskid)
 
 	ctx.EditMessage(update.CallbackQuery.GetUserID(), &tg.MessagesEditMessageRequest{
 		ID:      update.CallbackQuery.GetMsgID(),
@@ -46,26 +44,15 @@ func handleCancelCmd(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	taskID := args[1]
-	if err := core.CancelTask(ctx, taskID); err != nil {
+	if err := taskcontrol.CancelTask(ctx, taskID); err != nil {
 		logger.Errorf("failed to cancel task %s: %v", taskID, err)
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCancelErrorCancelFailed, map[string]any{
 			"Error": err.Error(),
 		})), nil)
 		return dispatcher.EndGroups
 	}
-	endCopySlotAfterCancel(taskID)
 	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCancelInfoCancelRequested, map[string]any{
 		"TaskID": taskID,
 	})), nil)
 	return dispatcher.EndGroups
-}
-
-// endCopySlotAfterCancel releases the per-user /copy slot only when the task
-// never entered Execute (still queued). Running tasks keep the slot until
-// Execute's defer End, so a second /copy cannot overlap in-flight work.
-func endCopySlotAfterCancel(taskID string) {
-	if core.IsTaskExecuting(taskID) {
-		return
-	}
-	copyfwd.EndByTaskID(taskID)
 }

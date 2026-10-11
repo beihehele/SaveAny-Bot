@@ -6,7 +6,7 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
-func validateResultPolicy(policy taskresult.Policy) error {
+func validateResultPolicy(policy string) error {
 	if policy != "" {
 		return fmt.Errorf("result_policy is not supported for Telegram saves")
 	}

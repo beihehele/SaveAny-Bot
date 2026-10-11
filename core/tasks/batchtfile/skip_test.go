@@ -2,7 +2,6 @@ package batchtfile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
-	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 	filepkg "github.com/krau/SaveAny-Bot/pkg/tfile"
 	"github.com/krau/SaveAny-Bot/storage"
 )
@@ -51,10 +49,10 @@ func TestBatchSkipDoesNotCancelRemainingFilesOrRetry(t *testing.T) {
 			for index, saver := range []*skipTestStorage{first, second} {
 				name := fmt.Sprintf("file-%d.bin", index)
 				elems[index] = TaskElement{ID: name, Path: name, Storage: saver, stream: stream,
-					localPath: filepath.Join(t.TempDir(), name),
-					File:      filepkg.NewTGFile(&tg.InputDocumentFileLocation{}, downloadClient{}, 4, name)}
+					cacheDir: t.TempDir(),
+					File:     filepkg.NewTGFile(&tg.InputDocumentFileLocation{}, downloadClient{}, 4, name)}
 			}
-			task := NewBatchTGFileTask("skip-test", t.Context(), elems, nil, false)
+			task := NewBatchTGFileTask("skip-test", t.Context(), elems, nil)
 			if err := task.Execute(t.Context()); err != nil {
 				t.Fatal(err)
 			}
@@ -63,8 +61,8 @@ func TestBatchSkipDoesNotCancelRemainingFilesOrRetry(t *testing.T) {
 				t.Fatalf("skip interrupted or retried: %+v calls=%d/%d", summary, first.calls, second.calls)
 			}
 			counts := summary.Counts()
-			if err := taskresult.CompletionError(taskresult.WithPolicy(t.Context(), taskresult.Strict), nil, &counts); !errors.Is(err, taskresult.ErrIncomplete) {
-				t.Fatalf("strict accepted a skipped input: %v", err)
+			if !counts.Valid() || counts.Failed != 1 || counts.Succeeded != 1 {
+				t.Fatalf("skipped input missing from counts: %+v", counts)
 			}
 			i18n.Init("en")
 			text, _, err := batchCompletionMessage(t.Context(), task, nil, []string{"existing.bin"})

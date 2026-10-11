@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: 💬 Don't know how to use it correctly?
-    url: https://github.com/krau/SaveAny-Bot/discussions
+    url: https://github.com/beihehele/SaveAny-Bot/discussions
     about: "Go to the discussion area to ask questions"
   - name: 📄 Documentation
-    url: https://sabot.unv.app
+    url: https://github.com/beihehele/SaveAny-Bot/tree/dev/docs/content
     about: "View the documentation"

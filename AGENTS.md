@@ -20,7 +20,7 @@ go run .
 
 # Docker build (multi-stage, Alpine-based)
 docker build -t saveany-bot .
-docker compose up -d
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
 ### Test
@@ -51,7 +51,7 @@ go fmt ./...
 go vet ./...
 
 # Generate code (i18n keys)
-go generate ./...
+go run ./cmd/geni18n
 ```
 
 ### Other Commands
@@ -111,7 +111,7 @@ type Local struct {
 
 ### Naming Conventions
 - **Packages**: lowercase, single word when possible (avoid underscores)
-- **Files**: lowercase with underscores for multiword (e.g., `auth_terminal.go`, `progress_reader.go`)
+- **Files**: lowercase with underscores for multiword (e.g., `auth_terminal.go`, `auth_test.go`)
 - **Variables**: camelCase for unexported, PascalCase for exported
 - **Constants**: PascalCase for exported, camelCase for unexported (not ALL_CAPS)
 - **Functions/Methods**: PascalCase for exported, camelCase for unexported
@@ -231,8 +231,8 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 ### Internationalization (i18n)
 - **Usage**: `i18n.T(i18nk.SomeKey, map[string]any{"Name": value})`
 - **Locale files**: `common/i18n/locale/*.yaml`
-- **Key generation**: Run `go generate ./...` to generate `common/i18n/i18nk/keys.go`
-- **Adding new strings**: Add to YAML → run `go generate` → use in code
+- **Key generation**: Run `go run ./cmd/geni18n` to generate `common/i18n/i18nk/keys.go`
+- **Adding new strings**: Add to YAML → run `go run ./cmd/geni18n` → use in code
 - All user-facing strings should be internationalized
 
 ### Context Usage
@@ -256,7 +256,7 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 1. Create handler function in `client/bot/handlers/<name>.go`
 2. Add to `CommandHandlers` slice in `register.go`
 3. Add i18n key to `common/i18n/locale/*.yaml`
-4. Run `go generate ./...`
+4. Run `go run ./cmd/geni18n`
 5. Test with Telegram bot
 
 ### Adding a New Task Type
@@ -288,6 +288,6 @@ When referencing code locations, use `path/to/file.go:line` format (e.g., `core/
 
 - Binary size matters: use `CGO_ENABLED=0` for static binaries
 - Docker images need no external media-processing executables.
-- Build process supports cross-compilation (amd64/arm64, Linux/macOS/Windows)
+- Published binaries: Linux/amd64 and Windows/amd64; published containers: Linux/amd64. Other cross-compiled targets require separate validation.
 - Documentation site uses Hugo; edit files in `docs/` directory
-- Session data stored in SQLite; delete `data/session.db` if changing bot token
+- Session data is stored in SQLite. Stop the service and back up data before changing credentials; preserve the original Bot/Userbot sessions for rollback.

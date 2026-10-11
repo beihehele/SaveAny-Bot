@@ -2,6 +2,23 @@ package copyfwd
 
 import "testing"
 
+func TestStaleCopyCleanupKeepsNewOwner(t *testing.T) {
+	const user int64 = 424244
+	if !TryBegin(user, "old") {
+		t.Fatal("cannot acquire old slot")
+	}
+	End(user, "old")
+	if !TryBegin(user, "new") {
+		t.Fatal("cannot acquire new slot")
+	}
+	defer End(user, "new")
+	End(user, "old")
+	EndByTaskID("old")
+	if TryBegin(user, "overlap") {
+		t.Fatal("stale cleanup released new copy")
+	}
+}
+
 func TestTryBeginEndByTaskIDReleasesSlot(t *testing.T) {
 	const user int64 = 424242
 	const taskID = "copy-task-1"

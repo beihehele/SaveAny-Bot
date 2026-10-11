@@ -19,12 +19,12 @@ func TestResultPolicyValidationPrecedesStorageAndTaskCreation(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		typ    tasktype.TaskType
-		policy taskresult.Policy
+		policy string
 		want   string
 	}{
 		{name: "unknown policy", typ: tasktype.TaskTypeTgfiles, policy: "typo", want: "result_policy is not supported"},
-		{name: "tgfiles strict stays unavailable", typ: tasktype.TaskTypeTgfiles, policy: taskresult.Strict, want: "result_policy is not supported"},
-		{name: "other types reject explicit legacy", typ: tasktype.TaskTypeTgfiles, policy: taskresult.Legacy, want: "result_policy is not supported"},
+		{name: "tgfiles strict stays unavailable", typ: tasktype.TaskTypeTgfiles, policy: "strict", want: "result_policy is not supported"},
+		{name: "other types reject explicit legacy", typ: tasktype.TaskTypeTgfiles, policy: "legacy", want: "result_policy is not supported"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			factory := NewTaskFactory(t.Context())
@@ -47,41 +47,45 @@ func TestResultPolicyValidationPrecedesStorageAndTaskCreation(t *testing.T) {
 
 func TestResultSummariesAreDetachedAndTerminalDecisionsStayFixed(t *testing.T) {
 	counts := taskresult.Counts{Total: 2, Succeeded: 1, Failed: 1}
-	for _, policy := range []taskresult.Policy{"", taskresult.Legacy, taskresult.Strict} {
-		info := &TaskProgressInfo{Status: TaskStatusRunning, ResultPolicy: policy}
-		input := counts
-		info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, ResultSummary: &input})
-		input.Total = 0
+	info := &TaskProgressInfo{Status: TaskStatusRunning}
+	input := counts
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, ResultSummary: &input})
+	input.Total = 0
+	response := convertTaskProgressToResponse(info)
+	if response.Status != TaskStatusCompleted {
+		t.Fatal("API changed the worker's terminal decision")
+	}
+	if response.ResultSummary == nil || *response.ResultSummary != counts {
+		t.Fatal("event result aliased or lost")
+	}
+	response.ResultSummary.Failed = 0
+	if *convertTaskProgressToResponse(info).ResultSummary != counts {
+		t.Fatal("response mutated stored result")
+	}
+
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled, ResultSummary: &taskresult.Counts{Total: 2, Cancelled: 2}})
+	if convertTaskProgressToResponse(info).Status != TaskStatusCompleted {
+		t.Fatal("late event rewrote completed task")
+	}
+}
+
+func TestUnavailableAndInvalidCountsAreOmitted(t *testing.T) {
+	for _, counts := range []*taskresult.Counts{nil, {Total: 2, Succeeded: 3}, {Total: 1, Failed: -1}} {
+		info := &TaskProgressInfo{Status: TaskStatusRunning}
+		info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, ResultSummary: counts})
 		response := convertTaskProgressToResponse(info)
-		if response.Status != TaskStatusCompleted {
-			t.Fatal("API changed the worker's terminal decision")
+		data, err := json.Marshal(response)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if policy == "" {
-			data, err := json.Marshal(response)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if strings.Contains(string(data), "result_") {
-				t.Fatalf("default response gained opted-in fields: %s", data)
-			}
-		} else {
-			if response.ResultSummary == nil || *response.ResultSummary != counts {
-				t.Fatal("event result aliased or lost")
-			}
-			response.ResultSummary.Failed = 0
-			if *convertTaskProgressToResponse(info).ResultSummary != counts {
-				t.Fatal("response mutated stored result")
-			}
-		}
-		info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled, ResultSummary: &taskresult.Counts{Total: 2, Cancelled: 2}})
-		if convertTaskProgressToResponse(info).Status != TaskStatusCompleted {
-			t.Fatal("late event rewrote completed task")
+		if response.Status != TaskStatusCompleted || strings.Contains(string(data), "result_") {
+			t.Fatalf("unavailable results altered response: %s", data)
 		}
 	}
 }
 
 func TestCancelledTaskAcceptsFinalCountsWithoutAnotherWebhook(t *testing.T) {
-	info := &TaskProgressInfo{Status: TaskStatusRunning, ResultPolicy: taskresult.Strict, TaskID: "cancelled-result", Webhook: "unused"}
+	info := &TaskProgressInfo{Status: TaskStatusRunning, TaskID: "cancelled-result", Webhook: "unused"}
 	info.mu.Lock()
 	info.Status = TaskStatusCancelled
 	info.UpdatedAt = time.Now().Add(-time.Minute)
@@ -112,7 +116,7 @@ func TestCancelledTaskAcceptsFinalCountsWithoutAnotherWebhook(t *testing.T) {
 }
 
 func TestConcurrentResultSnapshotsRemainConsistent(t *testing.T) {
-	info := &TaskProgressInfo{Status: TaskStatusRunning, ResultPolicy: taskresult.Strict}
+	info := &TaskProgressInfo{Status: TaskStatusRunning}
 	counts := taskresult.Counts{Total: 2, Succeeded: 1, Failed: 1}
 	var wg sync.WaitGroup
 	for range 100 {

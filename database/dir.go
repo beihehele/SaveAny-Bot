@@ -48,10 +48,6 @@ func GetDirsByUserChatIDAndStorageName(ctx context.Context, chatID int64, storag
 	return GetDirsByUserIDAndStorageName(ctx, user.ID, storageName)
 }
 
-func DeleteDirForUser(ctx context.Context, userID uint, storageName, path string) error {
-	return db.WithContext(ctx).Unscoped().Where("user_id = ? AND storage_name = ? AND path = ?", userID, storageName, path).Delete(&Dir{}).Error
-}
-
 func DeleteDirByID(ctx context.Context, id uint) error {
 	return db.WithContext(ctx).Unscoped().Delete(&Dir{}, id).Error
 }

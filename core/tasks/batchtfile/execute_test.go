@@ -45,9 +45,9 @@ func TestExecuteWithoutProgress(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			elem := TaskElement{ID: "file", Storage: &executionStorage{}, Path: "file.bin", stream: tc.stream,
-				localPath: filepath.Join(t.TempDir(), "cache.bin"),
-				File:      tfile.NewTGFile(&tg.InputDocumentFileLocation{}, downloadClient{}, 4, "file.bin")}
-			task := NewBatchTGFileTask("test", t.Context(), []TaskElement{elem}, nil, false)
+				cacheDir: t.TempDir(),
+				File:     tfile.NewTGFile(&tg.InputDocumentFileLocation{}, downloadClient{}, 4, "file.bin")}
+			task := NewBatchTGFileTask("test", t.Context(), []TaskElement{elem}, nil)
 			if tc.duplicate {
 				task.processing[elem.ID] = &elem
 			}
@@ -65,8 +65,8 @@ func TestExecuteWithoutProgress(t *testing.T) {
 			if !tc.duplicate && task.downloaded.Load() != 4 {
 				t.Fatalf("downloaded = %d, want 4", task.downloaded.Load())
 			}
-			if _, err := os.Stat(elem.localPath); !os.IsNotExist(err) {
-				t.Fatalf("cache file was not cleaned up: %v", err)
+			if entries, err := os.ReadDir(elem.cacheDir); err != nil || len(entries) != 0 {
+				t.Fatalf("cache file was not cleaned up: %v %v", entries, err)
 			}
 		})
 	}

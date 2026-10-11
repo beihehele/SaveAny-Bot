@@ -17,6 +17,8 @@ chmod +x saveany-bot
 ./saveany-bot
 ```
 
+当前发布流水线提供 Linux/amd64 和 Windows/amd64 二进制，以及 Linux/amd64 容器。其他平台自行构建并验收，不在已发布支持范围；旧 OpenWrt 守护脚本已移除。
+
 ### 进程守护
 
 {{< tabs "daemon" >}}
@@ -47,64 +49,6 @@ systemctl enable --now saveany-bot
 
 {{< /tab >}}
 
-{{< tab "procd (OpenWrt)" >}}
-
-<h4>添加开机自启动服务</h4>
-
-创建文件 <code>/etc/init.d/saveanybot</code> ，参考 <a href="https://github.com/krau/SaveAny-Bot/blob/main/docs/confs/wrt_init" target="_blank">wrt_init</a> 并自行修改:
-
-{{< codeblock >}}
-#!/bin/sh /etc/rc.common
-
-#This is the OpenWRT init.d script for SaveAnyBot
-
-START=99 
-STOP=10
-description="SaveAnyBot"
-
-WORKING_DIR="/mnt/mmc1-1/SaveAnyBot"
-EXEC_PATH="$WORKING_DIR/saveany-bot"
-start() {
-    echo "Starting SaveAnyBot..."
-    cd $WORKING_DIR
-    $EXEC_PATH &
-}
-stop() {
-    echo "Stopping SaveAnyBot..."
-    killall saveany-bot
-}
-reload() {
-    stop
-    start
-}
-
-{{< /codeblock >}}
-
-赋予权限:
-
-{{< codeblock >}}
-chmod +x /etc/init.d/saveanybot
-{{< /codeblock >}}
-
-然后将文件复制到 <code>/etc/rc.d</code> 并重命名为 <code>S99saveanybot</code>, 同样赋予权限:
-
-{{< codeblock >}}
-chmod +x /etc/rc.d/S99saveanybot
-{{< /codeblock >}}
-
-<h4>添加快捷指令</h4>
-
-创建文件 <code>/usr/bin/sabot</code> ，参考 <a href="https://github.com/krau/SaveAny-Bot/blob/main/docs/confs/wrt_bin" target="_blank">wrt_bin</a>  并自行修改，注意此处文件编码仅支持 ANSI 936 .
-
-随后赋予权限:
-
-{{< codeblock >}}
-chmod +x /usr/bin/sabot
-{{< /codeblock >}}
-
-使用: <code>sudo sabot start|stop|restart|status|enable|disable</code>
-
-{{< /tab >}}
 {{< /tabs >}}
 
 
@@ -120,9 +64,15 @@ docker build --build-arg GOPROXY=https://goproxy.cn,direct -t saveany-bot:local 
 
 构建参数只用于下载构建依赖，不改变运行时 Telegram 代理设置。
 
+若要运行当前尚未发布的工作区，使用 `docker compose -f docker-compose.local.yml up -d --build`；它直接构建当前源码，无需 `SAVEANY_IMAGE`。
+
 ### Docker Compose
 
-下载 [docker-compose.yml](https://github.com/beihehele/SaveAny-Bot/blob/main/docker-compose.yml) 文件, 在同目录下新建 `config.toml` 文件, 参考 [config.example.toml](https://github.com/beihehele/SaveAny-Bot/blob/main/config.example.toml) 编辑配置文件.
+先检出与目标镜像相同的发布 tag/commit，使用该版本的 `docker-compose.yml` 和 `config.example.toml`，将配置另存为 `config.toml`。不要混用 `main` 分支示例。设置 `SAVEANY_IMAGE` 为已验收的完整镜像 tag 或 digest；也可在同目录 `.env` 文件中设置，未指定时 Compose 会报错。下面的 `YOUR_VERIFIED_VERSION` 必须替换为目标版本。
+
+```bash
+export SAVEANY_IMAGE='ghcr.io/beihehele/saveany-bot:YOUR_VERIFIED_VERSION'
+```
 
 启动:
 
@@ -138,7 +88,7 @@ docker run -d --name saveany-bot --restart unless-stopped \
     -v /path/to/data:/app/data \
     -v /path/to/cache:/app/cache \
     -v /path/to/downloads:/app/downloads \
-    ghcr.io/beihehele/saveany-bot:latest
+    "${SAVEANY_IMAGE:?Set SAVEANY_IMAGE to a verified tag or digest}"
 ```
 
 {{< hint info >}}
@@ -147,7 +97,7 @@ docker run -d --name saveany-bot --restart unless-stopped \
 
 `data` 保存数据库和 Telegram 会话, 更新或重建容器时必须保留. `cache` 必须是仅用于临时文件的独立目录, 不要与 `data` 或 `downloads` 共用.
 
-程序退出不再清空整个缓存目录，每个任务清理自己创建的临时文件。强制退出或超时可能留下残留；确认服务停止、目录用途和文件内容后再人工清理，旧的 `no_clean_cache` 选项保留兼容但不控制整目录删除。
+程序退出不再清空整个缓存目录，每个任务清理自己创建的临时文件。强制退出或超时可能留下残留；确认服务停止、目录用途和文件内容后再人工清理，旧的 `no_clean_cache` 配置和 `--no-clean-cache` 参数已移除，升级前应删除。
 
 设置容器环境变量 `CONFIG_URL`（仅支持 HTTP(S)）时，程序直接加载远程配置，下载超时为 30 秒；HTTP 错误、响应不完整或配置解析失败会阻止启动。远程配置不会覆盖 `/app/config.toml` 或宿主机挂载文件，也不会保存为本地配置副本；未设置时继续读取本地配置。
 
@@ -166,7 +116,7 @@ Docker 更新前确认 `data` 已持久化并备份. 旧容器未挂载 `/app/da
 已按上面的挂载方式部署时:
 
 ```bash
-docker pull ghcr.io/beihehele/saveany-bot:latest
+docker pull "${SAVEANY_IMAGE:?Set SAVEANY_IMAGE to a verified tag or digest}"
 docker stop saveany-bot
 docker rm saveany-bot
 docker run -d --name saveany-bot --restart unless-stopped \
@@ -174,7 +124,7 @@ docker run -d --name saveany-bot --restart unless-stopped \
     -v /path/to/data:/app/data \
     -v /path/to/cache:/app/cache \
     -v /path/to/downloads:/app/downloads \
-    ghcr.io/beihehele/saveany-bot:latest
+    "${SAVEANY_IMAGE:?Set SAVEANY_IMAGE to a verified tag or digest}"
 ```
 
 docker compose:
@@ -184,4 +134,4 @@ docker compose pull
 docker compose up -d
 ```
 
-仅重启已有容器不会切换到刚拉取的新镜像. Compose 的 `up -d` 会根据镜像变化重建容器并保留挂载数据, 见 [Docker 官方说明](https://docs.docker.com/reference/cli/docker/compose/up/). 上例的 `latest` 应替换为此次已验收的版本或 digest.
+仅重启已有容器不会切换到刚拉取的新镜像. Compose 的 `up -d` 会根据镜像变化重建容器并保留挂载数据, 见 [Docker 官方说明](https://docs.docker.com/reference/cli/docker/compose/up/). 更新前将 `SAVEANY_IMAGE` 改为此次已验收的版本或 digest，并核对匹配的配置。

@@ -24,3 +24,6 @@ weight: 20
 `path` 是目标目录，单文件及媒体组均在其下按文件名保存。Bot/Userbot 必须能访问源消息；媒体组链接默认提取整组，`?single` 只保存指定成员。接口不创建监听或复制路由。
 
 可选 `webhook` 接收任务终态事件；后台无 webhook 表单。`result_policy` 不适用于 Telegram 保存。任务、进度和近期结果只在内存中，重启清空，终态结果约保留 24 小时。任务被接纳后，HTTP 请求结束不会取消任务。
+
+
+批量任务执行结束后，查询响应及正常终态 webhook 可包含 `result_summary`，统计 total/pending/running/succeeded/failed/cancelled/interrupted；failed 包括存储策略跳过的文件。这些计数仅描述逐文件结果，不改变任务终态或触发重试。未执行的任务或无法提供有效计数的任务省略该字段。提前取消的 webhook 可能不含最终计数，之后可查询补全结果，不会为补全再发一次 webhook。非空 `result_policy` 会明确拒绝。

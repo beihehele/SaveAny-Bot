@@ -26,6 +26,9 @@ func (t *Task) Type() tasktype.TaskType { return tasktype.TaskTypeCopy }
 
 func (t *Task) TaskID() string { return t.ID }
 
+// Discard releases ownership when cancellation prevents Execute from running.
+func (t *Task) Discard() { End(t.UserChatID, t.ID) }
+
 func (t *Task) Title() string {
 	return fmt.Sprintf("[copy] %d -> %d (n=%d)", t.SourceID, t.TargetID, t.Count)
 }

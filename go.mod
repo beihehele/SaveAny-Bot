@@ -10,7 +10,6 @@ require (
 	github.com/charmbracelet/log v1.0.0
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/goccy/go-yaml v1.19.2
-	github.com/gotd/contrib v0.21.1
 	github.com/gotd/td v0.145.1
 	github.com/rs/xid v1.6.0
 	github.com/spf13/cobra v1.10.2
@@ -18,7 +17,6 @@ require (
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.56.0
 	golang.org/x/term v0.44.0
-	golang.org/x/time v0.15.0
 )
 
 require (

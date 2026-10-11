@@ -19,12 +19,12 @@ import (
 var _ core.Executable = (*Task)(nil)
 
 type TaskElement struct {
-	ID        string
-	Storage   storage.Storage
-	Path      string
-	File      tfile.TGFile
-	localPath string
-	stream    bool
+	ID       string
+	Storage  storage.Storage
+	Path     string
+	File     tfile.TGFile
+	cacheDir string
+	stream   bool
 }
 
 type Task struct {
@@ -32,12 +32,10 @@ type Task struct {
 	ctx          context.Context
 	elems        []TaskElement
 	Progress     ProgressTracker
-	IgnoreErrors bool // if true, errors during processing will be ignored
 	downloaded   atomic.Int64
 	totalSize    int64
 	processing   map[string]TaskElementInfo
 	processingMu sync.RWMutex
-	failed       map[string]error // [TODO] errors for each element
 	results      taskresult.Tracker
 }
 
@@ -58,16 +56,16 @@ func NewTaskElement(
 	id := xid.New().String()
 	_, ok := stor.(storage.StorageCannotStream)
 	if !config.C().Stream || ok {
-		cachePath, err := filepath.Abs(filepath.Join(config.C().Temp.BasePath, fmt.Sprintf("%s_%s", id, file.Name())))
+		cacheDir, err := filepath.Abs(config.C().Temp.BasePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get absolute path for cache: %w", err)
 		}
 		return &TaskElement{
-			ID:        id,
-			Storage:   stor,
-			Path:      path,
-			File:      file,
-			localPath: cachePath,
+			ID:       id,
+			Storage:  stor,
+			Path:     path,
+			File:     file,
+			cacheDir: cacheDir,
 		}, nil
 	}
 	return &TaskElement{
@@ -84,7 +82,6 @@ func NewBatchTGFileTask(
 	ctx context.Context,
 	files []TaskElement,
 	progress ProgressTracker,
-	ignoreErrors bool,
 ) *Task {
 	task := &Task{
 		ID:         id,
@@ -100,9 +97,7 @@ func NewBatchTGFileTask(
 			return total
 		}(),
 		processing:   make(map[string]TaskElementInfo),
-		IgnoreErrors: ignoreErrors,
 		processingMu: sync.RWMutex{},
-		failed:       make(map[string]error),
 	}
 	task.results.Reset(task.resultElements())
 	return task
@@ -116,5 +111,5 @@ func (t *Task) resultElements() []taskresult.Element {
 	return elements
 }
 
-// ResultSummary reports file outcomes without changing IgnoreErrors or hooks.
+// ResultSummary reports file outcomes without changing scheduling or hooks.
 func (t *Task) ResultSummary() taskresult.Summary { return t.results.Snapshot() }

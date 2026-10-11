@@ -1,6 +1,6 @@
 services:
   saveany-bot:
-    image: ghcr.io/beihehele/saveany-bot:latest
+    image: ${SAVEANY_IMAGE:?Set SAVEANY_IMAGE to a verified image tag or digest}
     container_name: saveany-bot
     restart: unless-stopped
     volumes:

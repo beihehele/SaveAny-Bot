@@ -17,6 +17,8 @@ chmod +x saveany-bot
 ./saveany-bot
 ```
 
+The release workflows publish Linux/amd64 and Windows/amd64 binaries and Linux/amd64 containers. Other platforms require a separate build and acceptance; obsolete OpenWrt service scripts have been removed.
+
 ### Daemon
 
 {{< tabs "daemon" >}}
@@ -47,64 +49,6 @@ systemctl enable --now saveany-bot
 
 {{< /tab >}}
 
-{{< tab "procd (OpenWrt)" >}}
-
-<h4>Add Boot Autostart Service</h4>
-
-Create a file <code>/etc/init.d/saveanybot</code>, refer to <a href="https://github.com/krau/SaveAny-Bot/blob/main/docs/confs/wrt_init" target="_blank">wrt_init</a> and modify as needed:
-
-{{< codeblock >}}
-#!/bin/sh /etc/rc.common
-
-#This is the OpenWRT init.d script for SaveAnyBot
-
-START=99 
-STOP=10
-description="SaveAnyBot"
-
-WORKING_DIR="/mnt/mmc1-1/SaveAnyBot"
-EXEC_PATH="$WORKING_DIR/saveany-bot"
-start() {
-    echo "Starting SaveAnyBot..."
-    cd $WORKING_DIR
-    $EXEC_PATH &
-}
-stop() {
-    echo "Stopping SaveAnyBot..."
-    killall saveany-bot
-}
-reload() {
-    stop
-    start
-}
-
-{{< /codeblock >}}
-
-Set permissions:
-
-{{< codeblock >}}
-chmod +x /etc/init.d/saveanybot
-{{< /codeblock >}}
-
-Then copy the file to <code>/etc/rc.d</code> and rename it to <code>S99saveanybot</code>, also set permissions:
-
-{{< codeblock >}}
-chmod +x /etc/rc.d/S99saveanybot
-{{< /codeblock >}}
-
-<h4>Add Shortcut Commands</h4>
-
-Create a file <code>/usr/bin/sabot</code>, refer to <a href="https://github.com/krau/SaveAny-Bot/blob/main/docs/confs/wrt_bin" target="_blank">wrt_bin</a> and modify as needed. Note that the file encoding here only supports ANSI 936.
-
-Then set permissions:
-
-{{< codeblock >}}
-chmod +x /usr/bin/sabot
-{{< /codeblock >}}
-
-Usage: <code>sudo sabot start|stop|restart|status|enable|disable</code>
-
-{{< /tab >}}
 {{< /tabs >}}
 
 
@@ -120,9 +64,15 @@ docker build --build-arg GOPROXY=https://goproxy.cn,direct -t saveany-bot:local 
 
 This build argument controls dependency downloads and does not change the runtime Telegram proxy.
 
+For unpublished changes in the current checkout, use `docker compose -f docker-compose.local.yml up -d --build`; it builds the local source without `SAVEANY_IMAGE`.
+
 ### Docker Compose
 
-Download the [docker-compose.yml](https://github.com/beihehele/SaveAny-Bot/blob/main/docker-compose.yml) file, create a new `config.toml` file in the same directory, refer to [config.example.toml](https://github.com/beihehele/SaveAny-Bot/blob/main/config.example.toml) to edit the configuration file.
+Check out the release tag/commit matching the target image and use its `docker-compose.yml` and `config.example.toml`, saving your configuration as `config.toml`. Do not mix examples from `main`. Set `SAVEANY_IMAGE` to a verified full image tag or digest, directly or in a local `.env` file. Compose rejects a missing value. Replace `YOUR_VERIFIED_VERSION` below with the selected version.
+
+```bash
+export SAVEANY_IMAGE='ghcr.io/beihehele/saveany-bot:YOUR_VERIFIED_VERSION'
+```
 
 Start:
 
@@ -138,7 +88,7 @@ docker run -d --name saveany-bot --restart unless-stopped \
     -v /path/to/data:/app/data \
     -v /path/to/cache:/app/cache \
     -v /path/to/downloads:/app/downloads \
-    ghcr.io/beihehele/saveany-bot:latest
+    "${SAVEANY_IMAGE:?Set SAVEANY_IMAGE to a verified tag or digest}"
 ```
 
 {{< hint info >}}
@@ -147,7 +97,7 @@ This branch image contains the program and its configuration fetch tool. Pin a v
 
 `data` stores the database and Telegram sessions and must survive container recreation. Use a dedicated `cache` directory for temporary files; do not share it with `data` or `downloads`.
 
-The program no longer clears entire cache directories on exit. Each task cleans files it created; forced or timed-out shutdown can leave leftovers. Inspect directory purpose and file contents while stopped before manual cleanup. The legacy `no_clean_cache` option remains accepted but no longer controls recursive cleanup.
+The program no longer clears entire cache directories on exit. Each task cleans files it created; forced or timed-out shutdown can leave leftovers. Inspect directory purpose and file contents while stopped before manual cleanup. The legacy `no_clean_cache` setting and `--no-clean-cache` flag have been removed; delete them before upgrading.
 
 When the container environment variable `CONFIG_URL` is set to an HTTP(S) URL, the application loads that configuration directly with a 30-second download timeout. HTTP errors, incomplete responses, or invalid configuration prevent startup. Remote configuration does not overwrite `/app/config.toml` or a host-mounted file and is not persisted locally; without this variable, the application continues to load local configuration.
 
@@ -166,7 +116,7 @@ Before updating Docker deployments, verify that `data` is persistent and backed 
 For deployments using the mounts shown above:
 
 ```bash
-docker pull ghcr.io/beihehele/saveany-bot:latest
+docker pull "${SAVEANY_IMAGE:?Set SAVEANY_IMAGE to a verified tag or digest}"
 docker stop saveany-bot
 docker rm saveany-bot
 docker run -d --name saveany-bot --restart unless-stopped \
@@ -174,7 +124,7 @@ docker run -d --name saveany-bot --restart unless-stopped \
     -v /path/to/data:/app/data \
     -v /path/to/cache:/app/cache \
     -v /path/to/downloads:/app/downloads \
-    ghcr.io/beihehele/saveany-bot:latest
+    "${SAVEANY_IMAGE:?Set SAVEANY_IMAGE to a verified tag or digest}"
 ```
 
 docker compose:
@@ -184,4 +134,4 @@ docker compose pull
 docker compose up -d
 ```
 
-Restarting an existing container does not select the newly pulled image. Compose `up -d` recreates containers when their image changes and preserves mounted data; see the [Docker reference](https://docs.docker.com/reference/cli/docker/compose/up/). Replace `latest` in these examples with the version or digest verified for this update.
+Restarting an existing container does not select the newly pulled image. Compose `up -d` recreates containers when their image changes and preserves mounted data; see the [Docker reference](https://docs.docker.com/reference/cli/docker/compose/up/). Set `SAVEANY_IMAGE` to the verified version or digest for this update and check its matching configuration first.

@@ -50,7 +50,13 @@ storages = []
 blacklist = true
 ```
 
-Run Save Any Bot with Docker:
+To run the current checkout, build its image first:
+
+```bash
+docker build -t saveany-bot:local .
+```
+
+Run it with Docker:
 
 ```bash
 docker run -d --name saveany-bot --restart unless-stopped \
@@ -58,10 +64,13 @@ docker run -d --name saveany-bot --restart unless-stopped \
     -v ./data:/app/data \
     -v ./cache:/app/cache \
     -v ./downloads:/app/downloads \
-    ghcr.io/beihehele/saveany-bot:latest
+    saveany-bot:local
 ```
 
 The `data` directory contains the database and Telegram sessions. Keep it when recreating the container; use `cache` only for temporary files. Pin an image version or digest that you have verified for stable deployments.
+
+
+For prebuilt images, select a verified tag or digest and use configuration/examples from its matching release tag or commit. The remote Compose example requires `SAVEANY_IMAGE`; `latest` may refer to a different product revision. Unpublished local changes require a local build.
 
 Read this fork's [installation and update guide](docs/content/en/deployment/installation.md) and [configuration guide](docs/content/en/deployment/configuration/_index.md). The [upstream documentation site](https://sabot.unv.app/en/) may describe a different revision.
 
