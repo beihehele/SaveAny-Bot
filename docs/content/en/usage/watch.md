@@ -96,9 +96,9 @@ After `msgre:` use a keyword boolean expression (`&` AND, `|` OR, `!` NOT, `()` 
 
 ## Media group acceptance checklist
 
-These are manual checks after an upgrade, not a record of completed live Telegram testing. Use a separate Bot, UserBot session, source and destination test chats, two authorized test users, and at least two forum topics. Record the tested version, source and destination message IDs, and expected and actual results.
+This is an acceptance template, not the live test results for the current version. Use dedicated test content and source and destination chats, preferably with a dedicated Bot and UserBot session. Select checks for the features in use: a single-user deployment does not require a second user, while user isolation or multiple-topic checks need the corresponding users or topics. Record the tested version, source and destination message IDs, and expected and actual results in the version's acceptance report.
 
-- [ ] **Incoming media and silent save**: Both users send photo and video albums and individual media concurrently. Verify file counts, caption-based names, and save locations without mixing users' albums.
+- [ ] **Incoming media and silent save**: Send photo and video albums and individual media; verify file counts, caption-based names, and save locations. For multiple-user deployments, also check concurrent submissions from two users without mixing their albums.
 - [ ] **Overlapping albums**: Send two albums consecutively from one source. Watched saves and forwards keep album boundaries, and forwarded messages follow source order.
 - [ ] **Whole-album filtering**: A `msgre` match in one caption forwards the complete album. An album with no matching message is neither forwarded nor saved.
 - [ ] **Default storage and album rules**: Saves with `target=0` follow existing directory, filename, and album rules, saving each file once.
@@ -107,4 +107,4 @@ These are manual checks after an upgrade, not a record of completed live Telegra
 - [ ] **Batch copy and cancellation**: Copy matching albums with `/copy` and cancel a separate copy task. Check complete albums, final status, cancel-button removal, and the ability to start another copy.
 - [ ] **Rate limits and recovery**: Use controlled simulation or a naturally occurring `FLOOD_WAIT` to check wait reporting, cancellation, and final status. Leave this item unchecked if rate limiting was not exercised.
 
-Automated regressions do not replace these live checks. Keep them unverified until an isolated test environment is available.
+Automated regressions do not replace live checks for applicable scenarios. Record uncovered scenarios as unverified or not applicable; keep completed checks in the version's report rather than repeating them because this template remains unchecked.
