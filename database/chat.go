@@ -3,12 +3,25 @@ package database
 import "context"
 
 func (user *User) WatchChat(ctx context.Context, chat WatchChat) error {
-	if len(user.WatchChats) == 0 {
-		user.WatchChats = make([]WatchChat, 0)
+	chat.UserID = user.ID
+	// A command may hold a snapshot predating /unwatch. Saving that whole slice
+	// would recreate deleted routes; only persist the newly requested route.
+	if err := db.WithContext(ctx).Create(&chat).Error; err != nil {
+		return err
 	}
-
 	user.WatchChats = append(user.WatchChats, chat)
-	return db.WithContext(ctx).Save(user.WatchChats).Error
+	return nil
+}
+
+// WatchRouteActive checks the identity of a captured route before admission.
+// CreatedAt distinguishes a replacement even if an imported database reuses IDs.
+func WatchRouteActive(ctx context.Context, route WatchChat) (bool, error) {
+	var current WatchChat
+	result := db.WithContext(ctx).Select("created_at").
+		Where("id = ? AND user_id = ?", route.ID, route.UserID).Find(&current)
+	// Compare decoded instants instead of SQLite timestamp strings; older
+	// database/driver combinations may encode the same instant differently.
+	return result.RowsAffected > 0 && current.CreatedAt.Equal(route.CreatedAt), result.Error
 }
 
 func (user *User) WatchingRoute(ctx context.Context, sourceID, targetID int64, targetTopicID int) (bool, error) {

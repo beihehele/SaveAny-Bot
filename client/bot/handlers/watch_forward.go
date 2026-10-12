@@ -6,9 +6,11 @@ import (
 
 	"github.com/charmbracelet/log"
 	userclient "github.com/krau/SaveAny-Bot/client/user"
+	"github.com/krau/SaveAny-Bot/database"
 )
 
 type forwardAlbumKey struct {
+	RouteID       uint
 	SourceID      int64
 	TargetID      int64
 	TargetTopicID int
@@ -24,10 +26,10 @@ type forwardAlbumBuffer struct {
 	mu      sync.Mutex
 	groups  map[forwardAlbumKey]*forwardAlbumGroup
 	timers  map[forwardAlbumKey]*mediaTimer
-	onFlush func(sourceID, targetID int64, targetTopicID int, ids []int)
+	onFlush func(route database.WatchChat, ids []int)
 }
 
-func newForwardAlbumBuffer(onFlush func(sourceID, targetID int64, targetTopicID int, ids []int)) *forwardAlbumBuffer {
+func newForwardAlbumBuffer(onFlush func(route database.WatchChat, ids []int)) *forwardAlbumBuffer {
 	return &forwardAlbumBuffer{
 		groups:  make(map[forwardAlbumKey]*forwardAlbumGroup),
 		timers:  make(map[forwardAlbumKey]*mediaTimer),
@@ -36,10 +38,10 @@ func newForwardAlbumBuffer(onFlush func(sourceID, targetID int64, targetTopicID 
 }
 
 // add buffers one album part. The album is forwarded only if any part matched the filter.
-func (b *forwardAlbumBuffer) add(sourceID, targetID int64, targetTopicID int, groupedID int64, messageID int, filterMatched bool, timeout time.Duration) {
+func (b *forwardAlbumBuffer) add(route database.WatchChat, groupedID int64, messageID int, filterMatched bool, timeout time.Duration) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	key := forwardAlbumKey{SourceID: sourceID, TargetID: targetID, TargetTopicID: targetTopicID, GroupedID: groupedID}
+	key := forwardAlbumKey{RouteID: route.ID, SourceID: route.ChatID, TargetID: route.TargetID, TargetTopicID: route.TargetTopicID, GroupedID: groupedID}
 	if t, ok := b.timers[key]; ok {
 		t.Stop()
 	}
@@ -58,7 +60,7 @@ func (b *forwardAlbumBuffer) add(sourceID, targetID int64, targetTopicID int, gr
 		if g == nil || len(g.ids) == 0 || !g.matched {
 			return
 		}
-		b.onFlush(sourceID, targetID, targetTopicID, g.ids)
+		b.onFlush(route, g.ids)
 	})
 	b.timers[key] = timer
 }
@@ -77,16 +79,32 @@ func (b *forwardAlbumBuffer) takeGroup(key forwardAlbumKey, timer *mediaTimer) *
 	return g
 }
 
-var watchForwardAlbumBuf = newForwardAlbumBuffer(func(sourceID, targetID int64, targetTopicID int, ids []int) {
+func (b *forwardAlbumBuffer) dropRoute(id uint) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for key, timer := range b.timers {
+		if key.RouteID == id {
+			timer.Stop()
+			delete(b.timers, key)
+			delete(b.groups, key)
+		}
+	}
+}
+
+var watchForwardAlbumBuf = newForwardAlbumBuffer(func(route database.WatchChat, ids []int) {
 	uctx := userclient.GetCtx()
 	if uctx == nil {
 		return
 	}
 	logger := log.FromContext(uctx)
-	go func() {
-		// Same as /copy: ForwardMessage expands grouped_id and links [转] to a caption-bearing part.
-		if err := userclient.ForwardMessage(uctx, uctx, sourceID, targetID, ids[0], targetTopicID); err != nil {
-			logger.Errorf("forward album failed source=%d target=%d topic=%d ids=%v: %v", sourceID, targetID, targetTopicID, ids, err)
-		}
-	}()
+	err := watchRoutes.run(uctx, route, func() error {
+		go func() {
+			// Same as /copy: ForwardMessage expands grouped_id and links [转] to a caption-bearing part.
+			if err := userclient.ForwardMessage(uctx, uctx, route.ChatID, route.TargetID, ids[0], route.TargetTopicID); err != nil {
+				logger.Errorf("forward album failed source=%d target=%d topic=%d ids=%v: %v", route.ChatID, route.TargetID, route.TargetTopicID, ids, err)
+			}
+		}()
+		return nil
+	})
+	logWatchAdmissionError(uctx, route, err)
 })

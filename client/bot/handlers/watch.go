@@ -204,7 +204,7 @@ func handleUnwatchCmd(ctx *ext.Context, update *ext.Update) error {
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorUnwatchInvalidId)), nil)
 		return dispatcher.EndGroups
 	}
-	if err := user.UnwatchByID(ctx, uint(id)); err != nil {
+	if err := stopWatchRoute(ctx, user, uint(id)); err != nil {
 		logger.Errorf("Failed to unwatch id %d: %s", id, err)
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorUnwatchChatFailed, map[string]any{"Error": err.Error()})), nil)
 		return dispatcher.EndGroups
@@ -269,6 +269,7 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 			timeout = d
 		}
 		for _, chat := range chats {
+			route := *chat
 			filterMatched := watchFilterMatches(chat.Filter, msgText)
 			groupID, isGroup := file.Message().GetGroupedID()
 			isAlbum := isGroup && groupID != 0
@@ -276,27 +277,38 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 			if chat.TargetID != 0 {
 				if isAlbum {
 					// Defer filter to album flush; forward whole group with DropAuthor + [转].
-					watchForwardAlbumBuf.add(event.ChatID, chat.TargetID, chat.TargetTopicID, groupID, event.MessageID, filterMatched, timeout)
+					err := watchRoutes.run(ctx, route, func() error {
+						watchForwardAlbumBuf.add(route, groupID, event.MessageID, filterMatched, timeout)
+						return nil
+					})
+					logWatchAdmissionError(ctx, route, err)
 				} else if filterMatched {
 					sourceID, targetID, topicID, msgID := event.ChatID, chat.TargetID, chat.TargetTopicID, event.MessageID
-					go func() {
-						uctx := userclient.GetCtx()
-						if uctx == nil {
-							return
-						}
-						if err := userclient.ForwardMessage(uctx, uctx, sourceID, targetID, msgID, topicID); err != nil {
-							logger.Errorf("forward failed source=%d target=%d topic=%d msg=%d: %v", sourceID, targetID, topicID, msgID, err)
-						}
-					}()
+					err := watchRoutes.run(ctx, route, func() error {
+						go func() {
+							uctx := userclient.GetCtx()
+							if uctx == nil {
+								return
+							}
+							if err := userclient.ForwardMessage(uctx, uctx, sourceID, targetID, msgID, topicID); err != nil {
+								logger.Errorf("forward failed source=%d target=%d topic=%d msg=%d: %v", sourceID, targetID, topicID, msgID, err)
+							}
+						}()
+						return nil
+					})
+					logWatchAdmissionError(ctx, route, err)
 				}
 				continue
 			}
 
 			if isAlbum {
-				uid := chat.UserID
-				watchMediaGroupMgr.addFile(event.ChatID, uid, groupID, file, filterMatched, timeout, func(files []tfile.TGFileMessage) {
-					go processWatchLocalAlbum(ctx, uid, files)
+				err := watchRoutes.run(ctx, route, func() error {
+					watchMediaGroupMgr.addFile(route, groupID, file, filterMatched, timeout, func(files []tfile.TGFileMessage) {
+						go processWatchLocalAlbum(ctx, route, files)
+					})
+					return nil
 				})
+				logWatchAdmissionError(ctx, route, err)
 				continue
 			}
 			if !filterMatched {
@@ -308,7 +320,7 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 				continue
 			}
 			applyWatchFilename(ctx, user, file, "")
-			createWatchLocalTask(ctx, user, stor, defaultDirPath, file)
+			createWatchLocalTask(ctx, route, user, stor, defaultDirPath, file)
 		}
 	}
 }

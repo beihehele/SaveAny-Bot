@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -25,6 +26,7 @@ import (
 )
 
 type watchLocalAlbumKey struct {
+	RouteID   uint
 	ChatID    int64
 	UserID    uint
 	GroupedID int64
@@ -46,11 +48,11 @@ var watchMediaGroupMgr = &watchMediaGroupHandler{
 	timers: make(map[watchLocalAlbumKey]*mediaTimer),
 }
 
-func (w *watchMediaGroupHandler) addFile(chatID int64, userID uint, groupedID int64, file tfile.TGFileMessage, filterMatched bool, timeout time.Duration, callback func([]tfile.TGFileMessage)) {
+func (w *watchMediaGroupHandler) addFile(route database.WatchChat, groupedID int64, file tfile.TGFileMessage, filterMatched bool, timeout time.Duration, callback func([]tfile.TGFileMessage)) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	key := watchLocalAlbumKey{ChatID: chatID, UserID: userID, GroupedID: groupedID}
+	key := watchLocalAlbumKey{RouteID: route.ID, ChatID: route.ChatID, UserID: route.UserID, GroupedID: groupedID}
 	if timer, exists := w.timers[key]; exists {
 		timer.Stop()
 	}
@@ -87,6 +89,18 @@ func (w *watchMediaGroupHandler) takeGroup(key watchLocalAlbumKey, timer *mediaT
 	delete(w.groups, key)
 	delete(w.timers, key)
 	return g
+}
+
+func (w *watchMediaGroupHandler) dropRoute(id uint) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for key, timer := range w.timers {
+		if key.RouteID == id {
+			timer.Stop()
+			delete(w.timers, key)
+			delete(w.groups, key)
+		}
+	}
 }
 
 func albumCaptionText(files []tfile.TGFileMessage) string {
@@ -207,28 +221,28 @@ func buildWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Sto
 	return coretfile.NewTGFileTask(taskid, file, fileStor, storagePath, nil)
 }
 
-func createWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Storage, defaultDirPath string, file tfile.TGFileMessage) {
+func createWatchLocalTask(ctx *ext.Context, route database.WatchChat, user *database.User, stor storage.Storage, defaultDirPath string, file tfile.TGFileMessage) {
 	logger := log.FromContext(ctx)
 	task, err := buildWatchLocalTask(ctx, user, stor, defaultDirPath, file)
 	if err != nil {
 		logger.Errorf("create task failed: %s", err)
 		return
 	}
-	if err := core.AddTask(tgutil.ExtWithContext(ctx.Context, ctx), task); err != nil {
-		logger.Errorf("add task failed: %s", err)
+	if err := watchRouteEnqueue(route)(tgutil.ExtWithContext(ctx.Context, ctx), task); err != nil {
+		logWatchAdmissionError(ctx, route, err)
 		return
 	}
 	logger.Infof("Added media message task for user %d: %s", user.ChatID, file.Name())
 }
 
-func processWatchLocalAlbum(ctx *ext.Context, userID uint, files []tfile.TGFileMessage) {
+func processWatchLocalAlbum(ctx *ext.Context, route database.WatchChat, files []tfile.TGFileMessage) {
 	logger := log.FromContext(ctx)
-	user, stor, defaultDirPath, err := resolveWatchLocalStorage(ctx, userID)
+	user, stor, defaultDirPath, err := resolveWatchLocalStorage(ctx, route.UserID)
 	if err != nil {
 		logger.Warnf("skip local album: %v", err)
 		return
 	}
-	processWatchLocalAlbumTasks(ctx, user, stor, defaultDirPath, files, core.AddTasks)
+	processWatchLocalAlbumTasks(ctx, user, stor, defaultDirPath, files, watchRouteEnqueue(route))
 }
 
 // watchAlbumEnqueue keeps submission explicit so preparation and rejection can
@@ -278,6 +292,10 @@ func submitWatchAlbum(ctx *ext.Context, userID int64, source *tg.Message, tasks 
 		return 0
 	}
 	if err := enqueue(tgutil.ExtWithContext(ctx.Context, ctx), tasks...); err != nil {
+		if errors.Is(err, errWatchRouteStopped) {
+			logger.Debug("Skip stopped watch album", "user_id", userID, "grouped_id", groupedID)
+			return 0
+		}
 		logger.Error("Watch album admission rejected", "user_id", userID, "grouped_id", groupedID, "source_peer", peer,
 			"rejected_tasks", len(tasks), "prepare_failed", prepareFailed, "error", err)
 		return 0

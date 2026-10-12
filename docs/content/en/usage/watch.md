@@ -76,6 +76,12 @@ Output format:
 
 `id` is the auto-increment primary key from `/lswatch`.
 
+A successful stop discards pending album buffers for that route. Even if a timer has already taken an album, local save tasks check the route again before queue admission. Recreating the same source and destination uses a new route identity and does not inherit old buffers. Other routes and topics are unaffected.
+
+These buffers contain albums already assigned to a route. Before route assignment, Userbot also debounces each message for about five seconds. Messages waiting in this shared source stage are assigned using the routes active when consumed. A quickly recreated watch can therefore receive a message received before the replacement was created. Watching does not provide a strict source-message cutoff at route creation time.
+
+Stopping a watch does not cancel queued or running save tasks; cancel those separately from the task list. Forwarding is admitted when its execution goroutine is launched. An admitted forward may finish after the stop reply and will not have its album interrupted by stopping the watch. This boundary applies within one process; run only one instance for the same Bot/Userbot account.
+
 ## Filters
 
 ### msgre
@@ -103,6 +109,7 @@ This is an acceptance template, not the live test results for the current versio
 - [ ] **Whole-album filtering**: A `msgre` match in one caption forwards the complete album. An album with no matching message is neither forwarded nor saved.
 - [ ] **Default storage and album rules**: Saves with `target=0` follow existing directory, filename, and album rules, saving each file once.
 - [ ] **Multiple destinations and topics**: Watch the same source into two destinations and into two topics in one forum group. Each destination receives one complete album without crossing topics.
+- [ ] **Stop and recreate**: Stop one route while an album is buffered. Verify that unadmitted content is not saved or forwarded, other routes continue normally, and recreating the same source and destination does not inherit the old buffer. Admitted work may finish.
 - [ ] **Attribution and formatting**: Use a caption with bold text, links, and emoji. Verify that `[转]` points to the correct source and preserves the original text and formatting.
 - [ ] **Batch copy and cancellation**: Copy matching albums with `/copy` and cancel a separate copy task. Check complete albums, final status, cancel-button removal, and the ability to start another copy.
 - [ ] **Rate limits and recovery**: Use controlled simulation or a naturally occurring `FLOOD_WAIT` to check wait reporting, cancellation, and final status. Leave this item unchecked if rate limiting was not exercised.

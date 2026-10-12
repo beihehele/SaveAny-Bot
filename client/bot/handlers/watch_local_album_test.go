@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
 )
 
@@ -25,10 +26,10 @@ func TestWatchLocalAlbumBufferSeparateGroupedIDs(t *testing.T) {
 	}
 
 	// Two albums for same chat/user overlapping in time.
-	mgr.addFile(-1001, 1, 10, nil, true, 20*time.Millisecond, onFlush)
-	mgr.addFile(-1001, 1, 10, nil, false, 20*time.Millisecond, onFlush)
-	mgr.addFile(-1001, 1, 20, nil, false, 20*time.Millisecond, onFlush)
-	mgr.addFile(-1001, 1, 20, nil, true, 20*time.Millisecond, onFlush)
+	mgr.addFile(database.WatchChat{ChatID: -1001, UserID: 1}, 10, nil, true, 20*time.Millisecond, onFlush)
+	mgr.addFile(database.WatchChat{ChatID: -1001, UserID: 1}, 10, nil, false, 20*time.Millisecond, onFlush)
+	mgr.addFile(database.WatchChat{ChatID: -1001, UserID: 1}, 20, nil, false, 20*time.Millisecond, onFlush)
+	mgr.addFile(database.WatchChat{ChatID: -1001, UserID: 1}, 20, nil, true, 20*time.Millisecond, onFlush)
 
 	time.Sleep(60 * time.Millisecond)
 	mu.Lock()
@@ -50,7 +51,7 @@ func TestWatchLocalAlbumBufferDropsUnmatched(t *testing.T) {
 	}
 	var mu sync.Mutex
 	flushes := 0
-	mgr.addFile(-1001, 1, 11, nil, false, 20*time.Millisecond, func([]tfile.TGFileMessage) {
+	mgr.addFile(database.WatchChat{ChatID: -1001, UserID: 1}, 11, nil, false, 20*time.Millisecond, func([]tfile.TGFileMessage) {
 		mu.Lock()
 		defer mu.Unlock()
 		flushes++
@@ -68,9 +69,9 @@ func TestWatchLocalObsoleteTimerPreservesAlbumAndFilterMatch(t *testing.T) {
 		timers: make(map[watchLocalAlbumKey]*mediaTimer)}
 	key := watchLocalAlbumKey{ChatID: -1001, UserID: 1, GroupedID: 10}
 	onFlush := func([]tfile.TGFileMessage) { t.Error("unexpected timer callback") }
-	mgr.addFile(key.ChatID, key.UserID, key.GroupedID, nil, false, time.Hour, onFlush)
+	mgr.addFile(database.WatchChat{ChatID: key.ChatID, UserID: key.UserID}, key.GroupedID, nil, false, time.Hour, onFlush)
 	oldTimer := mgr.timers[key]
-	mgr.addFile(key.ChatID, key.UserID, key.GroupedID, nil, true, time.Hour, onFlush)
+	mgr.addFile(database.WatchChat{ChatID: key.ChatID, UserID: key.UserID}, key.GroupedID, nil, true, time.Hour, onFlush)
 	newTimer := mgr.timers[key]
 	defer newTimer.Stop()
 	if group := mgr.takeGroup(key, oldTimer); group != nil {
@@ -83,7 +84,7 @@ func TestWatchLocalObsoleteTimerPreservesAlbumAndFilterMatch(t *testing.T) {
 	if group == nil || len(group.files) != 2 || !group.matched {
 		t.Fatalf("reset album or whole-album filter match lost: %+v", group)
 	}
-	mgr.addFile(key.ChatID, key.UserID, key.GroupedID, nil, false, time.Hour, onFlush)
+	mgr.addFile(database.WatchChat{ChatID: key.ChatID, UserID: key.UserID}, key.GroupedID, nil, false, time.Hour, onFlush)
 	reusedTimer := mgr.timers[key]
 	defer reusedTimer.Stop()
 	if mgr.takeGroup(key, newTimer) != nil {

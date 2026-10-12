@@ -6,14 +6,16 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/krau/SaveAny-Bot/database"
 )
 
 func TestForwardAlbumTimerOwnership(t *testing.T) {
 	for _, reuse := range []bool{false, true} {
 		t.Run(map[bool]string{false: "reset", true: "reused key"}[reuse], func(t *testing.T) {
-			buf := newForwardAlbumBuffer(func(int64, int64, int, []int) { t.Error("unexpected timer flush") })
+			buf := newForwardAlbumBuffer(func(database.WatchChat, []int) { t.Error("unexpected timer flush") })
 			key := forwardAlbumKey{SourceID: 1, TargetID: 2, TargetTopicID: 3, GroupedID: 4}
-			buf.add(1, 2, 3, 4, 10, true, time.Hour)
+			buf.add(database.WatchChat{ChatID: 1, TargetID: 2, TargetTopicID: 3}, 4, 10, true, time.Hour)
 			old := buf.timers[key]
 			defer old.Stop()
 			want := []int{10, 11}
@@ -21,7 +23,7 @@ func TestForwardAlbumTimerOwnership(t *testing.T) {
 				buf.takeGroup(key, old)
 				want = []int{11}
 			}
-			buf.add(1, 2, 3, 4, 11, false, time.Hour)
+			buf.add(database.WatchChat{ChatID: 1, TargetID: 2, TargetTopicID: 3}, 4, 11, false, time.Hour)
 			current := buf.timers[key]
 			defer current.Stop()
 			if got := buf.takeGroup(key, old); got != nil {
@@ -44,12 +46,12 @@ func TestForwardAlbumTimerOwnership(t *testing.T) {
 func TestForwardAlbumZeroDelayTimer(t *testing.T) {
 	var flushed atomic.Int32
 	done := make(chan struct{}, 100)
-	buf := newForwardAlbumBuffer(func(int64, int64, int, []int) {
+	buf := newForwardAlbumBuffer(func(database.WatchChat, []int) {
 		flushed.Add(1)
 		done <- struct{}{}
 	})
 	for i := range 100 {
-		buf.add(1, 2, 3, int64(i), i, true, 0)
+		buf.add(database.WatchChat{ChatID: 1, TargetID: 2, TargetTopicID: 3}, int64(i), i, true, 0)
 	}
 	for range 100 {
 		select {
@@ -65,42 +67,35 @@ func TestForwardAlbumZeroDelayTimer(t *testing.T) {
 	}
 }
 
-func TestForwardAlbumBufferFlushesSortedIDs(t *testing.T) {
-	var mu sync.Mutex
-	var got []int
-	buf := newForwardAlbumBuffer(func(sourceID, targetID int64, targetTopicID int, ids []int) {
-		mu.Lock()
-		defer mu.Unlock()
-		got = append([]int(nil), ids...)
+func TestForwardAlbumBufferPreservesArrivalOrder(t *testing.T) {
+	flushed := make(chan []int, 1)
+	buf := newForwardAlbumBuffer(func(route database.WatchChat, ids []int) {
+		flushed <- append([]int(nil), ids...)
 	})
-	buf.add(-1001, -1002, 0, 99, 3, true, 20*time.Millisecond)
-	buf.add(-1001, -1002, 0, 99, 1, true, 20*time.Millisecond)
-	buf.add(-1001, -1002, 0, 99, 2, true, 20*time.Millisecond)
-	time.Sleep(60 * time.Millisecond)
-	mu.Lock()
-	defer mu.Unlock()
-	if len(got) != 3 {
-		t.Fatalf("got len %d want 3: %v", len(got), got)
-	}
-	want := map[int]bool{1: true, 2: true, 3: true}
-	for _, id := range got {
-		if !want[id] {
-			t.Fatalf("unexpected id %d in %v", id, got)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 0}, 99, 3, true, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 0}, 99, 1, true, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 0}, 99, 2, true, 20*time.Millisecond)
+	select {
+	case got := <-flushed:
+		// The buffer preserves arrival order; the forwarding RPC sorts member IDs.
+		if !reflect.DeepEqual(got, []int{3, 1, 2}) {
+			t.Fatalf("arrival order changed: %v", got)
 		}
-		delete(want, id)
+	case <-time.After(3 * time.Second):
+		t.Fatal("album did not flush")
 	}
 }
 
 func TestForwardAlbumBufferSeparateTargets(t *testing.T) {
 	var mu sync.Mutex
 	flushes := 0
-	buf := newForwardAlbumBuffer(func(sourceID, targetID int64, targetTopicID int, ids []int) {
+	buf := newForwardAlbumBuffer(func(route database.WatchChat, ids []int) {
 		mu.Lock()
 		defer mu.Unlock()
 		flushes++
 	})
-	buf.add(-1001, -1002, 0, 1, 10, true, 20*time.Millisecond)
-	buf.add(-1001, -1003, 0, 1, 11, true, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 0}, 1, 10, true, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1003, TargetTopicID: 0}, 1, 11, true, 20*time.Millisecond)
 	time.Sleep(60 * time.Millisecond)
 	mu.Lock()
 	defer mu.Unlock()
@@ -112,13 +107,13 @@ func TestForwardAlbumBufferSeparateTargets(t *testing.T) {
 func TestForwardAlbumBufferSeparateTopics(t *testing.T) {
 	var mu sync.Mutex
 	flushes := 0
-	buf := newForwardAlbumBuffer(func(sourceID, targetID int64, targetTopicID int, ids []int) {
+	buf := newForwardAlbumBuffer(func(route database.WatchChat, ids []int) {
 		mu.Lock()
 		defer mu.Unlock()
 		flushes++
 	})
-	buf.add(-1001, -1002, 1, 1, 10, true, 20*time.Millisecond)
-	buf.add(-1001, -1002, 2, 1, 11, true, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 1}, 1, 10, true, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 2}, 1, 11, true, 20*time.Millisecond)
 	time.Sleep(60 * time.Millisecond)
 	mu.Lock()
 	defer mu.Unlock()
@@ -130,15 +125,15 @@ func TestForwardAlbumBufferSeparateTopics(t *testing.T) {
 func TestForwardAlbumBufferFilterDefersToAlbum(t *testing.T) {
 	var mu sync.Mutex
 	var got []int
-	buf := newForwardAlbumBuffer(func(sourceID, targetID int64, targetTopicID int, ids []int) {
+	buf := newForwardAlbumBuffer(func(route database.WatchChat, ids []int) {
 		mu.Lock()
 		defer mu.Unlock()
 		got = append([]int(nil), ids...)
 	})
 	// Only first part matches caption filter; rest have empty caption.
-	buf.add(-1001, -1002, 0, 99, 1, true, 20*time.Millisecond)
-	buf.add(-1001, -1002, 0, 99, 2, false, 20*time.Millisecond)
-	buf.add(-1001, -1002, 0, 99, 3, false, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 0}, 99, 1, true, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 0}, 99, 2, false, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 0}, 99, 3, false, 20*time.Millisecond)
 	time.Sleep(60 * time.Millisecond)
 	mu.Lock()
 	defer mu.Unlock()
@@ -150,13 +145,13 @@ func TestForwardAlbumBufferFilterDefersToAlbum(t *testing.T) {
 func TestForwardAlbumBufferFilterDropsUnmatchedAlbum(t *testing.T) {
 	var mu sync.Mutex
 	flushes := 0
-	buf := newForwardAlbumBuffer(func(sourceID, targetID int64, targetTopicID int, ids []int) {
+	buf := newForwardAlbumBuffer(func(route database.WatchChat, ids []int) {
 		mu.Lock()
 		defer mu.Unlock()
 		flushes++
 	})
-	buf.add(-1001, -1002, 0, 99, 1, false, 20*time.Millisecond)
-	buf.add(-1001, -1002, 0, 99, 2, false, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 0}, 99, 1, false, 20*time.Millisecond)
+	buf.add(database.WatchChat{ChatID: -1001, TargetID: -1002, TargetTopicID: 0}, 99, 2, false, 20*time.Millisecond)
 	time.Sleep(60 * time.Millisecond)
 	mu.Lock()
 	defer mu.Unlock()
