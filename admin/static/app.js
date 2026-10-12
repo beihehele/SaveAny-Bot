@@ -124,7 +124,8 @@
   function scopeLabel(task) { return t(task.scope === "tracked" ? "trackedScope" : task.scope === "history" ? "historyScope" : "queueScope"); }
   function inputLines(report) {
     const lines = (report.input_results || []).map((result) =>
-      '#' + result.index + ' · ' + t('input_status_' + result.status) + ' · ' + t('input_code_' + result.code) + ' · ' + t("inputNewFiles") + ': ' + result.new_files);
+      '#' + result.index + ' · ' + t('input_status_' + result.status) + ' · ' + t('input_code_' + result.code) + ' · ' + t("inputNewFiles") + ': ' + result.new_files +
+      (result.album_fallback === true ? ' · ' + t("inputAlbumFallback") : ''));
     if (report.input_results_omitted) lines.push(t("inputOmitted") + ': ' + report.input_results_omitted);
     return lines;
   }
@@ -373,7 +374,7 @@
       toast(`${t("taskAccepted")} · ${response.task_id}`); $("task-urls").value = "";
       state.taskOffset = 0; $("task-search").value = ""; $("task-status").value = "";
       if (location.hash === "#tasks") await loadPage(); else location.hash = "tasks";
-      if ((response.input_results || []).some((item) => item.status !== "ready") || response.input_results_omitted) selectionDetails(response, t("taskAccepted") + " · " + response.task_id);
+      if ((response.input_results || []).some((item) => item.status !== "ready" || item.album_fallback === true) || response.input_results_omitted) selectionDetails(response, t("taskAccepted") + " · " + response.task_id);
     } catch (error) { toast(error.message); if (state.authenticated && error.selection) selectionDetails(error.selection, error.message); }
     finally { state.submitting = false; typeFields(); }
   });

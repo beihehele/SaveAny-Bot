@@ -121,6 +121,15 @@ func ForwardMessage(rpcCtx context.Context, ectx *ext.Context, fromChatID, toCha
 				}
 			}
 			sort.Ints(ids)
+		} else {
+			// Preserve the existing fallback, but make its reduced scope visible.
+			reason := "empty_result"
+			if err != nil {
+				reason = "query_error"
+			}
+			log.FromContext(rpcCtx).Warn("Media group lookup failed; forwarding only the selected message",
+				"source_chat_id", fromChatID, "target_chat_id", toChatID, "topic_id", topMsgID,
+				"message_id", msgID, "group_id", gid, "reason", reason, "error", err)
 		}
 	}
 	return ForwardMessagesDropAuthor(rpcCtx, ectx, fromChatID, toChatID, ids, topMsgID, linkID)

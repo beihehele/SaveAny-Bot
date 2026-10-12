@@ -115,7 +115,7 @@ func TestTelegramSaveEndToEnd(t *testing.T) {
 	})
 	var prepared inputresult.Report
 	if mode == "mixed-input-results" {
-		prepared.Add(1, "ready", 1)
+		prepared.AddWithAlbumFallback(1, "ready", 1)
 		prepared.Add(2, "message_unavailable", 0)
 		prepared.Add(3, "ready", 0)
 		extractor := factory.extractFiles
@@ -129,21 +129,24 @@ func TestTelegramSaveEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	if mode == "mixed-input-results" {
-		if len(response.InputResults) != 3 {
+		if len(response.InputResults) != 3 || !response.InputResults[0].AlbumFallback {
 			t.Fatal("CREATE lost source results")
 		}
 		response.InputResults[0].NewFiles = 99
+		response.InputResults[0].AlbumFallback = false
 		prepared.InputResults[0].NewFiles = 98
+		prepared.InputResults[0].AlbumFallback = false
 		info, ok := GetTask(response.TaskID)
 		if !ok {
 			t.Fatal("accepted task not tracked")
 		}
 		rendered := convertTaskProgressToResponse(info)
-		if len(rendered.InputResults) != 3 || rendered.InputResults[0].NewFiles != 1 || rendered.InputResults[1].Status != "failed" || rendered.InputResults[2].Status != "duplicate" {
+		if len(rendered.InputResults) != 3 || rendered.InputResults[0].NewFiles != 1 || !rendered.InputResults[0].AlbumFallback || rendered.InputResults[1].Status != "failed" || rendered.InputResults[2].Status != "duplicate" {
 			t.Fatalf("GET lost or aliased metadata: %+v", rendered)
 		}
 		rendered.InputResults[0].NewFiles = 97
-		if convertTaskProgressToResponse(info).InputResults[0].NewFiles != 1 {
+		rendered.InputResults[0].AlbumFallback = false
+		if stored := convertTaskProgressToResponse(info).InputResults[0]; stored.NewFiles != 1 || !stored.AlbumFallback {
 			t.Fatal("GET mutated stored metadata")
 		}
 	}

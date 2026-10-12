@@ -167,31 +167,38 @@ func getMessageFromClients(ctx context.Context, chatID int64, msgID int, botCtx,
 	return &MessageContext{Message: msg, Client: uc}, nil
 }
 
-// getGroupedMessagesWithContext 获取媒体组消息，返回消息列表和使用的 context
-// 确保消息获取和后续文件创建使用同一个 context
-func getGroupedMessagesWithContext(ctx context.Context, source *MessageContext, chatID int64) ([]*tg.Message, error) {
+// getGroupedMessagesWithContext retains the original client and reports only known
+// original-message fallback; a successful query does not prove album completeness.
+func getGroupedMessagesWithContext(ctx context.Context, source *MessageContext, chatID int64) ([]*tg.Message, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	msg := source.Message
 	clientCtx := tgutil.ClientWithContext(ctx, source.Client)
 
 	groupID, ok := msg.GetGroupedID()
 	if !ok || groupID == 0 {
-		return []*tg.Message{msg}, nil
+		return []*tg.Message{msg}, false, nil
 	}
 
 	// 使用获取原始消息的同一个 client 获取媒体组
 	msgs, err := tgutil.GetGroupedMessages(clientCtx, chatID, msg)
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return nil, false, ctx.Err()
 	}
 	if err != nil || len(msgs) == 0 {
-		// 如果获取失败，至少返回原始消息
-		return []*tg.Message{msg}, nil
+		// Preserve the original-message fallback without implying album completeness.
+		reason := "empty_result"
+		if err != nil {
+			reason = "query_error"
+		}
+		log.FromContext(ctx).Warn("Media group lookup failed; selecting only the original message",
+			"source_chat_id", chatID, "message_id", msg.GetID(), "group_id", groupID,
+			"reason", reason, "error", err)
+		return []*tg.Message{msg}, true, nil
 	}
 
-	return msgs, nil
+	return msgs, false, nil
 }
 
 // ExtractFilesFromLinks 从消息链接中提取文件
@@ -264,20 +271,22 @@ func extractFilesFromLinksReport(ctx context.Context, links []string,
 		}
 		groupID, isGroup := msg.GetGroupedID()
 		if isGroup && groupID != 0 && !single {
-			groupMsgs, err := getGroupedMessagesWithContext(ctx, msgCtx, chatID)
+			groupMsgs, albumFallback, err := getGroupedMessagesWithContext(ctx, msgCtx, chatID)
 			if ctx.Err() != nil {
 				return nil, report, ctx.Err()
 			}
-			if err == nil {
-				for _, gmsg := range groupMsgs {
-					add(gmsg)
-				}
-				report.Add(index+1, code, len(files.Files())-before)
-				continue
+			if err != nil {
+				return nil, report, err
 			}
-			// Preserve the existing single-message fallback.
-			logger.Errorf("Failed to get grouped messages: %v", err)
-			code = "album_unavailable"
+			for _, gmsg := range groupMsgs {
+				add(gmsg)
+			}
+			if albumFallback {
+				report.AddWithAlbumFallback(index+1, code, len(files.Files())-before)
+			} else {
+				report.Add(index+1, code, len(files.Files())-before)
+			}
+			continue
 		}
 		add(msg)
 		report.Add(index+1, code, len(files.Files())-before)

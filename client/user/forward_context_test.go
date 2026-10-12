@@ -1,18 +1,21 @@
 package user
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/celestix/gotgproto/ext"
 	peerstore "github.com/celestix/gotgproto/storage"
+	"github.com/charmbracelet/log"
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/constant"
 	"github.com/gotd/td/tg"
@@ -28,6 +31,7 @@ type forwardContextKey struct{}
 
 type albumContextInvoker struct {
 	cancelGroup context.CancelFunc
+	failGroup   bool
 	forward     *tg.MessagesForwardMessagesRequest
 	edit        *tg.MessagesEditMessageRequest
 	fetches     int
@@ -50,6 +54,9 @@ func (i *albumContextInvoker) Invoke(ctx context.Context, input bin.Encoder, out
 				i.cancelGroup()
 				return ctx.Err()
 			}
+			if i.failGroup {
+				return errors.New("album query unavailable")
+			}
 		}
 		var messages []tg.MessageClass
 		for _, id := range request.ID {
@@ -63,6 +70,10 @@ func (i *albumContextInvoker) Invoke(ctx context.Context, input bin.Encoder, out
 				msg.Message = "caption"
 			}
 			messages = append(messages, msg)
+		}
+		// Return album members out of order to exercise sorting at the RPC boundary.
+		for left, right := 0, len(messages)-1; left < right; left, right = left+1, right-1 {
+			messages[left], messages[right] = messages[right], messages[left]
 		}
 		output.(*tg.MessagesMessagesBox).Messages = &tg.MessagesMessages{Messages: messages}
 	case *tg.MessagesForwardMessagesRequest:
@@ -90,12 +101,15 @@ func TestForwardMessagePreservesAlbumTopicAndTaskContext(t *testing.T) {
 		}
 		cache.Init()
 	})
-	for _, cancelGroup := range []bool{false, true} {
-		t.Run(fmt.Sprintf("cancel_group_%t", cancelGroup), func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.WithValue(t.Context(), forwardContextKey{}, "task"))
+	for _, mode := range []string{"normal", "query_error", "cancelled"} {
+		t.Run(mode, func(t *testing.T) {
+			var output bytes.Buffer
+			logger := log.New(&output)
+			logger.SetFormatter(log.JSONFormatter)
+			ctx, cancel := context.WithCancel(log.WithContext(context.WithValue(t.Context(), forwardContextKey{}, "task"), logger))
 			defer cancel()
-			invoker := &albumContextInvoker{}
-			if cancelGroup {
+			invoker := &albumContextInvoker{failGroup: mode == "query_error"}
+			if mode == "cancelled" {
 				invoker.cancelGroup = cancel
 			}
 			peers := peerstore.NewPeerStorage(nil, true)
@@ -107,7 +121,7 @@ func TestForwardMessagePreservesAlbumTopicAndTaskContext(t *testing.T) {
 			client := &ext.Context{Context: t.Context(), Raw: tg.NewClient(invoker), PeerStorage: peers,
 				Self: &tg.User{ID: 7000 + forwardTestSelf.Add(1)}}
 			err := ForwardMessage(ctx, client, int64(source), int64(target), 42, 99)
-			if cancelGroup {
+			if mode == "cancelled" {
 				if !errors.Is(err, context.Canceled) || invoker.forward != nil || invoker.edit != nil {
 					t.Fatalf("cancelled album query fell back to sending: err=%v forward=%v edit=%v", err, invoker.forward, invoker.edit)
 				}
@@ -116,7 +130,11 @@ func TestForwardMessagePreservesAlbumTopicAndTaskContext(t *testing.T) {
 					t.Fatalf("album not forwarded/attributed: err=%v forward=%v edit=%v", err, invoker.forward, invoker.edit)
 				}
 				request := invoker.forward
-				if !request.DropAuthor || !reflect.DeepEqual(request.ID, []int{40, 42, 44}) || request.TopMsgID != 99 || len(request.RandomID) != 3 {
+				wantIDs := []int{40, 42, 44}
+				if mode == "query_error" {
+					wantIDs = []int{42}
+				}
+				if !request.DropAuthor || !reflect.DeepEqual(request.ID, wantIDs) || request.TopMsgID != 99 || len(request.RandomID) != len(wantIDs) {
 					t.Fatalf("album or topic changed: %+v", request)
 				}
 				if invoker.edit.ID != 142 || invoker.edit.Message != "[转] caption" || len(invoker.edit.Entities) != 2 {
@@ -128,8 +146,20 @@ func TestForwardMessagePreservesAlbumTopicAndTaskContext(t *testing.T) {
 					t.Fatalf("caption link/entity changed: link=%+v bold=%+v", link, bold)
 				}
 			}
-			if invoker.fetches == 0 || invoker.groupReads != 1 || client.Err() != nil {
+			if invoker.fetches == 0 || invoker.groupReads < 1 || client.Err() != nil {
 				t.Fatalf("query coverage or shared context changed: fetches=%d groups=%d client=%v", invoker.fetches, invoker.groupReads, client.Err())
+			}
+			if mode != "query_error" && invoker.groupReads != 1 {
+				t.Fatalf("normal/cancelled lookup repeated the album query: %d", invoker.groupReads)
+			}
+			if mode == "query_error" {
+				if strings.Count(output.String(), "Media group lookup failed; forwarding only the selected message") != 1 ||
+					!strings.Contains(output.String(), `"message_id":42`) || !strings.Contains(output.String(), `"group_id":700`) ||
+					!strings.Contains(output.String(), `"reason":"query_error"`) {
+					t.Fatalf("fallback was not reported once with source identity: %s", &output)
+				}
+			} else if output.Len() != 0 {
+				t.Fatalf("normal/cancelled lookup incorrectly reported fallback: %s", &output)
 			}
 		})
 	}

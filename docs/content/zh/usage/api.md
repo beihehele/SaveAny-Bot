@@ -31,3 +31,5 @@ weight: 20
 批量任务执行结束后，查询响应及正常终态 webhook 可包含 `result_summary`，统计 total/pending/running/succeeded/failed/cancelled/interrupted；failed 包括存储策略跳过的文件。这些计数仅描述逐文件结果，不改变任务终态或触发重试。未执行的任务或无法提供有效计数的任务省略该字段。提前取消的 webhook 可能不含最终计数，之后可查询补全结果，不会为补全再发一次 webhook。非空 `result_policy` 会明确拒绝。
 
 创建响应与后续任务详情提供 `input_results`：`index` 对应提交链接的序号，`status` 为 ready/duplicate/failed/partial，`code` 表示选取阶段的原因，`new_files` 为本项新增选入数量。有效链接仍可入队，失败或重复项不会阻止其余链接；全部无可保存文件时返回 400 和对应结果，不创建任务。最多保留前 100 项，超出数量通过 `input_results_omitted` 表示，实际仍处理所有链接。结果不保存链接或原始 Telegram 错误，不等于下载完成或媒体组完整；API 原有获取媒体组失败时保留原消息的回退行为保持不变。Webhook 不增加这些选取字段。
+
+已知整组查询失败或返回空结果时，对应项增加 `album_fallback: true`，表示只尝试选取原消息。该标记独立于选取状态：原消息新选入仍为 ready，之前已选入仍为 duplicate，无法保存仍为 failed；不据此推断丢失成员数量。没有已知降级时省略此字段；`?single` 以及查询成功但仅返回一个成员均不因数量被标记为降级。请求取消不触发回退，也不会接纳已准备的部分文件。

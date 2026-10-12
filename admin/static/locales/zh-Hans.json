@@ -188,6 +188,7 @@
   "availableDisk": "磁盘可用空间",
   "inputResults": "链接选取结果",
   "inputNewFiles": "新增选入文件",
+  "inputAlbumFallback": "媒体组取回失败，仅尝试选取原消息；整组完整性未确认",
   "inputOmitted": "未展示结果数",
   "inputSelectionNote": "序号对应提交的链接。选入仅表示加入任务，不代表下载完成或媒体组完整；最多展示前 100 项。",
   "input_status_ready": "已选入",

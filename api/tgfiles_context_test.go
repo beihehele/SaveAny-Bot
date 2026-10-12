@@ -1,18 +1,21 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/celestix/gotgproto/ext"
 	peerstore "github.com/celestix/gotgproto/storage"
+	"github.com/charmbracelet/log"
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/common/cache"
@@ -26,6 +29,8 @@ type sourceContextKey struct{}
 type sourceInvoker struct {
 	queries, groups int
 	fail            bool
+	emptyAlbum      bool
+	onlySelected    bool
 	cancel          context.CancelFunc
 	cancelAlbum     bool
 }
@@ -61,10 +66,14 @@ func (i *sourceInvoker) Invoke(ctx context.Context, input bin.Encoder, output bi
 	if i.fail {
 		return errors.New("source inaccessible")
 	}
+	if album && i.emptyAlbum {
+		output.(*tg.MessagesMessagesBox).Messages = &tg.MessagesMessages{}
+		return nil
+	}
 	var messages []tg.MessageClass
 	for _, id := range request.ID {
 		mid := id.(*tg.InputMessageID).ID
-		if mid == 40 || mid == 42 || mid == 44 {
+		if (mid == 40 || mid == 42 || mid == 44) && (!i.onlySelected || mid == 42) {
 			msg := sourceMessage(mid)
 			msg.PeerID = &tg.PeerChannel{ChannelID: request.Channel.(*tg.InputChannel).ChannelID}
 			messages = append(messages, msg)
@@ -107,7 +116,7 @@ func TestSourceCancellationStopsBotAndAlbumFallback(t *testing.T) {
 			userClient := sourceClient(t, userInvoker)
 			var err error
 			if album {
-				_, err = getGroupedMessagesWithContext(ctx, &MessageContext{Message: sourceMessage(42), Client: botClient}, -1000000000111)
+				_, _, err = getGroupedMessagesWithContext(ctx, &MessageContext{Message: sourceMessage(42), Client: botClient}, -1000000000111)
 			} else {
 				_, err = getMessageFromClients(ctx, -1000000000111, 42, botClient, userClient)
 			}
@@ -131,9 +140,65 @@ func TestSourceFallbackKeepsSuccessfulClientForDownloading(t *testing.T) {
 	if err != nil || source.Client != userClient || userInvoker.queries == 0 {
 		t.Fatalf("fallback failed: %v %+v", err, source)
 	}
-	msgs, err := getGroupedMessagesWithContext(ctx, source, -1000000000111)
-	if err != nil || len(msgs) != 3 || userInvoker.groups != 1 {
+	msgs, fallback, err := getGroupedMessagesWithContext(ctx, source, -1000000000111)
+	if err != nil || fallback || len(msgs) != 3 || userInvoker.groups != 1 {
 		t.Fatalf("album lost successful client: %v %v", msgs, err)
+	}
+}
+
+func TestAlbumLookupDiagnosticsPreserveFallbackAndCancellation(t *testing.T) {
+	for _, mode := range []string{"normal", "query_error", "empty_result", "cancelled", "single"} {
+		t.Run(mode, func(t *testing.T) {
+			var output bytes.Buffer
+			logger := log.New(&output)
+			logger.SetFormatter(log.JSONFormatter)
+			request, cancel := sourceRequest(t)
+			defer cancel()
+			ctx := log.WithContext(request, logger)
+			invoker := &sourceInvoker{fail: mode == "query_error", emptyAlbum: mode == "empty_result"}
+			if mode == "cancelled" {
+				invoker.cancel, invoker.cancelAlbum = cancel, true
+			}
+			client := sourceClient(t, invoker)
+			msg := sourceMessage(42)
+			if mode == "single" {
+				msg = &tg.Message{ID: 42}
+			}
+			source := &MessageContext{Message: msg, Client: client}
+			messages, fallback, err := getGroupedMessagesWithContext(ctx, source, -1000000000111)
+			if fallback != (mode == "query_error" || mode == "empty_result") {
+				t.Fatalf("incorrect fallback flag for %s: %t", mode, fallback)
+			}
+			switch mode {
+			case "cancelled":
+				if !errors.Is(err, context.Canceled) || messages != nil {
+					t.Fatalf("cancelled lookup returned partial selection: %v %v", messages, err)
+				}
+			case "normal":
+				if err != nil || len(messages) != 3 {
+					t.Fatalf("album selection changed: %v %v", messages, err)
+				}
+			default:
+				if err != nil || len(messages) != 1 || messages[0] != msg {
+					t.Fatalf("original-message fallback changed: %v %v", messages, err)
+				}
+			}
+			if client.Err() != nil || source.Client != client {
+				t.Fatal("shared client changed or was cancelled")
+			}
+			if mode == "query_error" || mode == "empty_result" {
+				if strings.Count(output.String(), "Media group lookup failed; selecting only the original message") != 1 ||
+					!strings.Contains(output.String(), `"message_id":42`) || !strings.Contains(output.String(), `"group_id":700`) ||
+					!strings.Contains(output.String(), `"reason":"`+mode+`"`) {
+					t.Fatalf("fallback was not reported once with source identity and reason: %s", &output)
+				}
+			} else if output.Len() != 0 {
+				t.Fatalf("normal/single/cancelled lookup incorrectly reported fallback: %s", &output)
+			}
+			if mode == "single" && invoker.queries != 0 {
+				t.Fatal("single message triggered an album query")
+			}
+		})
 	}
 }
 

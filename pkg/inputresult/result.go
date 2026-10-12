@@ -8,10 +8,11 @@ const Limit = 100
 
 // Result refers to the one-based position of a submitted link.
 type Result struct {
-	Index    int    `json:"index"`
-	Status   string `json:"status"`
-	Code     string `json:"code"`
-	NewFiles int    `json:"new_files"`
+	Index         int    `json:"index"`
+	Status        string `json:"status"`
+	Code          string `json:"code"`
+	NewFiles      int    `json:"new_files"`
+	AlbumFallback bool   `json:"album_fallback,omitempty"`
 }
 
 // Report bounds metadata independently of how many links are processed.
@@ -22,6 +23,16 @@ type Report struct {
 
 // Add records a selection result, retaining at most Limit entries.
 func (r *Report) Add(index int, code string, newFiles int) {
+	r.add(index, code, newFiles, false)
+}
+
+// AddWithAlbumFallback records known album lookup degradation independently of
+// whether the original message added a file, was a duplicate or was unsupported.
+func (r *Report) AddWithAlbumFallback(index int, code string, newFiles int) {
+	r.add(index, code, newFiles, true)
+}
+
+func (r *Report) add(index int, code string, newFiles int, albumFallback bool) {
 	status := "failed"
 	if newFiles > 0 {
 		status = "ready"
@@ -35,7 +46,7 @@ func (r *Report) Add(index int, code string, newFiles int) {
 		r.InputResultsOmitted++
 		return
 	}
-	r.InputResults = append(r.InputResults, Result{Index: index, Status: status, Code: code, NewFiles: newFiles})
+	r.InputResults = append(r.InputResults, Result{Index: index, Status: status, Code: code, NewFiles: newFiles, AlbumFallback: albumFallback})
 }
 
 // Clone prevents response callers from mutating retained metadata.

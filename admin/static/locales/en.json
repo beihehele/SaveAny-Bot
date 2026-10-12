@@ -188,6 +188,7 @@
   "availableDisk": "Available disk space",
   "inputResults": "Link selection results",
   "inputNewFiles": "New files selected",
+  "inputAlbumFallback": "Media group lookup failed; only the original message was considered. Album completeness is unverified",
   "inputOmitted": "Results not shown",
   "inputSelectionNote": "Positions refer to submitted links. Selection means inclusion in the task, not download completion or a complete media group. At most the first 100 results are shown.",
   "input_status_ready": "Selected",

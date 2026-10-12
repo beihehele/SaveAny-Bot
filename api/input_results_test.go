@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gotd/td/tg"
@@ -86,5 +88,99 @@ func TestLinkResultsPreserveOriginalMessageFallback(t *testing.T) {
 	})
 	if err != nil || len(files) != 1 || files[0].Message().ID != 42 || report.InputResults[0].NewFiles != 1 {
 		t.Fatalf("existing album fallback changed: %v %+v", err, report)
+	}
+}
+
+func TestAlbumFallbackMetadataPreservesSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		links         []string
+		invoker       sourceInvoker
+		wantIDs       []int
+		wantStatus    []string
+		fallback      []bool
+		unsupportedAt int
+		wantError     bool
+	}{
+		{"query error", []string{"https://t.me/c/111/42"}, sourceInvoker{fail: true}, []int{42}, []string{"ready"}, []bool{true}, 0, false},
+		{"empty result", []string{"https://t.me/c/111/42"}, sourceInvoker{emptyAlbum: true}, []int{42}, []string{"ready"}, []bool{true}, 0, false},
+		{"duplicate fallback", []string{"https://t.me/c/111/42?single", "https://t.me/c/111/42"}, sourceInvoker{fail: true}, []int{42}, []string{"ready", "duplicate"}, []bool{false, true}, 0, false},
+		{"repeated fallback", []string{"https://t.me/c/111/42", "https://t.me/c/111/42"}, sourceInvoker{fail: true}, []int{42}, []string{"ready", "duplicate"}, []bool{true, true}, 0, false},
+		{"explicit single", []string{"https://t.me/c/111/42?single"}, sourceInvoker{fail: true}, []int{42}, []string{"ready"}, []bool{false}, 0, false},
+		{"normal album", []string{"https://t.me/c/111/42"}, sourceInvoker{}, []int{40, 42, 44}, []string{"ready"}, []bool{false}, 0, false},
+		{"successful single member", []string{"https://t.me/c/111/42"}, sourceInvoker{onlySelected: true}, []int{42}, []string{"ready"}, []bool{false}, 0, false},
+		{"unsupported fallback", []string{"https://t.me/c/111/42"}, sourceInvoker{fail: true}, nil, []string{"failed"}, []bool{true}, 42, true},
+		{"mixed supported and unsupported", []string{"https://t.me/c/111/42?single", "https://t.me/c/111/44"}, sourceInvoker{fail: true}, []int{42}, []string{"ready", "failed"}, []bool{false, true}, 44, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := sourceRequest(t)
+			defer cancel()
+			client := sourceClient(t, &tc.invoker)
+			files, report, err := extractFilesFromLinksReport(ctx, tc.links, ParseMessageLink, func(_ context.Context, _ int64, msgID int) (*MessageContext, error) {
+				msg := sourceMessage(msgID)
+				if msgID == tc.unsupportedAt {
+					msg.Media = &tg.MessageMediaContact{}
+				}
+				return &MessageContext{Message: msg, Client: client}, nil
+			})
+			var selectionErr *inputresult.Error
+			if (err != nil) != tc.wantError || (tc.wantError && !errors.As(err, &selectionErr)) || len(files) != len(tc.wantIDs) || len(report.InputResults) != len(tc.links) {
+				t.Fatalf("selection changed: files=%d report=%+v err=%v", len(files), report, err)
+			}
+			ids := map[int]bool{}
+			for _, file := range files {
+				ids[file.Message().ID] = true
+				if file.Dler() != client.Raw {
+					t.Fatal("download client changed")
+				}
+			}
+			for _, id := range tc.wantIDs {
+				if !ids[id] {
+					t.Fatalf("selected member lost: %d", id)
+				}
+			}
+			payload, err := json.Marshal(report)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded struct {
+				Results []map[string]any `json:"input_results"`
+			}
+			if err := json.Unmarshal(payload, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			for index, result := range decoded.Results {
+				flag, present := result["album_fallback"]
+				if result["status"] != tc.wantStatus[index] || present != tc.fallback[index] || (present && flag != true) {
+					t.Fatalf("selection status or known fallback missing: %s", payload)
+				}
+				wantNew := 0
+				if tc.wantStatus[index] == "ready" {
+					wantNew = len(tc.wantIDs)
+				}
+				if report.InputResults[index].NewFiles != wantNew || (tc.wantStatus[index] == "failed" && report.InputResults[index].Code != "unsupported_media") {
+					t.Fatalf("selection counts or failure reason changed: %s", payload)
+				}
+			}
+			if strings.Contains(string(payload), "source inaccessible") || strings.Contains(string(payload), "https://") || client.Err() != nil {
+				t.Fatal("metadata leaked upstream details or cancelled shared client")
+			}
+			if tc.name == "explicit single" && tc.invoker.queries != 0 {
+				t.Fatal("single selection queried the album")
+			}
+		})
+	}
+}
+
+func TestCancelledAlbumLookupDiscardsFilesAndDoesNotReportFallback(t *testing.T) {
+	ctx, cancel := sourceRequest(t)
+	defer cancel()
+	invoker := &sourceInvoker{cancel: cancel, cancelAlbum: true}
+	client := sourceClient(t, invoker)
+	files, report, err := extractFilesFromLinksReport(ctx, []string{"https://t.me/c/111/42?single", "https://t.me/c/111/44"}, ParseMessageLink, func(_ context.Context, _ int64, msgID int) (*MessageContext, error) {
+		return &MessageContext{Message: sourceMessage(msgID), Client: client}, nil
+	})
+	if !errors.Is(err, context.Canceled) || files != nil || invoker.groups == 0 || len(report.InputResults) != 1 || report.InputResults[0].AlbumFallback || client.Err() != nil {
+		t.Fatalf("cancelled album lookup returned fallback or partial files: files=%v report=%+v err=%v", files, report, err)
 	}
 }
