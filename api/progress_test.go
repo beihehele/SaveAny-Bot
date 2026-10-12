@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 func TestTerminalProgressDoesNotRegress(t *testing.T) {
@@ -23,7 +24,7 @@ func TestTerminalProgressDoesNotRegress(t *testing.T) {
 			_, _, _, _, _, _, _, updated := info.snapshot()
 			info.Emit(taskevent.Event{Phase: taskevent.PhaseStart})
 			info.Emit(taskevent.Event{Phase: taskevent.PhaseProgress, DownloadedBytes: 99})
-			info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled})
+			info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeCancelled, Err: context.Canceled})
 			info.SetError("late error")
 			info.UpdateStatus(TaskStatusRunning)
 			got, _, bytes, _, _, _, errMsg, last := info.snapshot()
@@ -33,9 +34,21 @@ func TestTerminalProgressDoesNotRegress(t *testing.T) {
 		})
 	}
 	info := &TaskProgressInfo{Status: TaskStatusRunning}
-	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Err: fmt.Errorf("interrupted: %w", context.Canceled)})
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeCancelled, Err: fmt.Errorf("interrupted: %w", context.Canceled)})
 	if got, _, _, _, _, _, _, _ := info.snapshot(); got != TaskStatusCancelled {
 		t.Fatalf("cancellation became %s", got)
+	}
+}
+
+func TestProgressUsesExplicitWorkerOutcome(t *testing.T) {
+	info := &TaskProgressInfo{Status: TaskStatusRunning}
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled})
+	if convertTaskProgressToResponse(info).Status != TaskStatusRunning {
+		t.Fatal("missing worker outcome was guessed")
+	}
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled, Outcome: taskresult.OutcomeFailed})
+	if convertTaskProgressToResponse(info).Status != TaskStatusFailed {
+		t.Fatal("observer overrode explicit worker failure")
 	}
 }
 
@@ -93,7 +106,7 @@ func TestQueuedCancellationWebhookOnce(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			info.UpdateStatus(TaskStatusCancelled)
-			info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled})
+			info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeCancelled, Err: context.Canceled})
 		}()
 	}
 	wg.Wait()

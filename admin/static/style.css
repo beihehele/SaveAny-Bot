@@ -3,3 +3,6 @@
 @media(max-width:760px){.console{display:block}.sidebar{position:static;width:100%;padding:18px 16px}.sidebar .brand{padding:0}.sidebar .brand-sub{display:none}.sidebar .nav-label,.sidebar-footer{display:none}.sidebar nav{flex-direction:row;overflow:auto;gap:4px;margin-top:17px}.sidebar nav a{padding:9px 11px;white-space:nowrap;font-size:12px}.sidebar nav a>span:first-child{display:none}.main-layout{width:100%;margin:0}.topbar{height:auto;min-height:95px;padding:20px;flex-wrap:wrap}.top-actions{margin:0}.language-picker{top:20px;right:15px}.content{padding:20px 15px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric-value{font-size:27px}.panel{padding:18px}.storage-grid{grid-template-columns:1fr}.toolbar{flex-wrap:wrap}.toolbar input{flex-basis:100%}.toolbar select{flex:1;width:auto}.form-grid{grid-template-columns:1fr;gap:17px}.content-footer{flex-direction:column;gap:8px}.definition-list{grid-template-columns:minmax(80px,1fr) minmax(0,2fr);font-size:12px}.login-card{padding:28px}h1{font-size:23px}}
 
 #input-details{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;line-height:1.8}
+
+.preference-editor { display: grid; gap: 8px; margin: 20px 0; }
+.preference-editor button { justify-self: start; margin-top: 8px; }

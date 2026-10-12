@@ -62,7 +62,7 @@ func parseTargetWithTopic(targetArg string) (parsedTarget, error) {
 		return parsedTarget{}, errWatchTargetTopicInvalid
 	}
 	topicID, err := strconv.Atoi(parts[1])
-	if err != nil || topicID <= 0 {
+	if err != nil || topicID <= 0 || topicID > 2147483647 {
 		return parsedTarget{}, errWatchTargetTopicInvalid
 	}
 	return parsedTarget{ChatIDArg: parts[0], TopicID: topicID}, nil

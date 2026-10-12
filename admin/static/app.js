@@ -144,7 +144,16 @@
       [t("downloaded"), `${bytes(task.progress.downloaded_bytes)} / ${bytes(task.progress.total_bytes)}`],
       [t("fileCount"), `${task.progress.downloaded_files || 0} / ${task.progress.total_files || 0}`]);
     for (const line of inputLines(task)) values.push([t("inputResults"), line]);
-    if (task.result_summary) values.push([t("resultSummary"), JSON.stringify(task.result_summary)]);
+    if (task.result_summary) {
+      const counts = task.result_summary;
+      if (task.type === "copy") {
+        values.push([t("resultUnit"), t("copyResultUnit")],
+          [t("selectedItems"), counts.total], [t("succeededItems"), counts.succeeded],
+          [t("failedItems"), counts.failed], [t("cancelledItems"), counts.cancelled],
+          [t("interruptedItems"), counts.interrupted], [t("unattemptedItems"), counts.pending],
+          [t("runningItems"), counts.running], [t("resultMeaning"), t("copyResultMeaning")]);
+      } else values.push([t("resultSummary"), JSON.stringify(counts)]);
+    }
     definitions($("task-details"), values);
     $("task-detail-error").textContent = task.error || "";
     $("task-detail-error").hidden = !task.error;
@@ -176,7 +185,7 @@
         const cancel = button(t("cancel"), () => cancelTask(task, cancel), "danger-button small-button");
         actions.append(cancel);
       }
-      return [title, badge(task.status), progress, task.storage || "—", date(task.created_at), actions];
+      return [title, taskStatus(task), progress, task.storage || "—", date(task.created_at), actions];
     }));
   }
   function storageSelectors() {
@@ -231,6 +240,56 @@
       $("storage-cards").append(card);
     });
   }
+  function taskStatus(task) {
+    const value = node("div"); value.append(badge(task.status));
+    if (task.copy_outcome) value.append(node("div", t(`copyOutcome_${task.copy_outcome}`), "cell-subtitle"));
+    return value;
+  }
+  function userSelectors(users) {
+    for (const id of ["copy-user", "watch-user", "preview-user"]) {
+      const select = $(id), selected = select.value;
+      select.replaceChildren();
+      users.forEach((user) => { const option = node("option", user.chat_id); option.value = String(user.chat_id); select.append(option); });
+      if (users.some((user) => String(user.chat_id) === selected)) select.value = selected;
+      select.disabled = !users.length;
+    }
+  }
+  function preferenceEditor(user) {
+    const form = node("form", null, "preference-editor");
+    const controls = [];
+    const add = (key, label, value, choices) => {
+      const input = choices ? node("select") : node("input");
+      input.id = `preference-${user.chat_id}-${key}`;
+      if (choices) choices.forEach(([value, text]) => { const option = node("option", text); option.value = String(value); input.append(option); });
+      else input.maxLength = 4096;
+      input.value = String(value ?? "");
+      input.dataset.original = input.value;
+      const caption = node("label", t(label)); caption.htmlFor = input.id;
+      form.append(caption, input); controls.push([key, input]); return input;
+    };
+    const yesNo = [["true", t("yes")], ["false", t("no")]];
+    add("silent", "silent", user.silent, yesNo);
+    add("apply_rule", "applyRules", user.apply_rule, yesNo);
+    const storages = state.storages.map((item) => [item.name, item.name]);
+    if (!storages.some(([name]) => name === user.default_storage)) storages.unshift([user.default_storage, user.default_storage || t("unset")]);
+    const storage = add("default_storage", "defaultStorage", user.default_storage, storages);
+    const dir = add("default_dir", "defaultDirectory", user.default_dir || 0, [[0, t("unset")], ...user.directories.map((item) => [item.id, `${item.storage}: ${item.path}`])]);
+    storage.addEventListener("change", () => { dir.value = "0"; });
+    add("filename_strategy", "filenameStrategy", user.filename_strategy || "default", [["default", t("namingDefault")], ["message", t("namingMessage")], ["template", t("namingTemplate")]]);
+    add("filename_template", "filenameTemplate", user.filename_template);
+    add("conflict_strategy", "conflictStrategy", user.conflict_strategy || "rename", ["rename", "skip", "overwrite", "ask"].map((value) => [value, t(`conflict_${value}`)]));
+    const save = node("button", t("savePreferences"), "primary"); save.type = "submit"; form.append(save);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault(); if (save.disabled) return;
+      const payload = { user_chat_id: user.chat_id };
+      for (const [key, input] of controls) if (input.value !== input.dataset.original) payload[key] = ["silent", "apply_rule"].includes(key) ? input.value === "true" : key === "default_dir" ? Number(input.value) : input.value;
+      if (Object.keys(payload).length === 1) { toast(t("noChanges")); return; }
+      save.disabled = true;
+      try { await request("preferences", { method: "PATCH", body: JSON.stringify(payload) }); toast(t("saved")); await loadPage(); }
+      catch (error) { toast(error.message); } finally { save.disabled = false; }
+    });
+    return form;
+  }
   function userPreferences(users) {
     $("preference-cards").replaceChildren();
     if (!users.length) { $("preference-cards").append(node("p", t("empty"), "empty")); return; }
@@ -241,7 +300,7 @@
       definitions(values, [[t("defaultStorage"), user.default_storage || t("unset")], [t("defaultDirectory"), defaultDir?.path || t("unset")],
         [t("silent"), user.silent], [t("applyRules"), user.apply_rule], [t("filenameStrategy"), user.filename_strategy || t("unset")],
         [t("filenameTemplate"), user.filename_template || t("unset")], [t("conflictStrategy"), user.conflict_strategy || t("unset")]]);
-      panel.append(values, node("h2", t("directories")));
+      panel.append(values, preferenceEditor(user), node("h2", t("directories")));
       const dirs = node("div"); table(dirs, ["storage", "path"], user.directories.map((directory) => [directory.storage, directory.path]));
       panel.append(dirs, node("h2", t("rules")));
       const rules = node("div"); table(rules, ["ruleType", "ruleData", "storage", "path"], user.rules.map((rule) => [rule.type, rule.data, rule.storage, rule.path]));
@@ -254,9 +313,9 @@
     users.forEach((user) => {
       const panel = node("article", null, "panel"); panel.append(node("h2", `${t("telegramUser")} ${user.chat_id}`));
       const target = node("div");
-      table(target, ["sourceChat", "targetChat", "topic", "filter"], user.routes.map((route) =>
+      table(target, ["sourceChat", "targetChat", "topic", "filter", "actions"], user.routes.map((route) =>
         [`${route.source || "—"} (${route.source_id})`, route.target_id ? `${route.target || "—"} (${route.target_id})` : t("localSaving"),
-          route.topic_id ? `${route.topic || "—"} (${route.topic_id})` : "—", route.filter || t("none")]));
+          route.topic_id ? `${route.topic || "—"} (${route.topic_id})` : "—", route.filter || t("none"), stopRouteButton(user.chat_id, route)]));
       panel.append(target); $("route-table").append(panel);
     });
   }
@@ -317,7 +376,7 @@
         tasksTable($("task-table"), data.tasks);
         pagination($("task-pagination"), data.total, data.offset, (offset) => { state.taskOffset = offset; loadPage(); });
       } else if (page === "storages") { storageCards(); }
-      else if (page === "new") { storageSelectors(); taskTypes(); }
+      else if (page === "new") { storageSelectors(); taskTypes(); const data = await request("preferences", { signal }); if (sequence !== state.sequence) return; userSelectors(data.users); }
       else if (page === "files") {
         if (!$("file-storage").value) { $("file-table").replaceChildren(node("p", t("noLocalStorage"), "empty")); $("file-pagination").replaceChildren(); }
         else {
@@ -327,12 +386,21 @@
       } else if (page === "routes" || page === "preferences") {
         const data = await request("preferences", { signal });
         if (sequence !== state.sequence) return;
-        if (page === "routes") userRoutes(data.users); else userPreferences(data.users);
+        userSelectors(data.users); if (page === "routes") userRoutes(data.users); else userPreferences(data.users);
       } else if (page === "diagnostics") {
         const data = await request("diagnostics", { signal });
         if (sequence !== state.sequence) return;
         definitions($("runtime-settings"), Object.entries(data.settings).map(([key, value]) => [t(`setting_${key}`), value]));
         definitions($("watch-health"), [[t("watchPending"), data.watch?.Pending], [t("watchBuffered"), data.watch?.Buffered], [t("watchCapacity"), data.watch?.Capacity], [t("watchEnqueued"), data.watch?.Enqueued], [t("watchDropped"), data.watch?.Dropped], [t("botInitialized"), data.telegram?.bot_initialized], [t("userbotInitialized"), data.telegram?.userbot_initialized]]);
+        const forward = data.watch_forward;
+        definitions($("forward-health"), [[t("forwardPending"), forward?.Pending], [t("forwardRunning"), forward?.Running],
+          [t("forwardCapacity"), forward?.Capacity], [t("forwardWorkers"), forward?.Workers],
+          [t("forwardAccepted"), forward?.Accepted], [t("forwardStarted"), forward?.Started],
+          [t("forwardSucceeded"), forward?.Succeeded], [t("forwardFailed"), forward?.Failed],
+          [t("forwardCancelled"), forward?.Cancelled], [t("forwardInterrupted"), forward?.Interrupted],
+          [t("forwardRejectedFull"), forward?.RejectedFull], [t("forwardRejectedClosed"), forward?.RejectedClosed],
+          [t("forwardRejectedUnavailable"), forward?.RejectedUnavailable], [t("forwardDiscardedStopped"), forward?.DiscardedStopped],
+          [t("forwardDiscardedShutdown"), forward?.DiscardedShutdown], [t("forwardClosed"), forward?.Closed]]);
         table($("disk-health"), ["storage", "availableDisk"], (data.disks || []).map((disk) => [disk.storage, disk.available ? bytes(disk.available_bytes) : t("unavailable")]));
         table($("scan-health"), ["scanMode", "scanPages", "scanSucceeded", "scanFailed", "scanTimedOut", "scanCancelled", "scanLastDuration", "scanMaxDuration"], (data.scans || []).map((scan) => [t(`scan_${scan.mode}`), scan.pages, scan.succeeded, scan.failed, scan.timed_out, scan.cancelled, scan.pages ? Number(scan.last_duration_ms).toFixed(1) + " ms" : t("scanNoSamples"), scan.pages ? Number(scan.max_duration_ms).toFixed(1) + " ms" : t("scanNoSamples")]));
         table($("audit-table"), ["time", "operation", "object", "result"], data.audit.map((entry) => [date(entry.time), t(`audit_${entry.action}`), entry.object || "—", t(entry.result)]));
@@ -344,6 +412,49 @@
       }
     } finally { if (sequence === state.sequence) { state.loading = false; $("refresh").disabled = false; $(`page-${page}`).removeAttribute("aria-busy"); } }
   }
+  function stopRouteButton(userID, route) {
+    const trigger = button(t("stopRoute"), async () => {
+      if (!window.confirm(t("confirmStopRoute"))) return;
+      trigger.disabled = true;
+      try { await request(`routes/${route.id}/stop`, { method: "POST", body: JSON.stringify({ user_chat_id: userID }) }); toast(t("routeStopped")); await loadPage(); }
+      catch (error) { toast(error.message); } finally { trigger.disabled = false; }
+    }, "danger-button small-button");
+    return trigger;
+  }
+  for (const prefix of ["copy", "watch"]) {
+    $(`${prefix}-topics-load`).addEventListener("click", async () => {
+      const trigger = $(`${prefix}-topics-load`), select = $(`${prefix}-topics`);
+      if (trigger.disabled) return; trigger.disabled = true;
+      const target = $(`${prefix}-target`).value.trim();
+      try {
+        const data = await request("topics", { method: "POST", body: JSON.stringify({ user_chat_id: Number($(`${prefix}-user`).value), target }) });
+        if (target !== $(`${prefix}-target`).value.trim()) return;
+        select.replaceChildren(node("option", t("noTopic"))); select.firstChild.value = "";
+        data.topics.forEach((topic) => { const option = node("option", `${topic.title} (${topic.id})`); option.value = String(topic.id); select.append(option); });
+      } catch (error) { toast(error.message); } finally { trigger.disabled = false; }
+    });
+    $(`${prefix}-topics`).addEventListener("change", () => { $(`${prefix}-topic`).value = $(`${prefix}-topics`).value; });
+    $(`${prefix}-target`).addEventListener("input", () => { $(`${prefix}-topic`).value = ""; $(`${prefix}-topics`).replaceChildren(node("option", t("noTopic"))); $(`${prefix}-topics`).firstChild.value = ""; });
+    $(`${prefix}-form`).addEventListener("submit", async (event) => {
+      event.preventDefault(); const trigger = $(`${prefix}-submit`); if (trigger.disabled) return;
+      const target = $(`${prefix}-target`).value.trim(), topic = $(`${prefix}-topic`).value;
+      const payload = { user_chat_id: Number($(`${prefix}-user`).value), source: $(`${prefix}-source`).value.trim(), target: topic ? `${target}:${topic}` : target, filter: $(`${prefix}-filter`).value };
+      if (prefix === "copy") payload.count = Number($("copy-count").value);
+      if (!window.confirm(t(prefix === "copy" ? "confirmCreateCopy" : "confirmCreateRoute"))) return;
+      trigger.disabled = true;
+      try {
+        const data = await request(prefix === "copy" ? "copies" : "routes", { method: "POST", body: JSON.stringify(payload) });
+        toast(`${t(prefix === "copy" ? "taskAccepted" : "routeCreated")} · ${data.task_id || data.id}`);
+        if (prefix === "copy") { state.taskOffset = 0; $("task-search").value = ""; $("task-status").value = ""; location.hash = "tasks"; } else await loadPage();
+      } catch (error) { toast(error.message); } finally { trigger.disabled = false; }
+    });
+  }
+  $("preview-form").addEventListener("submit", async (event) => {
+    event.preventDefault(); const trigger = event.submitter; if (trigger.disabled) return; trigger.disabled = true;
+    const payload = { user_chat_id: Number($("preview-user").value), filter: $("preview-filter").value, text: $("preview-text").value, template: $("preview-template").value, original_name: $("preview-original").value };
+    try { const result = await request("preview", { method: "POST", body: JSON.stringify(payload) }); $("preview-result").textContent = `${t(result.matches ? "filterMatched" : "filterNotMatched")} · ${result.filename}`; }
+    catch (error) { toast(error.message); } finally { trigger.disabled = false; }
+  });
   $("login-form").addEventListener("submit", async (event) => {
     event.preventDefault(); $("login-submit").disabled = true; $("login-error").hidden = true;
     try {

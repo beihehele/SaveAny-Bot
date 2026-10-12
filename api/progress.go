@@ -247,6 +247,9 @@ func (t *TaskProgressInfo) responseSnapshot() taskProgressSnapshot {
 // Emit implements taskevent.Sink. It translates task lifecycle events into
 // status/progress updates and fires the webhook on terminal transitions.
 func (t *TaskProgressInfo) Emit(e taskevent.Event) {
+	if e.Phase == taskevent.PhaseDone && e.Outcome == taskresult.OutcomeUnknown {
+		return
+	}
 	t.mu.Lock()
 	if t.Status.terminal() {
 		// DELETE reports cancellation immediately, before Execute finishes. Allow
@@ -284,18 +287,6 @@ func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 	case taskevent.PhaseDone:
 		t.acceptResultSummaryLocked(e.ResultSummary)
 		outcome := e.Outcome
-		if outcome == taskresult.OutcomeUnknown {
-			// Older producers have no task-context decision. Keep their existing
-			// error-based contract; worker events always carry an explicit outcome.
-			switch {
-			case errors.Is(e.Err, context.Canceled):
-				outcome = taskresult.OutcomeCancelled
-			case e.Err != nil:
-				outcome = taskresult.OutcomeFailed
-			default:
-				outcome = taskresult.OutcomeSuccess
-			}
-		}
 		if outcome == taskresult.OutcomeCancelled {
 			t.Status = TaskStatusCancelled
 		} else if outcome == taskresult.OutcomeFailed {

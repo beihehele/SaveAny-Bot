@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/log"
 
 	"github.com/krau/SaveAny-Bot/api"
+	botHandlers "github.com/krau/SaveAny-Bot/client/bot/handlers"
 	userclient "github.com/krau/SaveAny-Bot/client/user"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
@@ -28,10 +29,11 @@ import (
 
 type taskRow struct {
 	api.TaskInfoResponse
-	Scope     string `json:"scope"`
-	Source    string `json:"source,omitempty"`
-	Executing bool   `json:"executing"`
-	CanCancel bool   `json:"can_cancel"`
+	Scope       string `json:"scope"`
+	Source      string `json:"source,omitempty"`
+	Executing   bool   `json:"executing"`
+	CanCancel   bool   `json:"can_cancel"`
+	CopyOutcome string `json:"copy_outcome,omitempty"`
 }
 
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +99,19 @@ func (s *Server) taskRows(ctx context.Context) []taskRow {
 	}
 	rows := make([]taskRow, 0, len(byID))
 	for _, row := range byID {
+		if row.Type == tasktype.TaskTypeCopy && row.Status == api.TaskStatusCompleted && row.ResultSummary != nil {
+			c := row.ResultSummary
+			switch {
+			case c.Total == 0:
+				row.CopyOutcome = "empty"
+			case c.Succeeded == c.Total:
+				row.CopyOutcome = "succeeded"
+			case c.Succeeded == 0:
+				row.CopyOutcome = "failed"
+			default:
+				row.CopyOutcome = "partial"
+			}
+		}
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -282,9 +297,10 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			"api_enabled":   cfg.API.Enable,
 			"secure_cookie": s.cfg.SecureCookie, "session_ttl": s.cfg.SessionTTL.String(),
 		}, "audit": s.audit.snapshot(),
-		"watch":    userclient.GetMediaMessageStats(),
-		"disks":    localDiskObservations(),
-		"scans":    copyfwd.GetScanStats(),
-		"telegram": map[string]bool{"bot_initialized": s.botInitialized, "userbot_initialized": s.userbotInitialized},
+		"watch":         userclient.GetMediaMessageStats(),
+		"watch_forward": botHandlers.GetWatchForwardStats(),
+		"disks":         localDiskObservations(),
+		"scans":         copyfwd.GetScanStats(),
+		"telegram":      map[string]bool{"bot_initialized": s.botInitialized, "userbot_initialized": s.userbotInitialized},
 	})
 }

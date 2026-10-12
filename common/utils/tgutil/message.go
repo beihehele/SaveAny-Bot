@@ -1,7 +1,11 @@
 package tgutil
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -16,6 +20,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gotd/td/constant"
 	"github.com/gotd/td/tg"
+	"github.com/gotd/td/tgerr"
 	"github.com/krau/SaveAny-Bot/common/cache"
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
@@ -113,31 +118,30 @@ func InputMessageClassSliceFromInt(ids []int) []tg.InputMessageClass {
 	return result
 }
 
-func GetMessagesRange(ctx *ext.Context, chatID int64, minId, maxId int) (msg []*tg.Message, err error) {
-	if msg, err = getMessagesRange(ctx, chatID, minId, maxId); err == nil {
-		return
-	}
-	in := constant.TDLibPeerID(chatID)
-	plain := in.ToPlain()
-	var channel constant.TDLibPeerID
+func GetMessagesRange(ctx *ext.Context, chatID int64, minId, maxId int) ([]*tg.Message, error) {
+	plain := constant.TDLibPeerID(chatID).ToPlain()
+	var channel, userID, chat constant.TDLibPeerID
 	channel.Channel(plain)
-	if msg, err = getMessagesRange(ctx, int64(channel), minId, maxId); err == nil {
-		return
-	}
-	var userID constant.TDLibPeerID
 	userID.User(plain)
-	if msg, err = getMessagesRange(ctx, int64(userID), minId, maxId); err == nil {
-		return
-	}
-	var chat constant.TDLibPeerID
 	chat.Chat(plain)
-	if msg, err = getMessagesRange(ctx, int64(chat), minId, maxId); err == nil {
-		return
+	var lastErr error
+	for _, id := range uniquePeerIDs(chatID, int64(channel), int64(userID), int64(chat)) {
+		msgs, err := getMessagesRange(ctx, id, minId, maxId)
+		if err == nil {
+			return msgs, nil
+		}
+		if stopMessageLookup(ctx, err) {
+			return nil, err
+		}
+		lastErr = err
 	}
-	return nil, fmt.Errorf("failed to get messages range for chat %d: %w", chatID, err)
+	return nil, fmt.Errorf("failed to get messages range for chat %d: %w", chatID, lastErr)
 }
 
 func getMessagesRange(ctx *ext.Context, chatID int64, minId, maxId int) ([]*tg.Message, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if minId > maxId {
 		return nil, fmt.Errorf("minId (%d) cannot be greater than maxId (%d)", minId, maxId)
 	}
@@ -159,6 +163,9 @@ func getMessagesRange(ctx *ext.Context, chatID int64, minId, maxId int) ([]*tg.M
 	result := make([]*tg.Message, 0, total)
 	chunks := slice.Chunk(toFetchIds, 100)
 	for _, chunk := range chunks {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		msgs, err := ctx.GetMessages(chatID, InputMessageClassSliceFromInt(chunk))
 		if err != nil {
 			return nil, err
@@ -194,6 +201,9 @@ func getMessagesRange(ctx *ext.Context, chatID int64, minId, maxId int) ([]*tg.M
 }
 
 func getMessageByID(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	key := fmt.Sprintf("tgmsg:%d:%d:%d", ctx.Self.ID, chatID, msgID)
 	if msg, ok := cache.Get[*tg.Message](key); ok {
 		return msg, nil
@@ -216,59 +226,88 @@ func getMessageByID(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, err
 	return tgm, nil
 }
 
-// f**k gotgproto's breaking changes
+// GetMessageByID supports both legacy plain IDs and typed Telegram peer IDs.
 func GetMessageByID(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, error) {
-	// we don't know what the input chatID is bot api style(e.g. channel with -100 prefix) or plain tdlib style(no any prefix and every id is positive)
-	if msg, err := getMessageByID(ctx, chatID, msgID); err == nil {
-		return msg, nil
-	}
-	in := constant.TDLibPeerID(chatID)
-	plain := in.ToPlain()
-	var channel constant.TDLibPeerID
+	plain := constant.TDLibPeerID(chatID).ToPlain()
+	var channel, chat, userID constant.TDLibPeerID
 	channel.Channel(plain)
-	if msg, err := getMessageByID(ctx, int64(channel), msgID); err == nil {
-		return msg, nil
-	}
-	var chat constant.TDLibPeerID
 	chat.Chat(plain)
-	if msg, err := getMessageByID(ctx, int64(chat), msgID); err == nil {
-		return msg, nil
-	}
-	var userID constant.TDLibPeerID
 	userID.User(plain)
-	if msg, err := getMessageByID(ctx, int64(userID), msgID); err == nil {
-		return msg, nil
+	var lastErr error
+	for _, id := range uniquePeerIDs(chatID, int64(channel), int64(chat), int64(userID)) {
+		msg, err := getMessageByID(ctx, id, msgID)
+		if err == nil {
+			return msg, nil
+		}
+		if stopMessageLookup(ctx, err) {
+			return nil, err
+		}
+		lastErr = err
 	}
+	return nil, fmt.Errorf("failed to get message by ID: chatID=%d, msgID=%d: %w", chatID, msgID, lastErr)
+}
 
-	return nil, fmt.Errorf("failed to get message by ID: chatID=%d, msgID=%d", chatID, msgID)
+func uniquePeerIDs(ids ...int64) []int64 {
+	result := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if !slices.Contains(result, id) {
+			result = append(result, id)
+		}
+	}
+	return result
 }
 
 func GetGroupedMessages(ctx *ext.Context, chatID int64, msg *tg.Message) ([]*tg.Message, error) {
+	return groupedMessages(ctx, chatID, msg, GetMessagesRange)
+}
+
+// A single bounded range fits the existing 100-ID fetch chunk. A nonempty
+// result is a best-effort selection, never evidence of album completeness.
+const groupedMessageRadius = 49
+
+func groupedMessages(ctx *ext.Context, chatID int64, msg *tg.Message, fetch func(*ext.Context, int64, int, int) ([]*tg.Message, error)) ([]*tg.Message, error) {
+	if ctx == nil || msg == nil || msg.ID <= 0 || msg.ID > 2147483647 {
+		return nil, fmt.Errorf("invalid grouped message")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	groupID, isGroup := msg.GetGroupedID()
 	if !isGroup || groupID == 0 {
 		return nil, fmt.Errorf("message %d is not grouped", msg.GetID())
 	}
 	msgID := msg.GetID()
-	minID := msgID - 10
-	maxID := msgID + 10
+	minID := msgID - groupedMessageRadius
+	maxID := msgID + min(groupedMessageRadius, 2147483647-msgID)
 	if minID < 1 {
 		minID = 1
 	}
-	msgs, err := GetMessagesRange(ctx, chatID, minID, maxID)
+	msgs, err := fetch(ctx, chatID, minID, maxID)
 	if err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	groupedMessages := make([]*tg.Message, 0, len(msgs))
+	seen := make(map[int]bool)
 	for _, m := range msgs {
 		if m == nil {
 			continue
 		}
 		mgid, isGroup := m.GetGroupedID()
-		if isGroup && mgid == groupID {
+		if isGroup && mgid == groupID && m.ID >= minID && m.ID <= maxID && !seen[m.ID] {
+			seen[m.ID] = true
 			groupedMessages = append(groupedMessages, m)
 		}
 	}
+	sort.Slice(groupedMessages, func(i, j int) bool { return groupedMessages[i].ID < groupedMessages[j].ID })
 	return groupedMessages, nil
+}
+
+func stopMessageLookup(ctx *ext.Context, err error) bool {
+	_, flood := tgerr.AsFloodWait(err)
+	return ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || flood
 }
 
 func ExtractMessageEntityUrls(msg *tg.Message) []string {

@@ -76,7 +76,7 @@ func TestStoppedDeploymentBackupUpgradeAndRestore(t *testing.T) {
 	}
 	user.DefaultStorage, user.DefaultDir, user.Silent, user.ApplyRule = "archive", dir.ID, true, true
 	user.FilenameStrategy, user.FilenameTemplate, user.ConflictStrategy = "TEMPLATE", "{{.Message}}", "OVERWRITE"
-	if err := UpdateUser(t.Context(), user); err != nil {
+	if err := UpdateUserPreferences(t.Context(), user.ChatID, map[string]any{"default_storage": user.DefaultStorage, "default_dir": user.DefaultDir, "silent": user.Silent, "apply_rule": user.ApplyRule, "filename_strategy": user.FilenameStrategy, "filename_template": user.FilenameTemplate, "conflict_strategy": user.ConflictStrategy}); err != nil {
 		t.Fatal(err)
 	}
 	rule := Rule{UserID: user.ID, Type: "IS-ALBUM", Data: "true", StorageName: "archive", DirPath: "NEW-FOR-ALBUM"}

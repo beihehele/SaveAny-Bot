@@ -4,8 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/log"
-	userclient "github.com/krau/SaveAny-Bot/client/user"
 	"github.com/krau/SaveAny-Bot/database"
 )
 
@@ -92,19 +90,11 @@ func (b *forwardAlbumBuffer) dropRoute(id uint) {
 }
 
 var watchForwardAlbumBuf = newForwardAlbumBuffer(func(route database.WatchChat, ids []int) {
-	uctx := userclient.GetCtx()
+	uctx := watchForwards.client()
 	if uctx == nil {
 		return
 	}
-	logger := log.FromContext(uctx)
-	err := watchRoutes.run(uctx, route, func() error {
-		go func() {
-			// Same as /copy: ForwardMessage expands grouped_id and links [转] to a caption-bearing part.
-			if err := userclient.ForwardMessage(uctx, uctx, route.ChatID, route.TargetID, ids[0], route.TargetTopicID); err != nil {
-				logger.Errorf("forward album failed source=%d target=%d topic=%d ids=%v: %v", route.ChatID, route.TargetID, route.TargetTopicID, ids, err)
-			}
-		}()
-		return nil
-	})
-	logWatchAdmissionError(uctx, route, err)
+	// Keep the original representative; ForwardMessage expands grouped_id and
+	// links [转] to a caption-bearing part, including members not in this buffer.
+	enqueueWatchForward(uctx, route, ids[0])
 })

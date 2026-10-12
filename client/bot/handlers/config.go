@@ -77,7 +77,7 @@ func handleConfigFnameSTCallback(ctx *ext.Context, update *ext.Update) error {
 			return err
 		}
 		user.FilenameStrategy = st.String()
-		if err := database.UpdateUser(ctx, user); err != nil {
+		if err := database.UpdateUserPreferences(ctx, user.ChatID, map[string]any{"filename_strategy": user.FilenameStrategy}); err != nil {
 			return err
 		}
 		acknowledgeCallback(ctx, update.CallbackQuery.GetQueryID())
@@ -132,7 +132,7 @@ func handleConfigConflictSTCallback(ctx *ext.Context, update *ext.Update) error 
 			return fmt.Errorf("invalid conflict strategy: %s", selected)
 		}
 		user.ConflictStrategy = selected
-		if err := database.UpdateUser(ctx, user); err != nil {
+		if err := database.UpdateUserPreferences(ctx, user.ChatID, map[string]any{"conflict_strategy": user.ConflictStrategy}); err != nil {
 			return err
 		}
 		acknowledgeCallback(ctx, update.CallbackQuery.GetQueryID())
@@ -196,7 +196,7 @@ func handleConfigFnameTmpl(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	user.FilenameTemplate = newTmpl
-	if err := database.UpdateUser(ctx, user); err != nil {
+	if err := database.UpdateUserPreferences(ctx, user.ChatID, map[string]any{"filename_template": user.FilenameTemplate}); err != nil {
 		return err
 	}
 	ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgConfigInfoTemplateUpdated, nil)), nil)

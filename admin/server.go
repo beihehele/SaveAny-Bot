@@ -15,6 +15,7 @@ import (
 
 	"github.com/krau/SaveAny-Bot/api"
 	"github.com/krau/SaveAny-Bot/client/bot"
+	botHandlers "github.com/krau/SaveAny-Bot/client/bot/handlers"
 	userclient "github.com/krau/SaveAny-Bot/client/user"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/adminauth"
@@ -37,6 +38,9 @@ type Server struct {
 	protected          []string
 	botInitialized     bool
 	userbotInitialized bool
+	ctx                context.Context
+	controls           chan struct{}
+	management         botHandlers.ManagementService
 }
 
 // NewServer constructs a console without starting it or changing bot behavior.
@@ -60,6 +64,7 @@ func NewServer(ctx context.Context, cfg config.AdminConfig) (*Server, error) {
 		cfg: cfg, auth: newAuthentication(verifier, cfg.SessionTTL),
 		factory: api.NewTaskFactory(taskhistory.WithSource(ctx, "admin")), started: time.Now(),
 		secrets: configSecrets(config.C()), protected: protectedPaths(),
+		ctx: ctx, controls: make(chan struct{}, 2),
 	}
 	s.botInitialized = bot.ExtContext() != nil
 	s.userbotInitialized = config.C().Telegram.Userbot.Enable && userclient.GetCtx() != nil
@@ -83,6 +88,12 @@ func NewServer(ctx context.Context, cfg config.AdminConfig) (*Server, error) {
 	s.route(mux, "GET /admin/api/v1/files", s.files)
 	s.route(mux, "GET /admin/api/v1/download", s.download)
 	s.route(mux, "GET /admin/api/v1/preferences", s.preferences)
+	s.route(mux, "PATCH /admin/api/v1/preferences", s.updatePreferences)
+	s.route(mux, "POST /admin/api/v1/routes", s.createRoute)
+	s.route(mux, "POST /admin/api/v1/routes/{id}/stop", s.stopRoute)
+	s.route(mux, "POST /admin/api/v1/copies", s.createCopy)
+	s.route(mux, "POST /admin/api/v1/topics", s.topics)
+	s.route(mux, "POST /admin/api/v1/preview", s.preview)
 	s.route(mux, "GET /admin/api/v1/diagnostics", s.diagnostics)
 	s.httpServer = &http.Server{
 		Addr: net.JoinHostPort(cfg.Host, fmt.Sprint(cfg.Port)), Handler: s.security(mux),

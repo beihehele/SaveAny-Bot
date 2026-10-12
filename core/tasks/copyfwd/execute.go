@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/celestix/gotgproto/ext"
 	"github.com/charmbracelet/log"
 	"github.com/krau/SaveAny-Bot/client/user"
 )
@@ -15,7 +16,12 @@ const forwardGap = 500 * time.Millisecond
 // Execute searches source history, then forwards matched messages (DropAuthor) with [转] link.
 // Album hits are already deduped in collect (one id per grouped_id); ForwardMessage expands the group.
 func (t *Task) Execute(ctx context.Context) error {
+	return t.executeWithClient(ctx, user.GetCtx)
+}
+
+func (t *Task) executeWithClient(ctx context.Context, client func() *ext.Context) error {
 	defer End(t.UserChatID, t.ID)
+	t.resetResults(0)
 
 	logger := log.FromContext(ctx).WithPrefix(fmt.Sprintf("copyfwd[%s]", t.ID))
 	logger.Info("Starting copy-forward task")
@@ -31,7 +37,7 @@ func (t *Task) Execute(ctx context.Context) error {
 		}
 	}()
 
-	uctx := user.GetCtx()
+	uctx := client()
 	if uctx == nil {
 		execErr = fmt.Errorf("userbot unavailable")
 		return execErr
@@ -48,6 +54,7 @@ func (t *Task) Execute(ctx context.Context) error {
 		execErr = fmt.Errorf("collect messages: %w", err)
 		return execErr
 	}
+	t.resetResults(len(ids))
 	if t.Progress != nil {
 		at := 0
 		if len(ids) > 0 {
@@ -55,6 +62,10 @@ func (t *Task) Execute(ctx context.Context) error {
 		}
 		// Force final scan line even when matched < want (history exhausted early).
 		t.Progress.OnScanDone(ctx, len(ids), t.Count, at)
+	}
+	if err := ctx.Err(); err != nil {
+		execErr = err
+		return execErr
 	}
 
 	logger.Infof("Scan done: matched=%d want=%d", len(ids), t.Count)
@@ -84,7 +95,10 @@ func (t *Task) Execute(ctx context.Context) error {
 		}
 		logger.Debugf("Forwarding %d/%d msg=%d", i+1, total, msgID)
 		started := time.Now()
-		if err := user.ForwardMessage(ctx, uctx, t.SourceID, t.TargetID, msgID, t.TargetTopicID); err != nil {
+		t.startResult()
+		err := user.ForwardMessage(ctx, uctx, t.SourceID, t.TargetID, msgID, t.TargetTopicID)
+		t.finishResult(err, ctx.Err())
+		if err != nil {
 			logger.Errorf("Forward msg %d failed: %v", msgID, err)
 			failed++
 		} else {
@@ -95,6 +109,12 @@ func (t *Task) Execute(ctx context.Context) error {
 		}
 		if t.Progress != nil {
 			t.Progress.OnForward(ctx, i+1, total)
+		}
+		// There may be no next iteration to observe cancellation during the last
+		// RPC or feedback callback. Keep confirmed counts, but preserve its cause.
+		if err := ctx.Err(); err != nil {
+			execErr = err
+			return execErr
 		}
 	}
 

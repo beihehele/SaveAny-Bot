@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/celestix/gotgproto"
@@ -21,8 +22,11 @@ import (
 
 var uc *gotgproto.Client
 var ectx *ext.Context
+var clientMu sync.Mutex
 
 func GetCtx() *ext.Context {
+	clientMu.Lock()
+	defer clientMu.Unlock()
 	if ectx != nil {
 		return ectx
 	}
@@ -35,13 +39,16 @@ func GetCtx() *ext.Context {
 
 func Login(ctx context.Context) (*gotgproto.Client, error) {
 	log.FromContext(ctx).Debug("Logging in user client")
-	if uc != nil {
-		return uc, nil
+	clientMu.Lock()
+	existing := uc
+	clientMu.Unlock()
+	if existing != nil {
+		return existing, nil
 	}
 	res := make(chan struct {
 		client *gotgproto.Client
 		err    error
-	})
+	}, 1)
 	go func() {
 		resolver, err := tgutil.NewConfigProxyResolver()
 		if err != nil {
@@ -90,8 +97,10 @@ func Login(ctx context.Context) (*gotgproto.Client, error) {
 		if r.err != nil {
 			return nil, r.err
 		}
+		clientMu.Lock()
 		uc = r.client
-		uc.Dispatcher.AddHandler(handlers.NewMessage(filters.Message.Media, func(ctx *ext.Context, u *ext.Update) error {
+		clientMu.Unlock()
+		r.client.Dispatcher.AddHandler(handlers.NewMessage(filters.Message.Media, func(ctx *ext.Context, u *ext.Update) error {
 			switch u.UpdateClass.(type) {
 			case *tg.UpdateEditChannelMessage, *tg.UpdateEditMessage, *tg.UpdateDeleteChannelMessages, *tg.UpdateDeleteMessages:
 				return dispatcher.EndGroups
@@ -103,9 +112,9 @@ func Login(ctx context.Context) (*gotgproto.Client, error) {
 			}
 			return dispatcher.ContinueGroups
 		}))
-		uc.Dispatcher.AddHandler(handlers.NewMessage(filters.Message.Media, handleMediaMessage))
+		r.client.Dispatcher.AddHandler(handlers.NewMessage(filters.Message.Media, handleMediaMessage))
 		go observeMediaMessages(ctx)
-		log.FromContext(ctx).Infof("User client logged in successfully: %s", uc.Self.FirstName+" "+uc.Self.LastName)
-		return uc, nil
+		log.FromContext(ctx).Infof("User client logged in successfully: %s", r.client.Self.FirstName+" "+r.client.Self.LastName)
+		return r.client, nil
 	}
 }

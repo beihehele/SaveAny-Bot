@@ -1,6 +1,8 @@
 package user
 
 import (
+	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -8,6 +10,7 @@ import (
 	"github.com/celestix/gotgproto/ext"
 	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
 )
 
@@ -16,6 +19,9 @@ type MediaMessageEvent struct {
 	ChatID    int64 // from witch the media message was sent
 	MessageID int
 	File      tfile.TGFileMessage
+	// Routes captures recipients before debounce/channel waiting. Do not rebind
+	// an old event to routes created while it waits for consumption.
+	Routes []database.WatchChat
 }
 
 type messageKey struct {
@@ -64,6 +70,13 @@ func (m *MediaMessageHandler) addEvent(event MediaMessageEvent, onFlush func(Med
 	defer m.mu.Unlock()
 	if timer, exists := m.timers[key]; exists {
 		timer.Stop()
+	}
+	if previous, exists := m.events[key]; exists {
+		// Refresh media/caption without assigning the pending message to newly
+		// created routes. The initial event owns its recipient snapshot.
+		event.Routes = previous.Routes
+	} else {
+		event.Routes = slices.Clone(event.Routes)
 	}
 	// Always refresh the payload so caption edits after the first update are kept.
 	m.events[key] = event
@@ -115,11 +128,25 @@ func handleMediaMessage(ctx *ext.Context, update *ext.Update) error {
 		return err
 	}
 	chatId := update.EffectiveChat().GetID()
-	sendMediaMessageEvent(MediaMessageEvent{
-		Ctx:       ctx,
-		ChatID:    chatId,
-		MessageID: message.ID,
-		File:      file,
-	})
+	event, err := captureMediaMessageEvent(ctx, chatId, message.ID, file)
+	if err != nil {
+		return err
+	}
+	if len(event.Routes) != 0 {
+		sendMediaMessageEvent(event)
+	}
 	return dispatcher.EndGroups
+}
+
+func captureMediaMessageEvent(ctx *ext.Context, chatID int64, messageID int, file tfile.TGFileMessage) (MediaMessageEvent, error) {
+	routes, err := database.GetWatchChatsByChatID(ctx, chatID)
+	if err != nil {
+		return MediaMessageEvent{}, fmt.Errorf("capture watch routes: %w", err)
+	}
+	event := MediaMessageEvent{Ctx: ctx, ChatID: chatID, MessageID: messageID, File: file,
+		Routes: make([]database.WatchChat, 0, len(routes))}
+	for _, route := range routes {
+		event.Routes = append(event.Routes, *route)
+	}
+	return event, nil
 }

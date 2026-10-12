@@ -29,7 +29,7 @@ func handleSilentCmd(ctx *ext.Context, update *ext.Update) error {
 		return nil
 	}
 	user.Silent = !user.Silent
-	if err := database.UpdateUser(ctx, user); err != nil {
+	if err := database.UpdateUserPreferences(ctx, user.ChatID, map[string]any{"silent": user.Silent}); err != nil {
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorUpdateUserInfoFailed, map[string]any{
 			"Error": err.Error(),
 		})), nil)
@@ -84,10 +84,9 @@ func handleSetDefaultCallback(ctx *ext.Context, update *ext.Update) error {
 		// 已经选择了文件夹
 		var err error
 		dir, err = database.GetDirByID(ctx, data.DirID)
-		if err != nil {
+		if err != nil || dir.UserID != user.ID || dir.StorageName != storageName {
 			return failedAnswer(i18n.T(i18nk.BotMsgDirErrorGetUserDirsFailed, nil))
 		}
-		user.DefaultDir = dir.ID
 	} else {
 		// 检查是否有可用的文件夹
 		dirs, err := database.GetDirsByUserIDAndStorageName(ctx, user.ID, storageName)
@@ -114,7 +113,11 @@ func handleSetDefaultCallback(ctx *ext.Context, update *ext.Update) error {
 		}
 	}
 	user.DefaultStorage = selectedStorage.Name()
-	if err := database.UpdateUser(ctx, user); err != nil {
+	preferences := map[string]any{"default_storage": user.DefaultStorage}
+	if dir != nil {
+		preferences["default_dir"] = dir.ID
+	}
+	if err := database.UpdateUserPreferences(ctx, user.ChatID, preferences); err != nil {
 		return failedAnswer(i18n.T(i18nk.BotMsgCommonErrorUpdateUserInfoFailed, map[string]any{
 			"Error": err.Error(),
 		}))

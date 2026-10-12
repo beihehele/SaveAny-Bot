@@ -18,7 +18,7 @@ import (
 
 type scanProgressFn func(matched, atMsgID int)
 
-func scanPage(ctx context.Context, uctx *ext.Context, sourceID int64, offsetID int, search bool, query string) ([]*tg.Message, error) {
+func scanPage(ctx context.Context, uctx *ext.Context, sourceID int64, offsetID int, search bool, query string) (user.MessagePage, error) {
 	timeout := config.C().Telegram.ScanTimeout
 	if timeout <= 0 {
 		timeout = config.DefaultTelegramScanTimeout
@@ -33,23 +33,26 @@ func scanPage(ctx context.Context, uctx *ext.Context, sourceID int64, offsetID i
 	started := time.Now()
 	logger := log.FromContext(ctx)
 	logger.Debug("Copy scan page started", "mode", mode, "source", sourceID, "offset_id", offsetID, "timeout", timeout)
-	var msgs []*tg.Message
+	var page user.MessagePage
 	var err error
 	if search {
-		msgs, err = user.SearchMessages(client, sourceID, query, offsetID)
+		page, err = user.SearchMessages(client, sourceID, query, offsetID)
 	} else {
-		msgs, err = user.HistoryMessages(client, sourceID, offsetID)
+		page, err = user.HistoryMessages(client, sourceID, offsetID)
 	}
 	if err == nil {
 		err = pageCtx.Err()
 	}
+	if err == nil && page.RawCount > 0 && (page.NextOffsetID <= 0 || offsetID > 0 && page.NextOffsetID >= offsetID) {
+		err = fmt.Errorf("pagination did not advance: next offset %d", page.NextOffsetID)
+	}
 	elapsed := time.Since(started)
 	scanStats.record(search, elapsed, err)
-	logger.Debug("Copy scan page finished", "mode", mode, "source", sourceID, "offset_id", offsetID, "messages", len(msgs), "duration", elapsed, "error", err)
+	logger.Debug("Copy scan page finished", "mode", mode, "source", sourceID, "offset_id", offsetID, "messages", len(page.Messages), "raw_count", page.RawCount, "duration", elapsed, "error", err)
 	if err != nil {
-		return nil, fmt.Errorf("copy %s page (source %d offset %d): %w", mode, sourceID, offsetID, err)
+		return user.MessagePage{}, fmt.Errorf("copy %s page (source %d offset %d): %w", mode, sourceID, offsetID, err)
 	}
-	return msgs, nil
+	return page, nil
 }
 
 func collectMatchedIDs(ctx context.Context, uctx *ext.Context, sourceID int64, filter string, count int, onProgress scanProgressFn) ([]int, error) {
@@ -71,21 +74,24 @@ func collectMatchedIDs(ctx context.Context, uctx *ext.Context, sourceID int64, f
 func collectFromHistory(ctx context.Context, uctx *ext.Context, sourceID int64, count int, node msgfilter.Node, onProgress scanProgressFn) ([]int, error) {
 	matched := make([]int, 0, count)
 	groupRep := make(map[int64]int) // grouped_id -> representative msg id
+	seen := make(map[int]struct{})
 	offsetID := 0
 	for len(matched) < count {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		msgs, err := scanPage(ctx, uctx, sourceID, offsetID, false, "")
+		page, err := scanPage(ctx, uctx, sourceID, offsetID, false, "")
 		if err != nil {
 			return nil, err
 		}
-		if len(msgs) == 0 {
+		if page.RawCount == 0 {
 			break
 		}
-		lastID := 0
-		for _, m := range msgs {
-			lastID = m.GetID()
+		for _, m := range page.Messages {
+			if _, duplicate := seen[m.ID]; duplicate || m.ID <= 0 || offsetID > 0 && m.ID >= offsetID {
+				continue
+			}
+			seen[m.ID] = struct{}{}
 			if !matchesNode(node, m.GetMessage()) {
 				continue
 			}
@@ -99,10 +105,10 @@ func collectFromHistory(ctx context.Context, uctx *ext.Context, sourceID int64, 
 				break
 			}
 		}
-		if len(msgs) < user.SearchPageSize() {
+		if page.RawCount < user.SearchPageSize() {
 			break
 		}
-		offsetID = lastID
+		offsetID = page.NextOffsetID
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(matched)))
 	return matched, nil
@@ -124,18 +130,19 @@ func collectFromSearch(ctx context.Context, uctx *ext.Context, sourceID int64, c
 			if exhausted[seed] {
 				continue
 			}
-			msgs, err := scanPage(ctx, uctx, sourceID, offsets[seed], true, seed)
+			page, err := scanPage(ctx, uctx, sourceID, offsets[seed], true, seed)
 			if err != nil {
 				return nil, err
 			}
-			if len(msgs) == 0 {
+			if page.RawCount == 0 {
 				exhausted[seed] = true
 				continue
 			}
 			progress = true
-			lastID := 0
-			for _, m := range msgs {
-				lastID = m.GetID()
+			for _, m := range page.Messages {
+				if m.ID <= 0 || offsets[seed] > 0 && m.ID >= offsets[seed] {
+					continue
+				}
 				if _, ok := seen[m.GetID()]; ok {
 					continue
 				}
@@ -145,10 +152,10 @@ func collectFromSearch(ctx context.Context, uctx *ext.Context, sourceID int64, c
 				seen[m.GetID()] = struct{}{}
 				acceptHit(m, &matched, groupRep)
 			}
-			if len(msgs) < user.SearchPageSize() {
+			if page.RawCount < user.SearchPageSize() {
 				exhausted[seed] = true
 			} else {
-				offsets[seed] = lastID
+				offsets[seed] = page.NextOffsetID
 			}
 		}
 

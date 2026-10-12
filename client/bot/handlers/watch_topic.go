@@ -91,8 +91,17 @@ func nextForumTopicsOffset(topics []tg.ForumTopicClass, msgDateByID map[int]int)
 func forEachForumTopicsPage(ctx *ext.Context, inputPeer tg.InputPeerClass, fn func(topics []tg.ForumTopicClass, msgDateByID map[int]int) (stop bool, err error)) error {
 	const limit = 100
 	var offsetDate, offsetID, offsetTopic int
+	seen := make(map[[3]int]struct{})
 
-	for {
+	for page := 0; page < 100; page++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		key := [3]int{offsetDate, offsetID, offsetTopic}
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("forum topics pagination stalled")
+		}
+		seen[key] = struct{}{}
 		result, err := ctx.Raw.MessagesGetForumTopics(ctx, &tg.MessagesGetForumTopicsRequest{
 			Peer:        inputPeer,
 			Limit:       limit,
@@ -122,6 +131,7 @@ func forEachForumTopicsPage(ctx *ext.Context, inputPeer tg.InputPeerClass, fn fu
 			return fmt.Errorf("forum topics pagination stalled")
 		}
 	}
+	return fmt.Errorf("forum topics page budget exceeded")
 }
 
 func collectForumTopics(ctx *ext.Context, chatID int64) ([]forumTopicEntry, error) {

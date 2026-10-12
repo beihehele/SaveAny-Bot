@@ -106,6 +106,9 @@ func (s *Store) Track(ctx context.Context, id, typ, title string) (context.Conte
 }
 
 func (e *entry) Emit(event taskevent.Event) {
+	if event.Phase == taskevent.PhaseDone && event.Outcome == taskresult.OutcomeUnknown {
+		return
+	}
 	s := e.store
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -136,12 +139,6 @@ func (e *entry) Emit(event taskevent.Event) {
 			r.Status = "failed"
 		case taskresult.OutcomeSuccess:
 			r.Status = "completed"
-		default:
-			if event.Err != nil {
-				r.Status = "failed"
-			} else {
-				r.Status = "completed"
-			}
 		}
 		if event.Err != nil {
 			r.Error = event.Err.Error()

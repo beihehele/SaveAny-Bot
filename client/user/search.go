@@ -14,15 +14,22 @@ func SearchPageSize() int {
 	return searchPageSize
 }
 
+// MessagePage retains pagination metadata before filtering service/empty messages.
+type MessagePage struct {
+	Messages     []*tg.Message
+	RawCount     int
+	NextOffsetID int
+}
+
 // SearchMessages searches chat history for keyword q, paging older with offsetID.
 // Returns messages in API order (typically newest first within the page).
-func SearchMessages(ctx *ext.Context, chatID int64, q string, offsetID int) ([]*tg.Message, error) {
+func SearchMessages(ctx *ext.Context, chatID int64, q string, offsetID int) (MessagePage, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("user context is nil")
+		return MessagePage{}, fmt.Errorf("user context is nil")
 	}
 	peer, err := resolveInputPeer(ctx, chatID)
 	if err != nil {
-		return nil, err
+		return MessagePage{}, err
 	}
 	res, err := ctx.Raw.MessagesSearch(ctx, &tg.MessagesSearchRequest{
 		Peer:     peer,
@@ -32,19 +39,19 @@ func SearchMessages(ctx *ext.Context, chatID int64, q string, offsetID int) ([]*
 		Limit:    searchPageSize,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("messages.search: %w", err)
+		return MessagePage{}, fmt.Errorf("messages.search: %w", err)
 	}
-	return extractMessages(res), nil
+	return extractMessages(res)
 }
 
-// HistoryMessages fetches a page of messages newer than offsetID (offset 0 = latest).
-func HistoryMessages(ctx *ext.Context, chatID int64, offsetID int) ([]*tg.Message, error) {
+// HistoryMessages fetches older messages below offsetID (offset 0 = latest).
+func HistoryMessages(ctx *ext.Context, chatID int64, offsetID int) (MessagePage, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("user context is nil")
+		return MessagePage{}, fmt.Errorf("user context is nil")
 	}
 	peer, err := resolveInputPeer(ctx, chatID)
 	if err != nil {
-		return nil, err
+		return MessagePage{}, err
 	}
 	res, err := ctx.Raw.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{
 		Peer:     peer,
@@ -52,12 +59,12 @@ func HistoryMessages(ctx *ext.Context, chatID int64, offsetID int) ([]*tg.Messag
 		Limit:    searchPageSize,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("messages.getHistory: %w", err)
+		return MessagePage{}, fmt.Errorf("messages.getHistory: %w", err)
 	}
-	return extractMessages(res), nil
+	return extractMessages(res)
 }
 
-func extractMessages(res tg.MessagesMessagesClass) []*tg.Message {
+func extractMessages(res tg.MessagesMessagesClass) (MessagePage, error) {
 	var classes []tg.MessageClass
 	switch v := res.(type) {
 	case *tg.MessagesMessages:
@@ -67,15 +74,32 @@ func extractMessages(res tg.MessagesMessagesClass) []*tg.Message {
 	case *tg.MessagesChannelMessages:
 		classes = v.Messages
 	default:
-		return nil
+		return MessagePage{}, fmt.Errorf("unexpected messages response: %T", res)
 	}
-	out := make([]*tg.Message, 0, len(classes))
+	page := MessagePage{RawCount: len(classes), Messages: make([]*tg.Message, 0, len(classes))}
 	for _, mc := range classes {
-		msg, ok := mc.(*tg.Message)
-		if !ok || msg == nil {
-			continue
+		id := 0
+		switch message := mc.(type) {
+		case *tg.Message:
+			if message == nil {
+				continue
+			}
+			id = message.ID
+			page.Messages = append(page.Messages, message)
+		case *tg.MessageService:
+			if message == nil {
+				continue
+			}
+			id = message.ID
+		case *tg.MessageEmpty:
+			if message == nil {
+				continue
+			}
+			id = message.ID
 		}
-		out = append(out, msg)
+		if id > 0 && (page.NextOffsetID == 0 || id < page.NextOffsetID) {
+			page.NextOffsetID = id
+		}
 	}
-	return out
+	return page, nil
 }

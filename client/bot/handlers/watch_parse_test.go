@@ -96,6 +96,17 @@ func TestFormatWatchTargetDisplay(t *testing.T) {
 	}
 }
 
+func TestTopicIDCannotOverflowTelegramWireInteger(t *testing.T) {
+	for _, value := range []string{"target:2147483648", "target:4294967297"} {
+		if _, err := parseTargetWithTopic(value); err == nil {
+			t.Fatalf("overflowing Topic accepted: %s", value)
+		}
+	}
+	if parsed, err := parseTargetWithTopic("target:2147483647"); err != nil || parsed.TopicID != 2147483647 {
+		t.Fatalf("valid boundary rejected: %+v %v", parsed, err)
+	}
+}
+
 func TestWatchFilterMatches(t *testing.T) {
 	if !watchFilterMatches("", "anything") {
 		t.Fatal("empty filter should match")

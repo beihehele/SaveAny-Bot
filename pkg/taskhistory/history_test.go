@@ -53,6 +53,20 @@ func TestHistoryRetentionIsolationAndDuplicateRollback(t *testing.T) {
 	}
 }
 
+func TestHistoryUsesExplicitWorkerOutcome(t *testing.T) {
+	s := NewStore(10, time.Hour)
+	ctx, _, _ := s.Track(t.Context(), "task", "copy", "copy")
+	taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseStart})
+	taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled})
+	if s.Snapshots()[0].Status != "running" {
+		t.Fatal("missing worker outcome was guessed")
+	}
+	taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled, Outcome: taskresult.OutcomeFailed})
+	if s.Snapshots()[0].Status != "failed" {
+		t.Fatal("observer overrode explicit worker failure")
+	}
+}
+
 func TestQueuedCancellationAndRunningDecision(t *testing.T) {
 	for _, running := range []bool{false, true} {
 		t.Run(fmt.Sprint(running), func(t *testing.T) {

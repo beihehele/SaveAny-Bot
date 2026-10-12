@@ -252,75 +252,69 @@ func listenMediaMessageEvent(ch chan userclient.MediaMessageEvent) {
 	if userclient.GetCtx() == nil {
 		return
 	}
-	logger := log.FromContext(userclient.GetCtx())
 	for event := range ch {
-		logger.Debug("Received media message event", "chat_id", event.ChatID, "file_name", event.File.Name())
-		ctx := event.Ctx
-		file := event.File
-		chats, err := database.GetWatchChatsByChatID(ctx, event.ChatID)
-		if err != nil {
-			logger.Errorf("Failed to get watch chats for chat ID %d: %v", event.ChatID, err)
+		processWatchMediaMessageEvent(event)
+	}
+}
+
+// processWatchMediaMessageEvent consumes the captured recipient snapshot;
+// final admission still checks each route against the live database.
+func processWatchMediaMessageEvent(event userclient.MediaMessageEvent) {
+	ctx := event.Ctx
+	file := event.File
+	if ctx == nil || file == nil || file.Message() == nil || ctx.Err() != nil {
+		return
+	}
+	logger := log.FromContext(ctx)
+	logger.Debug("Received media message event", "chat_id", event.ChatID, "file_name", file.Name())
+	msgText := event.File.Message().GetMessage()
+	// Album parts can arrive staggered by media-group debounce; keep buffers open at least that long.
+	timeout := time.Duration(max(config.C().Telegram.MediaGroupTimeout, 1)) * time.Second
+	if d := userclient.MediaMessageDebounce(); d > timeout {
+		timeout = d
+	}
+	for _, route := range event.Routes {
+		if route.ChatID != event.ChatID {
+			logger.Warn("Skip watch route for another source", "route_id", route.ID)
 			continue
 		}
-		msgText := event.File.Message().GetMessage()
-		// Album parts can arrive staggered by media-group debounce; keep buffers open at least that long.
-		timeout := time.Duration(max(config.C().Telegram.MediaGroupTimeout, 1)) * time.Second
-		if d := userclient.MediaMessageDebounce(); d > timeout {
-			timeout = d
-		}
-		for _, chat := range chats {
-			route := *chat
-			filterMatched := watchFilterMatches(chat.Filter, msgText)
-			groupID, isGroup := file.Message().GetGroupedID()
-			isAlbum := isGroup && groupID != 0
+		filterMatched := watchFilterMatches(route.Filter, msgText)
+		groupID, isGroup := file.Message().GetGroupedID()
+		isAlbum := isGroup && groupID != 0
 
-			if chat.TargetID != 0 {
-				if isAlbum {
-					// Defer filter to album flush; forward whole group with DropAuthor + [转].
-					err := watchRoutes.run(ctx, route, func() error {
-						watchForwardAlbumBuf.add(route, groupID, event.MessageID, filterMatched, timeout)
-						return nil
-					})
-					logWatchAdmissionError(ctx, route, err)
-				} else if filterMatched {
-					sourceID, targetID, topicID, msgID := event.ChatID, chat.TargetID, chat.TargetTopicID, event.MessageID
-					err := watchRoutes.run(ctx, route, func() error {
-						go func() {
-							uctx := userclient.GetCtx()
-							if uctx == nil {
-								return
-							}
-							if err := userclient.ForwardMessage(uctx, uctx, sourceID, targetID, msgID, topicID); err != nil {
-								logger.Errorf("forward failed source=%d target=%d topic=%d msg=%d: %v", sourceID, targetID, topicID, msgID, err)
-							}
-						}()
-						return nil
-					})
-					logWatchAdmissionError(ctx, route, err)
-				}
-				continue
-			}
-
+		if route.TargetID != 0 {
 			if isAlbum {
+				// Defer filter to album flush; forward whole group with DropAuthor + [转].
 				err := watchRoutes.run(ctx, route, func() error {
-					watchMediaGroupMgr.addFile(route, groupID, file, filterMatched, timeout, func(files []tfile.TGFileMessage) {
-						go processWatchLocalAlbum(ctx, route, files)
-					})
+					watchForwardAlbumBuf.add(route, groupID, event.MessageID, filterMatched, timeout)
 					return nil
 				})
 				logWatchAdmissionError(ctx, route, err)
-				continue
+			} else if filterMatched {
+				enqueueWatchForward(ctx, route, event.MessageID)
 			}
-			if !filterMatched {
-				continue
-			}
-			user, stor, defaultDirPath, err := resolveWatchLocalStorage(ctx, chat.UserID)
-			if err != nil {
-				logger.Warnf("skip local watch: %v", err)
-				continue
-			}
-			applyWatchFilename(ctx, user, file, "")
-			createWatchLocalTask(ctx, route, user, stor, defaultDirPath, file)
+			continue
 		}
+
+		if isAlbum {
+			err := watchRoutes.run(ctx, route, func() error {
+				watchMediaGroupMgr.addFile(route, groupID, file, filterMatched, timeout, func(files []tfile.TGFileMessage) {
+					go processWatchLocalAlbum(ctx, route, files)
+				})
+				return nil
+			})
+			logWatchAdmissionError(ctx, route, err)
+			continue
+		}
+		if !filterMatched {
+			continue
+		}
+		user, stor, defaultDirPath, err := resolveWatchLocalStorage(ctx, route.UserID)
+		if err != nil {
+			logger.Warnf("skip local watch: %v", err)
+			continue
+		}
+		applyWatchFilename(ctx, user, file, "")
+		createWatchLocalTask(ctx, route, user, stor, defaultDirPath, file)
 	}
 }

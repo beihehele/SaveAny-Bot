@@ -44,7 +44,9 @@ func (i *stalledPageInvoker) Invoke(ctx context.Context, input bin.Encoder, outp
 
 func TestCopyScanTimeoutAbortsWithoutPartialResultsOrSharedCancellation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[telegram]\nscan_timeout='80ms'\n"), 0600); err != nil {
+	// Leave the successful first page time to finish under concurrent builds or
+	// race instrumentation. The stalled next page still expires its real deadline.
+	if err := os.WriteFile(path, []byte("[telegram]\nscan_timeout='1s'\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.Init(t.Context(), path); err != nil {
@@ -126,7 +128,7 @@ func (i *recoveringPageInvoker) Invoke(ctx context.Context, input bin.Encoder, o
 
 func TestCopyScanRecoversAfterConsecutiveTimeoutsWithSameClient(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[telegram]\nscan_timeout='30ms'\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("[telegram]\nscan_timeout='1s'\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.Init(t.Context(), path); err != nil {

@@ -62,6 +62,7 @@ func stopWatchRoute(ctx context.Context, user *database.User, id uint) error {
 	}, func() {
 		watchForwardAlbumBuf.dropRoute(id)
 		watchMediaGroupMgr.dropRoute(id)
+		watchForwards.dropRoute(id)
 	})
 }
 

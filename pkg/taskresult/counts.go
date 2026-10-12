@@ -1,6 +1,7 @@
 package taskresult
 
-// Provider exposes submitted file results after Execute has returned.
+// Provider exposes execution results after Execute has returned. The task type
+// defines the unit: a saved file, or a selected message/album for copy tasks.
 type Provider interface {
 	ResultSummary() Summary
 }

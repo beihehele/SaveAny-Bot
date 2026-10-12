@@ -2,12 +2,15 @@ package copyfwd
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/krau/SaveAny-Bot/core"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 var _ core.Executable = (*Task)(nil)
+var _ taskresult.Provider = (*Task)(nil)
 
 type Task struct {
 	ID            string
@@ -18,6 +21,8 @@ type Task struct {
 	Filter        string
 	Count         int
 	Progress      ProgressTracker
+	resultMu      sync.RWMutex
+	result        taskresult.Summary
 }
 
 func (t *Task) Type() tasktype.TaskType { return tasktype.TaskTypeCopy }

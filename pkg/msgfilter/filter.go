@@ -13,7 +13,14 @@ type cachedFilter struct {
 	err  error
 }
 
-var parsedFilterCache sync.Map // string -> cachedFilter
+const filterCacheLimit = 256
+
+// Entries include invalid expressions and are bounded across route changes.
+var parsedFilterCache = struct {
+	sync.Mutex
+	entries map[string]cachedFilter
+	order   []string
+}{entries: make(map[string]cachedFilter)}
 
 // ParseFilter parses a stored filter string (msgre:...). Empty filter matches all.
 func ParseFilter(filter string) (Node, error) {
@@ -38,15 +45,27 @@ func Match(filter, text string) bool {
 	if filter == "" {
 		return true
 	}
-	if v, ok := parsedFilterCache.Load(filter); ok {
-		c := v.(cachedFilter)
+	parsedFilterCache.Lock()
+	c, ok := parsedFilterCache.entries[filter]
+	parsedFilterCache.Unlock()
+	if ok {
 		if c.err != nil || c.node == nil {
 			return false
 		}
 		return Eval(c.node, text)
 	}
 	node, err := ParseFilter(filter)
-	parsedFilterCache.Store(filter, cachedFilter{node: node, err: err})
+	parsedFilterCache.Lock()
+	if _, exists := parsedFilterCache.entries[filter]; !exists {
+		if len(parsedFilterCache.order) == filterCacheLimit {
+			delete(parsedFilterCache.entries, parsedFilterCache.order[0])
+			copy(parsedFilterCache.order, parsedFilterCache.order[1:])
+			parsedFilterCache.order = parsedFilterCache.order[:len(parsedFilterCache.order)-1]
+		}
+		parsedFilterCache.order = append(parsedFilterCache.order, filter)
+		parsedFilterCache.entries[filter] = cachedFilter{node: node, err: err}
+	}
+	parsedFilterCache.Unlock()
 	if err != nil || node == nil {
 		return false
 	}

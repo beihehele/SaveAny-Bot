@@ -72,7 +72,7 @@ func TestProgressRetentionPrunesOnRegistrationAndTerminalEvents(t *testing.T) {
 				case "error":
 					info.SetError("failed")
 				case "event":
-					info.Emit(taskevent.Event{Phase: taskevent.PhaseDone})
+					info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeSuccess})
 				}
 				if len(s.tasks) != min(i+1, 3)+1 || s.tasks["active"] != active {
 					t.Fatalf("history grew or lost active task: %d", len(s.tasks))
@@ -104,7 +104,7 @@ func TestProgressRetentionConcurrentTransitionsAndCleanup(t *testing.T) {
 			for i := range 40 {
 				info := s.register(fmt.Sprintf("%d-%d", worker, i), "tgfiles", "local", "", "done", "")
 				info.Emit(taskevent.Event{Phase: taskevent.PhaseStart})
-				info.Emit(taskevent.Event{Phase: taskevent.PhaseDone})
+				info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeSuccess})
 				info.Emit(taskevent.Event{Phase: taskevent.PhaseProgress, DownloadedBytes: 99})
 				s.prune(time.Now())
 			}
@@ -141,7 +141,7 @@ func TestEvictedProgressStillDeliversWebhookAndRetry(t *testing.T) {
 	if len(s.tasks) != 0 {
 		t.Fatal("zero history budget did not evict completed record")
 	}
-	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone})
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeSuccess})
 	info.UpdateStatus(TaskStatusCancelled)
 	for range 2 {
 		select {

@@ -11,6 +11,7 @@ import (
 	"github.com/krau/SaveAny-Bot/admin"
 	"github.com/krau/SaveAny-Bot/api"
 	"github.com/krau/SaveAny-Bot/client/bot"
+	botHandlers "github.com/krau/SaveAny-Bot/client/bot/handlers"
 	userclient "github.com/krau/SaveAny-Bot/client/user"
 	"github.com/krau/SaveAny-Bot/common/cache"
 	"github.com/krau/SaveAny-Bot/common/i18n"
@@ -70,12 +71,15 @@ func Run(cmd *cobra.Command, _ []string) {
 	<-ctx.Done()
 	logger.Info("Exiting...")
 	defer logger.Info("Exit complete")
-	timer := time.NewTimer(8 * time.Second)
-	defer timer.Stop()
+	shutdownCtx, finishShutdown := context.WithTimeout(context.Background(), 8*time.Second)
+	defer finishShutdown()
 	select {
 	case <-workersDone:
-	case <-timer.C:
+	case <-shutdownCtx.Done():
 		logger.Warn("Task shutdown deadline exceeded; temporary files are preserved")
+	}
+	if err := botHandlers.WaitWatchForwards(shutdownCtx); err != nil {
+		logger.Warn("Watch forwarding shutdown deadline exceeded")
 	}
 	// Tasks remove their own temporary files. Never recursively clear a configured
 	// directory here: it may contain unrelated files or tasks still shutting down.

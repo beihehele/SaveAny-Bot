@@ -49,7 +49,7 @@ func TestResultSummariesAreDetachedAndTerminalDecisionsStayFixed(t *testing.T) {
 	counts := taskresult.Counts{Total: 2, Succeeded: 1, Failed: 1}
 	info := &TaskProgressInfo{Status: TaskStatusRunning}
 	input := counts
-	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, ResultSummary: &input})
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeSuccess, ResultSummary: &input})
 	input.Total = 0
 	response := convertTaskProgressToResponse(info)
 	if response.Status != TaskStatusCompleted {
@@ -63,7 +63,7 @@ func TestResultSummariesAreDetachedAndTerminalDecisionsStayFixed(t *testing.T) {
 		t.Fatal("response mutated stored result")
 	}
 
-	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled, ResultSummary: &taskresult.Counts{Total: 2, Cancelled: 2}})
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeCancelled, Err: context.Canceled, ResultSummary: &taskresult.Counts{Total: 2, Cancelled: 2}})
 	if convertTaskProgressToResponse(info).Status != TaskStatusCompleted {
 		t.Fatal("late event rewrote completed task")
 	}
@@ -72,7 +72,7 @@ func TestResultSummariesAreDetachedAndTerminalDecisionsStayFixed(t *testing.T) {
 func TestUnavailableAndInvalidCountsAreOmitted(t *testing.T) {
 	for _, counts := range []*taskresult.Counts{nil, {Total: 2, Succeeded: 3}, {Total: 1, Failed: -1}} {
 		info := &TaskProgressInfo{Status: TaskStatusRunning}
-		info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, ResultSummary: counts})
+		info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeSuccess, ResultSummary: counts})
 		response := convertTaskProgressToResponse(info)
 		data, err := json.Marshal(response)
 		if err != nil {
@@ -95,7 +95,7 @@ func TestCancelledTaskAcceptsFinalCountsWithoutAnotherWebhook(t *testing.T) {
 		t.Fatal("early cancellation fabricated execution results")
 	}
 	counts := taskresult.Counts{Total: 2, Succeeded: 1, Cancelled: 1}
-	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Err: context.Canceled, ResultSummary: &counts})
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeCancelled, Err: context.Canceled, ResultSummary: &counts})
 	response := convertTaskProgressToResponse(info)
 	if response.Status != TaskStatusCancelled || response.ResultSummary == nil || *response.ResultSummary != counts || time.Since(response.UpdatedAt) > time.Minute {
 		t.Fatal("final cancellation counts were not published")
@@ -109,7 +109,7 @@ func TestCancelledTaskAcceptsFinalCountsWithoutAnotherWebhook(t *testing.T) {
 	if first.ResultSummary != nil {
 		t.Fatal("queued webhook payload was mutated after creation")
 	}
-	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, ResultSummary: &taskresult.Counts{Total: 2, Succeeded: 2}})
+	info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeSuccess, ResultSummary: &taskresult.Counts{Total: 2, Succeeded: 2}})
 	if *convertTaskProgressToResponse(info).ResultSummary != counts {
 		t.Fatal("duplicate terminal event rewrote cancellation counts")
 	}
@@ -123,7 +123,7 @@ func TestConcurrentResultSnapshotsRemainConsistent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, ResultSummary: &counts})
+			info.Emit(taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeSuccess, ResultSummary: &counts})
 			response := convertTaskProgressToResponse(info)
 			if response.ResultSummary == nil || response.Status != TaskStatusCompleted || *response.ResultSummary != counts {
 				t.Error("inconsistent response")
