@@ -1,5 +1,7 @@
 # Review records
 
+The local web usability follow-up is [2026-10-13-web-management-usability.md](2026-10-13-web-management-usability.md): one-source/one-target dropdowns, chat search, durable account-scoped chat/Topic snapshots with explicit sync, radio choices, basic keyword filters and local validation. These changes are not yet published or deployed.
+
 The current candidate is [v2.0.0-rc.5](https://github.com/beihehele/SaveAny-Bot/releases/tag/v2.0.0-rc.5), code commit `634b653`, published from `dev`. [The rc.5 release and acceptance report](2026-10-12-rc5-release-acceptance.md) records successful candidate CI, published binary/image identity, the official-image fallback after mirror timeouts, WSL deployment and real Telegram checks. [The consolidated backlog report](2026-10-12-backlog-remediation.md) preserves implementation reviews and remaining acceptance limits. Earlier candidate preparation, rc.4 history/media and deployment reports are historical evidence. WSL is the acceptance environment; NAS migration remains deferred.
 
 Dated reports describe the code and checks at that point in time. Reports preceding the Telegram-only cleanup include features no longer supported and are historical evidence, not current setup instructions.

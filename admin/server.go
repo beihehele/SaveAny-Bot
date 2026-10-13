@@ -92,7 +92,10 @@ func NewServer(ctx context.Context, cfg config.AdminConfig) (*Server, error) {
 	s.route(mux, "POST /admin/api/v1/routes", s.createRoute)
 	s.route(mux, "POST /admin/api/v1/routes/{id}/stop", s.stopRoute)
 	s.route(mux, "POST /admin/api/v1/copies", s.createCopy)
+	s.route(mux, "POST /admin/api/v1/chats", s.chats)
+	s.route(mux, "POST /admin/api/v1/chats/refresh", s.refreshChats)
 	s.route(mux, "POST /admin/api/v1/topics", s.topics)
+	s.route(mux, "POST /admin/api/v1/topics/refresh", s.refreshTopics)
 	s.route(mux, "POST /admin/api/v1/preview", s.preview)
 	s.route(mux, "GET /admin/api/v1/diagnostics", s.diagnostics)
 	s.httpServer = &http.Server{

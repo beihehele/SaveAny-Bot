@@ -3,7 +3,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const pages = ["overview", "tasks", "new", "storages", "files", "routes", "preferences", "diagnostics"];
-  const state = { authenticated: false, csrf: "", language: "zh-Hans", words: {}, storages: [], capabilities: [], metadata: false, page: "overview", sequence: 0, abort: null, loading: false, submitting: false, taskOffset: 0, fileOffset: 0 };
+  const state = { authenticated: false, csrf: "", language: "zh-Hans", words: {}, storages: [], users: [], capabilities: [], metadata: false, page: "overview", sequence: 0, abort: null, loading: false, submitting: false, taskOffset: 0, fileOffset: 0 };
   let languageSequence = 0;
   let searchTimer, toastTimer;
   const t = (key) => state.words[key] || key;
@@ -33,10 +33,12 @@
     toastTimer = setTimeout(() => { $("toast").hidden = true; }, 4500);
   }
   function showLogin(message = "") {
+    management.logout();
     state.authenticated = false;
     state.csrf = "";
     state.metadata = false;
     state.storages = [];
+    state.users = [];
     state.capabilities = [];
     state.sequence++;
     if (state.abort) state.abort.abort();
@@ -60,6 +62,7 @@
       if (response.status === 401 && path !== "login") showLogin(t("sessionExpired"));
       const error = new Error(t(data.error || "internal_error"));
       error.selection = data;
+      error.status = response.status;
       throw error;
     }
     return data;
@@ -137,7 +140,7 @@
     if (!$("input-dialog").open) $("input-dialog").showModal();
   }
   function taskDetails(task) {
-    const values = [[t("taskID"), task.task_id], [t("title"), task.title], [t("status"), t(task.status)],
+    const values = [[t("taskID"), task.task_id], [t("title"), task.title], [t("status"), t(taskStatusKey(task))],
       [t("scope"), scopeLabel(task)], [t("taskType"), t(task.type || "unknownType")],
       [t("source"), t(`source_${task.source || "unknown"}`)], [t("storage"), task.storage], [t("path"), task.path], [t("createdAt"), date(task.created_at)]];
     if (task.progress) values.push([t("progress"), `${Number(task.progress.percent || 0).toFixed(1)}%`],
@@ -152,8 +155,12 @@
           [t("failedItems"), counts.failed], [t("cancelledItems"), counts.cancelled],
           [t("interruptedItems"), counts.interrupted], [t("unattemptedItems"), counts.pending],
           [t("runningItems"), counts.running], [t("resultMeaning"), t("copyResultMeaning")]);
-      } else values.push([t("resultSummary"), JSON.stringify(counts)]);
+      } else values.push([t("fileCount"), counts.total], [t("succeededItems"), counts.succeeded],
+        [t("unsavedItems"), counts.failed], [t("cancelledItems"), counts.cancelled],
+        [t("interruptedItems"), counts.interrupted], [t("unattemptedItems"), counts.pending],
+        [t("runningItems"), counts.running], [t("resultMeaning"), t("fileResultMeaning")]);
     }
+    if (task.copy_outcome) values.push([t("result"), t(`copyOutcome_${task.copy_outcome}`)]);
     definitions($("task-details"), values);
     $("task-detail-error").textContent = task.error || "";
     $("task-detail-error").hidden = !task.error;
@@ -169,11 +176,19 @@
     } catch (error) { toast(error.message); } finally { trigger.disabled = false; }
   }
   function tasksTable(target, tasks) {
-    table(target, ["task", "status", "progress", "storage", "createdAt", "actions"], tasks.map((task) => {
+    table(target, ["task", "status", "progressResult", "storage", "createdAt", "actions"], tasks.map((task) => {
       const title = node("div");
       title.append(node("div", task.title || task.task_id, "cell-title"), node("div", `${task.task_id} · ${t(`source_${task.source || "unknown"}`)} · ${scopeLabel(task)}`, "cell-subtitle"));
       const progress = node("div", null, "progress");
-      if (task.progress && (task.progress.total_bytes || task.progress.total_files)) {
+      if (task.result_summary) {
+        const counts = task.result_summary;
+        progress.append(node("span", `${t("resultSucceeded")}: ${counts.succeeded ?? "—"} / ${counts.total ?? "—"}`),
+          node("span", `${t(task.type === "copy" ? "resultFailed" : "resultUnsaved")}: ${counts.failed ?? "—"}`, "cell-subtitle"));
+        for (const [field, label] of [["cancelled", "cancelledItems"], ["interrupted", "interruptedItems"], ["pending", "unattemptedItems"], ["running", "runningItems"]]) {
+          if (counts[field] > 0) progress.append(node("span", `${t(label)}: ${counts[field]}`, "cell-subtitle"));
+        }
+        progress.append(node("span", t(task.type === "copy" ? "copyCountUnit" : "fileCountUnit"), "cell-subtitle"));
+      } else if (task.progress && (task.progress.total_bytes || task.progress.total_files)) {
         const percent = Math.min(100, Math.max(0, Number(task.progress.percent || 0)));
         const meter = node("progress"); meter.max = 100; meter.value = percent;
         meter.setAttribute("aria-label", `${t("progress")} ${percent.toFixed(1)}%`);
@@ -241,11 +256,18 @@
     });
   }
   function taskStatus(task) {
-    const value = node("div"); value.append(badge(task.status));
-    if (task.copy_outcome) value.append(node("div", t(`copyOutcome_${task.copy_outcome}`), "cell-subtitle"));
+    const value = node("div");
+    const key = taskStatusKey(task);
+    value.append(node("span", t(key), `badge ${key === "executionEnded" ? "ended" : task.status}`));
+    if (task.copy_outcome) value.append(node("div", t(`copyOutcome_${task.copy_outcome}`), `cell-subtitle ${["failed", "partial"].includes(task.copy_outcome) ? "result-warning" : ""}`));
     return value;
   }
+  function taskStatusKey(task) {
+    const incomplete = task.result_summary && task.result_summary.succeeded < task.result_summary.total;
+    return task.status === "completed" && (incomplete || (task.type === "copy" && task.copy_outcome !== "succeeded")) ? "executionEnded" : task.status;
+  }
   function userSelectors(users) {
+    state.users = users;
     for (const id of ["copy-user", "watch-user", "preview-user"]) {
       const select = $(id), selected = select.value;
       select.replaceChildren();
@@ -253,6 +275,7 @@
       if (users.some((user) => String(user.chat_id) === selected)) select.value = selected;
       select.disabled = !users.length;
     }
+    management.usersChanged(users, state.page);
   }
   function preferenceEditor(user) {
     const form = node("form", null, "preference-editor");
@@ -421,34 +444,29 @@
     }, "danger-button small-button");
     return trigger;
   }
-  for (const prefix of ["copy", "watch"]) {
-    $(`${prefix}-topics-load`).addEventListener("click", async () => {
-      const trigger = $(`${prefix}-topics-load`), select = $(`${prefix}-topics`);
-      if (trigger.disabled) return; trigger.disabled = true;
-      const target = $(`${prefix}-target`).value.trim();
-      try {
-        const data = await request("topics", { method: "POST", body: JSON.stringify({ user_chat_id: Number($(`${prefix}-user`).value), target }) });
-        if (target !== $(`${prefix}-target`).value.trim()) return;
-        select.replaceChildren(node("option", t("noTopic"))); select.firstChild.value = "";
-        data.topics.forEach((topic) => { const option = node("option", `${topic.title} (${topic.id})`); option.value = String(topic.id); select.append(option); });
-      } catch (error) { toast(error.message); } finally { trigger.disabled = false; }
-    });
-    $(`${prefix}-topics`).addEventListener("change", () => { $(`${prefix}-topic`).value = $(`${prefix}-topics`).value; });
-    $(`${prefix}-target`).addEventListener("input", () => { $(`${prefix}-topic`).value = ""; $(`${prefix}-topics`).replaceChildren(node("option", t("noTopic"))); $(`${prefix}-topics`).firstChild.value = ""; });
-    $(`${prefix}-form`).addEventListener("submit", async (event) => {
-      event.preventDefault(); const trigger = $(`${prefix}-submit`); if (trigger.disabled) return;
-      const target = $(`${prefix}-target`).value.trim(), topic = $(`${prefix}-topic`).value;
-      const payload = { user_chat_id: Number($(`${prefix}-user`).value), source: $(`${prefix}-source`).value.trim(), target: topic ? `${target}:${topic}` : target, filter: $(`${prefix}-filter`).value };
-      if (prefix === "copy") payload.count = Number($("copy-count").value);
-      if (!window.confirm(t(prefix === "copy" ? "confirmCreateCopy" : "confirmCreateRoute"))) return;
-      trigger.disabled = true;
-      try {
-        const data = await request(prefix === "copy" ? "copies" : "routes", { method: "POST", body: JSON.stringify(payload) });
-        toast(`${t(prefix === "copy" ? "taskAccepted" : "routeCreated")} · ${data.task_id || data.id}`);
-        if (prefix === "copy") { state.taskOffset = 0; $("task-search").value = ""; $("task-status").value = ""; location.hash = "tasks"; } else await loadPage();
-      } catch (error) { toast(error.message); } finally { trigger.disabled = false; }
-    });
+  const management = SaveAnyManagement.init({ $, t, node, button, request, toast,
+    authenticated: () => state.authenticated,
+    copyAccepted: () => { state.taskOffset = 0; $("task-search").value = ""; $("task-status").value = ""; location.hash = "tasks"; },
+    watchUpdated: () => loadPage()
+  });
+  const newTabs = [...document.querySelectorAll('[role="tab"][data-new-mode]')];
+  function switchNewMode(mode) {
+    for (const tab of newTabs) {
+      const selected = tab.dataset.newMode === mode;
+      tab.setAttribute("aria-selected", String(selected)); tab.tabIndex = selected ? 0 : -1;
+      $(tab.getAttribute("aria-controls")).hidden = !selected;
+    }
   }
+  newTabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => switchNewMode(tab.dataset.newMode));
+    tab.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? newTabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + newTabs.length) % newTabs.length;
+      switchNewMode(newTabs[next].dataset.newMode); newTabs[next].focus();
+    });
+  });
+  for (const prefix of ["copy", "watch"]) $(`${prefix}-user`).addEventListener("change", () => management.usersChanged(state.users, state.page));
   $("preview-form").addEventListener("submit", async (event) => {
     event.preventDefault(); const trigger = event.submitter; if (trigger.disabled) return; trigger.disabled = true;
     const payload = { user_chat_id: Number($("preview-user").value), filter: $("preview-filter").value, text: $("preview-text").value, template: $("preview-template").value, original_name: $("preview-original").value };

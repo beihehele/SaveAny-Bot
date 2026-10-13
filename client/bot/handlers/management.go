@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/celestix/gotgproto/ext"
@@ -26,6 +27,61 @@ type RouteRequest struct {
 	Target     string `json:"target"`
 	Filter     string `json:"filter"`
 	Count      int    `json:"count"`
+}
+
+// ManagedTarget checks current creator/admin membership for the target.
+func (m ManagementService) ManagedTarget(ctx context.Context, owner int64, target string) error {
+	if _, err := ManagementUser(ctx, owner); err != nil {
+		return err
+	}
+	client, err := m.client(ctx)
+	if err != nil {
+		return err
+	}
+	pt, err := parseTargetWithTopic(target)
+	if err != nil {
+		return err
+	}
+	id, err := tgutil.ParseChatID(client, pt.ChatIDArg)
+	if err != nil || id >= 0 {
+		return fmt.Errorf("select a managed group or channel")
+	}
+	input, err := client.ResolveInputPeerById(id)
+	if err != nil {
+		return err
+	}
+	var chats []tg.ChatClass
+	switch p := input.(type) {
+	case *tg.InputPeerChannel:
+		box, err := client.Raw.ChannelsGetChannels(ctx, []tg.InputChannelClass{&tg.InputChannel{ChannelID: p.ChannelID, AccessHash: p.AccessHash}})
+		if err != nil {
+			return err
+		}
+		chats = box.GetChats()
+	case *tg.InputPeerChat:
+		box, err := client.Raw.MessagesGetChats(ctx, []int64{p.ChatID})
+		if err != nil {
+			return err
+		}
+		chats = box.GetChats()
+	default:
+		return fmt.Errorf("select a managed group or channel")
+	}
+	for _, raw := range chats {
+		switch ch := raw.(type) {
+		case *tg.Channel:
+			_, admin := ch.GetAdminRights()
+			if botAPIChannelPrefix-ch.ID == id && !ch.Left && (ch.Creator || admin) {
+				return nil
+			}
+		case *tg.Chat:
+			_, admin := ch.GetAdminRights()
+			if -ch.ID == id && !ch.Left && !ch.Deactivated && (ch.Creator || admin) {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("target is no longer managed by the current Userbot account")
 }
 
 // ManagementService shares Bot validation, ownership and stop admission with
@@ -92,6 +148,9 @@ func (m ManagementService) prepare(ctx context.Context, req RouteRequest, copyOn
 	if err != nil {
 		return nil, database.WatchChat{}, err
 	}
+	if source == target {
+		return nil, database.WatchChat{}, fmt.Errorf("source and target must differ")
+	}
 	if copyOnly && target == 0 {
 		return nil, database.WatchChat{}, errCopyTargetLocalForbidden
 	}
@@ -118,6 +177,11 @@ func (m ManagementService) CreateWatch(ctx context.Context, req RouteRequest) (d
 	u, route, err := m.prepare(ctx, req, false)
 	if err != nil {
 		return route, err
+	}
+	if route.TargetID != 0 {
+		if err := m.ManagedTarget(ctx, req.UserChatID, strconv.FormatInt(route.TargetID, 10)); err != nil {
+			return route, err
+		}
 	}
 	watching, err := u.WatchingRoute(ctx, route.ChatID, route.TargetID, route.TargetTopicID)
 	if err != nil {
@@ -151,6 +215,9 @@ func (m ManagementService) CreateCopy(ctx, serviceCtx context.Context, req Route
 	if err != nil {
 		return "", err
 	}
+	if err := m.ManagedTarget(ctx, req.UserChatID, strconv.FormatInt(route.TargetID, 10)); err != nil {
+		return "", err
+	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -166,8 +233,8 @@ func (m ManagementService) CreateCopy(ctx, serviceCtx context.Context, req Route
 	return id, nil
 }
 
-// Topics lists a bounded number of selectable, stable forum topic IDs.
-func (m ManagementService) Topics(ctx context.Context, chatID int64, target string) ([]map[string]any, error) {
+// fetchTopics lists a bounded number of selectable, stable forum topic IDs.
+func (m ManagementService) fetchTopics(ctx context.Context, chatID int64, target string) ([]TopicChoice, error) {
 	if _, err := ManagementUser(ctx, chatID); err != nil {
 		return nil, err
 	}
@@ -183,15 +250,17 @@ func (m ManagementService) Topics(ctx context.Context, chatID int64, target stri
 	if err != nil {
 		return nil, err
 	}
-	entries := make([]map[string]any, 0)
+	entries := make([]TopicChoice, 0)
+	seen := make(map[int]bool)
 	err = forEachForumTopicsPage(client, peer, func(topics []tg.ForumTopicClass, _ map[int]int) (bool, error) {
 		for _, item := range topics {
-			if topic, ok := item.(*tg.ForumTopic); ok {
-				entries = append(entries, map[string]any{"id": topic.ID, "title": topic.Title})
+			if topic, ok := item.(*tg.ForumTopic); ok && !seen[topic.ID] {
+				seen[topic.ID] = true
+				entries = append(entries, TopicChoice{ID: topic.ID, Title: topic.Title})
 			}
 		}
 		if len(entries) > 1000 {
-			return true, fmt.Errorf("too many topics; enter the topic ID manually")
+			return true, fmt.Errorf("topic list exceeds 1000 entries")
 		}
 		return false, nil
 	})

@@ -27,8 +27,9 @@ func TestConsoleTranslations(t *testing.T) {
 		}
 	}
 	for file, pattern := range map[string]string{
-		"index.html": `data-i18n(?:-placeholder|-aria-label)?="([^"]+)"`,
-		"app.js":     `\bt\("([^"]+)"\)`,
+		"index.html":    `data-i18n(?:-placeholder|-aria-label)?="([^"]+)"`,
+		"app.js":        `\bt\("([^"]+)"\)`,
+		"management.js": `\bt\("([^"]+)"\)`,
 	} {
 		content, err := assets.ReadFile("static/" + file)
 		if err != nil {

@@ -40,6 +40,8 @@ func (s *Server) control(w http.ResponseWriter, r *http.Request, action string, 
 		code := "management_failed"
 		if errors.Is(err, botHandlers.ErrManagementConflict) {
 			status, code = http.StatusConflict, "management_conflict"
+		} else if errors.Is(err, botHandlers.ErrListSyncBusy) {
+			status, code = http.StatusTooManyRequests, "list_sync_busy"
 		}
 		s.fail(w, status, code)
 		return
@@ -58,6 +60,28 @@ func (s *Server) createRoute(w http.ResponseWriter, r *http.Request) {
 		route, err := s.management.CreateWatch(ctx, req)
 		return map[string]any{"id": route.ID}, err
 	})
+}
+
+func (s *Server) chats(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserChatID int64 `json:"user_chat_id"`
+	}
+	if decodeBody(w, r, &req, 1024) != nil {
+		s.fail(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	s.control(w, r, "list_chats", func(ctx context.Context) (any, error) { return s.management.CachedChats(ctx, req.UserChatID) })
+}
+
+func (s *Server) refreshChats(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserChatID int64 `json:"user_chat_id"`
+	}
+	if decodeBody(w, r, &req, 1024) != nil {
+		s.fail(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	s.control(w, r, "refresh_chats", func(ctx context.Context) (any, error) { return s.management.RefreshChats(ctx, req.UserChatID) })
 }
 
 func (s *Server) stopRoute(w http.ResponseWriter, r *http.Request) {
@@ -96,8 +120,21 @@ func (s *Server) topics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.control(w, r, "list_topics", func(ctx context.Context) (any, error) {
-		entries, err := s.management.Topics(ctx, req.UserChatID, req.Target)
-		return map[string]any{"topics": entries}, err
+		return s.management.CachedTopics(ctx, req.UserChatID, req.Target)
+	})
+}
+
+func (s *Server) refreshTopics(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserChatID int64  `json:"user_chat_id"`
+		Target     string `json:"target"`
+	}
+	if decodeBody(w, r, &req, 1024) != nil || len(req.Target) > 256 || req.Target == "" {
+		s.fail(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	s.control(w, r, "refresh_topics", func(ctx context.Context) (any, error) {
+		return s.management.RefreshTopics(ctx, req.UserChatID, req.Target)
 	})
 }
 

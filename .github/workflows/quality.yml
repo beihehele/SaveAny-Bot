@@ -33,6 +33,11 @@ jobs:
         run: go mod verify
       - name: Check container entrypoint contracts
         run: sh tests/entrypoint_test.sh
+      - name: Check admin scripts
+        run: |
+          node --check admin/static/app.js
+          node --check admin/static/management.js
+          node --test tests/admin_management_test.cjs
       - name: Test and vet
         run: |
           go test ./...
