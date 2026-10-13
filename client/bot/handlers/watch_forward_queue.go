@@ -235,7 +235,7 @@ func (q *watchForwardQueue) finish(job watchForwardJob, err error) {
 	q.changed.Broadcast()
 }
 
-// Legacy routes can retain plain IDs while newer routes use Bot API IDs.
+// Telegram peer IDs and Bot API IDs can address the same current target.
 // Conservatively serialize equal plain numbers across peer namespaces rather
 // than resolving peers/RPCs under the queue lock. The original IDs still reach
 // ForwardMessage unchanged; unrelated equal-number peers may share a slot.

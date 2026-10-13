@@ -354,5 +354,7 @@
   "fileResultMeaning": "Counts use files. Unsaved includes failed files and files skipped by the conflict policy; cancellation, interruption and unattempted files are counted separately.",
   "copyCountUnit": "Counted by message / album",
   "fileCountUnit": "Counted by file",
-  "executionEnded": "Execution ended"
+  "executionEnded": "Execution ended",
+  "taskSubmissionUnknown": "The task may already have been created. Check the task list before submitting again.",
+  "setting_scan_timeout": "History scan page timeout"
 }

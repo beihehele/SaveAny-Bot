@@ -495,17 +495,31 @@
     const urls = $("task-urls").value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     if (!urls.length) { toast(t("enterUrls")); return; }
     const payload = { type, storage, path: targetPath, params: { message_links: urls } };
+    const session = state.csrf;
+    const fields = [...$("task-form").querySelectorAll("input,textarea,select,button")].map((el) => [el, el.disabled]);
     state.submitting = true;
-    $("task-submit").disabled = true;
+    fields.forEach(([el]) => { el.disabled = true; });
+    $("task-submission-results").replaceChildren();
     try {
       const response = await request("tasks", { method: "POST", body: JSON.stringify(payload) });
-      if (!state.authenticated) return;
+      if (!state.authenticated || session !== state.csrf) return;
       toast(`${t("taskAccepted")} · ${response.task_id}`); $("task-urls").value = "";
       state.taskOffset = 0; $("task-search").value = ""; $("task-status").value = "";
       if (location.hash === "#tasks") await loadPage(); else location.hash = "tasks";
       if ((response.input_results || []).some((item) => item.status !== "ready" || item.album_fallback === true) || response.input_results_omitted) selectionDetails(response, t("taskAccepted") + " · " + response.task_id);
-    } catch (error) { toast(error.message); if (state.authenticated && error.selection) selectionDetails(error.selection, error.message); }
-    finally { state.submitting = false; typeFields(); }
+    } catch (error) {
+      if (state.authenticated && session === state.csrf) {
+        toast(error.message);
+        if (!error.status || error.status >= 500) {
+          $("task-submission-results").append(node("p", t("taskSubmissionUnknown"), "error"),
+            button(t("viewAll"), () => { location.hash = "tasks"; }));
+        } else if (error.selection) selectionDetails(error.selection, error.message);
+      }
+    } finally {
+      state.submitting = false;
+      fields.forEach(([el, disabled]) => { el.disabled = disabled; });
+      typeFields();
+    }
   });
   $("task-type").addEventListener("change", typeFields);
   $("task-search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.taskOffset = 0; loadPage(); }, 350); });

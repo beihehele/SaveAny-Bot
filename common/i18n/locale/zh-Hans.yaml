@@ -35,7 +35,6 @@ bot:
       link_result_unsupported_media: "存在不支持的媒体"
       link_result_album_unavailable: "无法获取媒体组"
       link_result_duplicate: "已被前面的链接选入，跳过重复"
-      link_result_ready: "已选入"
       button_conflict_overwrite: 覆盖
       button_conflict_rename: 重命名
       button_conflict_skip: 跳过

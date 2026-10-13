@@ -223,7 +223,7 @@ func TestRemovedTaskTypesCannotResolveOrEnqueue(t *testing.T) {
 		return nil, nil
 	})
 	before := len(GetAllTasks())
-	for _, typ := range []string{"directlinks", "aria2", "ytdlp", "parseditem", "tphpics", "transfer", "copy"} {
+	for _, typ := range []string{"unknown", "copy"} {
 		_, err := factory.CreateTask(&CreateTaskRequest{Type: tasktype.TaskType(typ), Storage: "unavailable", Params: json.RawMessage(`{}`)})
 		if err == nil || !strings.Contains(err.Error(), "unsupported task type") {
 			t.Fatalf("%s: %v", typ, err)

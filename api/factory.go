@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
@@ -76,9 +75,6 @@ func (f *TaskFactory) CreateTask(req *CreateTaskRequest) (*CreateTaskResponse, e
 	if req.Type != tasktype.TaskTypeTgfiles {
 		return nil, fmt.Errorf("unsupported task type: %s", req.Type)
 	}
-	if err := validateResultPolicy(req.ResultPolicy); err != nil {
-		return nil, err
-	}
 	return f.createTask(req)
 }
 
@@ -118,7 +114,7 @@ func (f *TaskFactory) registerAndEnqueueTask(task core.Executable, taskType task
 
 func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req *CreateTaskRequest, stor storage.Storage) (*CreateTaskResponse, error) {
 	var params TGFilesParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
+	if err := decodeTaskJSON(req.Params, &params); err != nil {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 

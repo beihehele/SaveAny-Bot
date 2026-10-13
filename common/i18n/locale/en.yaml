@@ -35,7 +35,6 @@ bot:
       link_result_unsupported_media: "Contains unsupported media"
       link_result_album_unavailable: "Media group could not be fetched"
       link_result_duplicate: "Already selected by an earlier link; duplicate skipped"
-      link_result_ready: "Selected"
       button_conflict_overwrite: Overwrite
       button_conflict_rename: Rename
       button_conflict_skip: Skip

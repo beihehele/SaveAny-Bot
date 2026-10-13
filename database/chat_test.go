@@ -11,7 +11,7 @@ import (
 
 func TestWatchRouteIdentityAndStaleUserSnapshot(t *testing.T) {
 	previous := db
-	db = migrationDB(t)
+	db = testDatabase(t)
 	t.Cleanup(func() { db = previous })
 	user := &User{Model: gorm.Model{ID: 1}}
 	if err := user.WatchChat(t.Context(), WatchChat{ChatID: 10, TargetID: 20, TargetTopicID: 2}); err != nil {
@@ -91,7 +91,7 @@ func TestWatchRouteIdentityAndStaleUserSnapshot(t *testing.T) {
 
 func TestWatchRouteFailuresPreserveState(t *testing.T) {
 	previous := db
-	db = migrationDB(t)
+	db = testDatabase(t)
 	t.Cleanup(func() { db = previous })
 	user := &User{Model: gorm.Model{ID: 1}}
 	if err := user.WatchChat(t.Context(), WatchChat{ChatID: 10}); err != nil {

@@ -3,47 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
-
-func TestResultPolicyValidationPrecedesStorageAndTaskCreation(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		typ    tasktype.TaskType
-		policy string
-		want   string
-	}{
-		{name: "unknown policy", typ: tasktype.TaskTypeTgfiles, policy: "typo", want: "result_policy is not supported"},
-		{name: "tgfiles strict stays unavailable", typ: tasktype.TaskTypeTgfiles, policy: "strict", want: "result_policy is not supported"},
-		{name: "other types reject explicit legacy", typ: tasktype.TaskTypeTgfiles, policy: "legacy", want: "result_policy is not supported"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			factory := NewTaskFactory(t.Context())
-			req := &CreateTaskRequest{Type: tc.typ, Storage: "missing", ResultPolicy: tc.policy, Params: json.RawMessage(`{}`)}
-			if _, err := factory.CreateTask(req); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("validation error=%v", err)
-			}
-			body, err := json.Marshal(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			rr := httptest.NewRecorder()
-			NewHandlers(factory).CreateTaskHandler(rr, httptest.NewRequest(http.MethodPost, "/api/v1/tasks", strings.NewReader(string(body))))
-			if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), tc.want) {
-				t.Fatalf("response=%d %s", rr.Code, rr.Body.String())
-			}
-		})
-	}
-}
 
 func TestResultSummariesAreDetachedAndTerminalDecisionsStayFixed(t *testing.T) {
 	counts := taskresult.Counts{Total: 2, Succeeded: 1, Failed: 1}

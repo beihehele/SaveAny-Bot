@@ -46,7 +46,7 @@ type Event struct {
 	DownloadedFiles int
 	Err             error
 	// Outcome is the worker's terminal decision, captured before terminal hooks.
-	// Zero preserves compatibility with events from older producers.
+	// Nonterminal events leave Outcome unset; terminal events require a decision.
 	Outcome       taskresult.Outcome
 	ResultSummary *taskresult.Counts
 }

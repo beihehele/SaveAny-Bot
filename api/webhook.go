@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -13,22 +15,6 @@ import (
 // webhookClient Webhook 客户端
 var webhookClient = &http.Client{
 	Timeout: 30 * time.Second,
-}
-
-// SendWebhook 发送 Webhook 回调
-func SendWebhook(ctx context.Context, payload *WebhookPayload) {
-	if payload == nil || payload.TaskID == "" {
-		return
-	}
-
-	// 获取任务信息以获取 webhook URL
-	info, ok := GetTask(payload.TaskID)
-	if !ok || info.Webhook == "" {
-		return
-	}
-
-	webhookURL := info.Webhook
-	sendWebhook(ctx, webhookURL, payload)
 }
 
 // sendWebhook receives the destination captured with the terminal decision.
@@ -57,7 +43,7 @@ func sendWebhook(ctx context.Context, webhookURL string, payload *WebhookPayload
 		for i := range 3 {
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBuffer(payloadBytes))
 			if err != nil {
-				logger.Errorf("Failed to create webhook request: %v", err)
+				logger.Errorf("Failed to create webhook request: %v", webhookLogError(err))
 				return
 			}
 
@@ -66,7 +52,7 @@ func sendWebhook(ctx context.Context, webhookURL string, payload *WebhookPayload
 
 			resp, err := webhookClient.Do(req)
 			if err != nil {
-				logger.Warnf("Webhook request failed (attempt %d/3): %v", i+1, err)
+				logger.Warnf("Webhook request failed (attempt %d/3): %v", i+1, webhookLogError(err))
 				if i < 2 && !waitWebhookRetry(ctx, i) {
 					return
 				}
@@ -75,7 +61,7 @@ func sendWebhook(ctx context.Context, webhookURL string, payload *WebhookPayload
 			resp.Body.Close()
 
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				logger.Debugf("Webhook sent successfully: %s", webhookURL)
+				logger.Debug("Webhook sent successfully")
 				return
 			}
 
@@ -87,6 +73,16 @@ func sendWebhook(ctx context.Context, webhookURL string, payload *WebhookPayload
 
 		logger.Errorf("Failed to send webhook after 3 attempts")
 	}()
+}
+
+func webhookLogError(err error) error {
+	// net/http includes the full destination URL in url.Error. Keep its cause
+	// for diagnosis without logging URL credentials, path or query parameters.
+	var requestErr *url.Error
+	if errors.As(err, &requestErr) {
+		return requestErr.Err
+	}
+	return err
 }
 
 // CreateWebhookPayload creates a Webhook payload.

@@ -20,7 +20,7 @@ func Init() {
 		MaxCost:     config.C().Cache.MaxCost,
 		BufferItems: 64,
 		OnReject: func(item *ristretto.Item[any]) {
-			log.Warnf("Cache item rejected: key=%d, value=%v", item.Key, item.Value)
+			log.Warnf("Cache item rejected: key=%d", item.Key)
 		},
 	})
 	if err != nil {

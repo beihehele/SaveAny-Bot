@@ -19,8 +19,8 @@ func WatchRouteActive(ctx context.Context, route WatchChat) (bool, error) {
 	var current WatchChat
 	result := db.WithContext(ctx).Select("created_at").
 		Where("id = ? AND user_id = ?", route.ID, route.UserID).Find(&current)
-	// Compare decoded instants instead of SQLite timestamp strings; older
-	// database/driver combinations may encode the same instant differently.
+	// Compare decoded instants: SQLite drivers and timezones can encode the
+	// same instant differently.
 	return result.RowsAffected > 0 && current.CreatedAt.Equal(route.CreatedAt), result.Error
 }
 

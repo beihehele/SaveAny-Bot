@@ -2,41 +2,35 @@ package storage
 
 import (
 	"fmt"
-	"reflect"
 
 	storenum "github.com/krau/SaveAny-Bot/pkg/enums/storage"
 	"github.com/mitchellh/mapstructure"
-	"github.com/spf13/viper"
 )
 
-var storageFactories = map[storenum.StorageType]func(cfg *BaseConfig) (StorageConfig, error){
-	storenum.Local: createStorageConfig(&LocalStorageConfig{}),
+var storageFactories = map[storenum.StorageType]func(raw map[string]any) (StorageConfig, error){
+	storenum.Local: decodeLocalConfig,
 }
 
-func createStorageConfig(configType StorageConfig) func(cfg *BaseConfig) (StorageConfig, error) {
-	return func(cfg *BaseConfig) (StorageConfig, error) {
-		configValue := reflect.New(reflect.TypeOf(configType).Elem()).Interface().(StorageConfig)
-
-		reflect.ValueOf(configValue).Elem().FieldByName("BaseConfig").Set(reflect.ValueOf(*cfg))
-
-		if err := mapstructure.Decode(cfg.RawConfig, configValue); err != nil {
-			return nil, fmt.Errorf("failed to decode %s storage config: %w", cfg.Type, err)
-		}
-
-		return configValue, nil
+func decodeLocalConfig(raw map[string]any) (StorageConfig, error) {
+	config := new(LocalStorageConfig)
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result: config, ErrorUnused: true, WeaklyTypedInput: true,
+	})
+	if err != nil {
+		return nil, err
 	}
+	if err := decoder.Decode(raw); err != nil {
+		return nil, err
+	}
+	return config, nil
 }
 
-func LoadStorageConfigs(v *viper.Viper) ([]StorageConfig, error) {
-	var baseConfigs []BaseConfig
-	if err := v.UnmarshalKey("storages", &baseConfigs); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal storage configs: %w", err)
-	}
-
+func LoadStorageConfigs(definitions []map[string]any) ([]StorageConfig, error) {
 	var configs []StorageConfig
-	for _, baseCfg := range baseConfigs {
-		if !baseCfg.Enable {
-			continue
+	for _, raw := range definitions {
+		var baseCfg BaseConfig
+		if err := mapstructure.WeakDecode(raw, &baseCfg); err != nil {
+			return nil, fmt.Errorf("decode storage definition: %w", err)
 		}
 		st, err := storenum.ParseStorageType(baseCfg.Type)
 		if err != nil {
@@ -48,9 +42,12 @@ func LoadStorageConfigs(v *viper.Viper) ([]StorageConfig, error) {
 			return nil, fmt.Errorf("unsupported storage type: %s", baseCfg.Type)
 		}
 
-		cfg, err := factory(&baseCfg)
+		cfg, err := factory(raw)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create storage config for %s: %w", baseCfg.Name, err)
+		}
+		if !baseCfg.Enable {
+			continue
 		}
 
 		if err := cfg.Validate(); err != nil {

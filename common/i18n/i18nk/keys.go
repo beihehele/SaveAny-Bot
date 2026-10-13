@@ -72,7 +72,6 @@ const (
 	BotMsgCommonLinkResultDuplicate                       Key = "bot.msg.common.link_result_duplicate"
 	BotMsgCommonLinkResultMessageUnavailable              Key = "bot.msg.common.link_result_message_unavailable"
 	BotMsgCommonLinkResultNoMedia                         Key = "bot.msg.common.link_result_no_media"
-	BotMsgCommonLinkResultReady                           Key = "bot.msg.common.link_result_ready"
 	BotMsgCommonLinkResultResolutionFailed                Key = "bot.msg.common.link_result_resolution_failed"
 	BotMsgCommonLinkResultUnsupportedMedia                Key = "bot.msg.common.link_result_unsupported_media"
 	BotMsgCommonPromptConflictMoreFiles                   Key = "bot.msg.common.prompt_conflict_more_files"

@@ -54,7 +54,12 @@ func TestHookHelperProcess(t *testing.T) {
 
 func writeHookFixture(t *testing.T, path, text string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
+	// Existence signals readiness; publish only after the PID is fully written.
+	pending := path + ".pending"
+	if err := os.WriteFile(pending, []byte(text), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(pending, path); err != nil {
 		t.Fatal(err)
 	}
 }

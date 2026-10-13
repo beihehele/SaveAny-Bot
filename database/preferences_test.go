@@ -7,7 +7,7 @@ import (
 
 func TestPreferenceTransactionValidatesFinalPairAndRollsBack(t *testing.T) {
 	previous := db
-	db = migrationDB(t)
+	db = testDatabase(t)
 	t.Cleanup(func() { db = previous })
 	if err := db.AutoMigrate(&User{}, &Dir{}, &Rule{}); err != nil {
 		t.Fatal(err)

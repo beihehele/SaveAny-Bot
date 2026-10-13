@@ -25,10 +25,10 @@ func TestOutcomeUsesTaskContextAndPreservesNilSuccess(t *testing.T) {
 		{"ordinary failure", t.Context(), errors.New("EOF"), OutcomeFailed},
 		{"task cancellation with ordinary error", cancelled, errors.New("EOF"), OutcomeCancelled},
 		{"task cancellation with wrapped error", cancelled, internal, OutcomeCancelled},
-		{"nil after cancellation preserves legacy success", cancelled, nil, OutcomeSuccess},
+		{"nil after cancellation keeps the successful return", cancelled, nil, OutcomeSuccess},
 		{"deadline with internal cancellation is failure", deadline, internal, OutcomeFailed},
 		{"deadline is failure", deadline, context.DeadlineExceeded, OutcomeFailed},
-		{"nil after deadline preserves legacy success", deadline, nil, OutcomeSuccess},
+		{"nil after deadline keeps the successful return", deadline, nil, OutcomeSuccess},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := ClassifyOutcome(tc.ctx, tc.err); got != tc.want {

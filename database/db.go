@@ -38,13 +38,10 @@ func Init(ctx context.Context) {
 	if err := db.WithContext(ctx).AutoMigrate(&User{}, &Dir{}, &Rule{}, &WatchChat{}, &TelegramList{}); err != nil {
 		logger.Fatal("Database migration failed; preserve the original database, inspect a copy or restore a verified backup", "error", err)
 	}
-	if err := migrateWatchRouteIndex(db.WithContext(ctx)); err != nil {
-		logger.Fatal("Failed to migrate watch route index", "error", err)
-	}
 	if err := syncUsers(ctx); err != nil {
 		logger.Fatal("Failed to sync users:", err)
 	}
-	logger.Debug("Database migrated")
+	logger.Debug("Database schema ready")
 	logger.Info("Database initialized")
 }
 

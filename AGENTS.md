@@ -8,6 +8,13 @@ SaveAny-Bot is a Telegram bot written in Go that saves Telegram files locally an
 
 **Tech Stack**: Go 1.25.0 minimum (see `go.mod`), gotd/td (Telegram MTProto), Cobra (CLI), Viper (config), GORM (ORM), SQLite
 
+### Product Scope
+
+- Optimize for personal use, simple administration and one-source/one-target workflows.
+- Fix reproduced failures and confirmed dead code; keep ordinary operation and failure feedback clear.
+- Accept only the current documented configuration and API schema; do not keep project-version compatibility branches or migration adapters. Telegram protocol ID forms remain supported.
+- Preserve basic access checks, file integrity and cancellation. Avoid speculative defensive layers, multi-tenant features and generic frameworks without a concrete need.
+
 ## Build & Test Commands
 
 ### Build

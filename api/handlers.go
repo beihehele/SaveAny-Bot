@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -45,7 +44,7 @@ func (h *Handlers) CreateTaskHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := decodeTaskJSON(body, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid_request", "failed to decode request body: "+err.Error())
 		return
 	}

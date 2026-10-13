@@ -12,7 +12,6 @@ import (
 	"unicode/utf16"
 
 	"github.com/celestix/gotgproto/ext"
-	"github.com/duke-git/lancet/v2/maputil"
 	"github.com/duke-git/lancet/v2/mathutil"
 	"github.com/duke-git/lancet/v2/slice"
 	lcstrutil "github.com/duke-git/lancet/v2/strutil"
@@ -21,7 +20,6 @@ import (
 	"github.com/gotd/td/constant"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
-	"github.com/krau/SaveAny-Bot/common/cache"
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/strutil"
@@ -147,21 +145,9 @@ func getMessagesRange(ctx *ext.Context, chatID int64, minId, maxId int) ([]*tg.M
 	}
 	total := maxId - minId + 1
 	msgIds := mathutil.Range(minId, total)
-	toFetchIds := make([]int, 0, total)
-	cached := make(map[int]*tg.Message, total)
-	for _, id := range msgIds {
-		if msg, ok := cache.Get[*tg.Message](fmt.Sprintf("tgmsg:%d:%d:%d", ctx.Self.ID, chatID, id)); ok {
-			cached[id] = msg
-		} else {
-			toFetchIds = append(toFetchIds, id)
-		}
-	}
-	if len(toFetchIds) == 0 {
-		return maputil.Values(cached), nil
-	}
 
 	result := make([]*tg.Message, 0, total)
-	chunks := slice.Chunk(toFetchIds, 100)
+	chunks := slice.Chunk(msgIds, 100)
 	for _, chunk := range chunks {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -188,14 +174,8 @@ func getMessagesRange(ctx *ext.Context, chatID int64, minId, maxId int) ([]*tg.M
 		}
 	}
 
-	for _, msg := range result {
-		cache.Set(fmt.Sprintf("tgmsg:%d:%d:%d", ctx.Self.ID, chatID, msg.GetID()), msg)
-	}
-	for _, msg := range cached {
-		if msg == nil {
-			continue
-		}
-		result = append(result, msg)
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -203,10 +183,6 @@ func getMessagesRange(ctx *ext.Context, chatID int64, minId, maxId int) ([]*tg.M
 func getMessageByID(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-	key := fmt.Sprintf("tgmsg:%d:%d:%d", ctx.Self.ID, chatID, msgID)
-	if msg, ok := cache.Get[*tg.Message](key); ok {
-		return msg, nil
 	}
 	msgs, err := ctx.GetMessages(chatID, []tg.InputMessageClass{
 		&tg.InputMessageID{ID: msgID},
@@ -222,11 +198,12 @@ func getMessageByID(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, err
 	if !ok {
 		return nil, fmt.Errorf("unexpected message type: %T", msg)
 	}
-	cache.Set(key, tgm)
 	return tgm, nil
 }
 
-// GetMessageByID supports both legacy plain IDs and typed Telegram peer IDs.
+// GetMessageByID reads current metadata using plain or typed Telegram peer IDs.
+// Messages can be edited/deleted and file references expire, so reads bypass
+// the process cache used for interactive Bot callbacks.
 func GetMessageByID(ctx *ext.Context, chatID int64, msgID int) (*tg.Message, error) {
 	plain := constant.TDLibPeerID(chatID).ToPlain()
 	var channel, chat, userID constant.TDLibPeerID
@@ -329,10 +306,10 @@ func ExtractMessageEntityUrls(msg *tg.Message) []string {
 			urls = append(urls, ent.GetURL())
 		case *tg.MessageEntityURL:
 			start := ent.Offset
-			end := ent.Offset + ent.Length
-			if start < 0 || end > len(utf16Codes) {
+			if start < 0 || start > len(utf16Codes) || ent.Length <= 0 || ent.Length > len(utf16Codes)-start {
 				continue
 			}
+			end := start + ent.Length
 			subRunes := utf16.Decode(utf16Codes[start:end])
 			urls = append(urls, string(subRunes))
 		}

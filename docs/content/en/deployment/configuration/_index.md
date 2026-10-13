@@ -10,4 +10,4 @@ Use this repository's `config.example.toml` or `config.example.full.toml`. Confi
 
 Persist the database and sessions. Keep download roots separate from configuration and session files. `/storage` chooses the default root; local watch saves require a usable default root.
 
-See [local storage](storages), [admin](../../usage/admin), [API](../../usage/api), and the [migration guide](../../usage/migration).
+See [local storage](storages), [admin](../../usage/admin), and [API](../../usage/api). Configuration files accept only the documented fields; undefined fields are rejected.

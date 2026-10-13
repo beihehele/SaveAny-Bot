@@ -295,6 +295,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			"workers": cfg.Workers, "retry": cfg.Retry, "threads": cfg.Threads, "stream": cfg.Stream,
 			"log_level": cfg.Log.Level, "userbot_enabled": cfg.Telegram.Userbot.Enable,
 			"api_enabled":   cfg.API.Enable,
+			"scan_timeout":  cfg.Telegram.ScanTimeout.String(),
 			"secure_cookie": s.cfg.SecureCookie, "session_ttl": s.cfg.SessionTTL.String(),
 		}, "audit": s.audit.snapshot(),
 		"watch":         userclient.GetMediaMessageStats(),

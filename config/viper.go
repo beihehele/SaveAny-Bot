@@ -153,13 +153,14 @@ func Init(ctx context.Context, configFile ...string) error {
 		}
 	}
 
-	if err := validateSupportedFeatures(viper.GetViper()); err != nil {
-		return err
+	var input struct {
+		Config             `mapstructure:",squash"`
+		StorageDefinitions []map[string]any `mapstructure:"storages"`
 	}
-	next := &Config{}
-	if err := viper.Unmarshal(next); err != nil {
+	if err := viper.UnmarshalExact(&input); err != nil {
 		return fmt.Errorf("decode config: %w", err)
 	}
+	next := &input.Config
 	if next.Hook.Exec.Timeout <= 0 {
 		return fmt.Errorf("hook.exec.timeout must be a positive duration")
 	}
@@ -167,7 +168,7 @@ func Init(ctx context.Context, configFile ...string) error {
 		return fmt.Errorf("telegram.scan_timeout must be a positive duration")
 	}
 
-	storagesConfig, err := storage.LoadStorageConfigs(viper.GetViper())
+	storagesConfig, err := storage.LoadStorageConfigs(input.StorageDefinitions)
 	if err != nil {
 		return fmt.Errorf("error loading storage configs: %w", err)
 	}

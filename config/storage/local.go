@@ -7,8 +7,8 @@ import (
 )
 
 type LocalStorageConfig struct {
-	BaseConfig
-	BasePath string `toml:"base_path" mapstructure:"base_path" json:"base_path"`
+	BaseConfig `mapstructure:",squash"`
+	BasePath   string `toml:"base_path" mapstructure:"base_path" json:"base_path"`
 }
 
 func (l *LocalStorageConfig) Validate() error {

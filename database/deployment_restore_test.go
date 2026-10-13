@@ -12,6 +12,9 @@ import (
 	"github.com/celestix/gotgproto/sessionMaker"
 
 	"github.com/krau/SaveAny-Bot/config"
+	"github.com/krau/SaveAny-Bot/pkg/enums/fnamest"
+	rulekind "github.com/krau/SaveAny-Bot/pkg/rule"
+	"github.com/krau/SaveAny-Bot/pkg/tcbdata"
 )
 
 // This rehearses a stopped, synthetic deployment. It never opens a production
@@ -75,23 +78,17 @@ func TestStoppedDeploymentBackupUpgradeAndRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	user.DefaultStorage, user.DefaultDir, user.Silent, user.ApplyRule = "archive", dir.ID, true, true
-	user.FilenameStrategy, user.FilenameTemplate, user.ConflictStrategy = "TEMPLATE", "{{.Message}}", "OVERWRITE"
+	user.FilenameStrategy, user.FilenameTemplate, user.ConflictStrategy = fnamest.Template.String(), "{{.msgraw}}", tcbdata.ConflictStrategyOverwrite
 	if err := UpdateUserPreferences(t.Context(), user.ChatID, map[string]any{"default_storage": user.DefaultStorage, "default_dir": user.DefaultDir, "silent": user.Silent, "apply_rule": user.ApplyRule, "filename_strategy": user.FilenameStrategy, "filename_template": user.FilenameTemplate, "conflict_strategy": user.ConflictStrategy}); err != nil {
 		t.Fatal(err)
 	}
-	rule := Rule{UserID: user.ID, Type: "IS-ALBUM", Data: "true", StorageName: "archive", DirPath: "NEW-FOR-ALBUM"}
+	rule := Rule{UserID: user.ID, Type: rulekind.IsAlbum.String(), Data: "true", StorageName: "archive", DirPath: rulekind.RuleDirPathNewForAlbum}
 	route := WatchChat{UserID: user.ID, ChatID: 100, TargetID: 200, TargetTopicID: 300,
 		SourceName: "source", TargetName: "destination", TargetTopicName: "topic", Filter: "caption"}
 	for _, model := range []any{&rule, &route} {
 		if err := db.WithContext(t.Context()).Create(model).Error; err != nil {
 			t.Fatal(err)
 		}
-	}
-	if err := db.Exec("DROP INDEX idx_watch_route").Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec("CREATE UNIQUE INDEX idx_watch_route ON watch_chats(user_id, chat_id, target_id)").Error; err != nil {
-		t.Fatal(err)
 	}
 	want, err := GetUserByChatID(t.Context(), 42)
 	if err != nil {
@@ -165,7 +162,7 @@ func TestStoppedDeploymentBackupUpgradeAndRestore(t *testing.T) {
 	verify(upgraded)
 	var columns []struct{ Name string }
 	if err := db.Raw("PRAGMA index_info('idx_watch_route')").Scan(&columns).Error; err != nil {
-		t.Fatalf("upgrade failed to migrate the route index: %+v %v", columns, err)
+		t.Fatalf("failed to inspect the current route index: %+v %v", columns, err)
 	}
 	names := make([]string, len(columns))
 	for i, column := range columns {

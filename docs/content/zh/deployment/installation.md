@@ -97,7 +97,6 @@ docker run -d --name saveany-bot --restart unless-stopped \
 
 `data` 保存数据库和 Telegram 会话, 更新或重建容器时必须保留. `cache` 必须是仅用于临时文件的独立目录, 不要与 `data` 或 `downloads` 共用.
 
-程序退出不再清空整个缓存目录，每个任务清理自己创建的临时文件。强制退出或超时可能留下残留；确认服务停止、目录用途和文件内容后再人工清理，旧的 `no_clean_cache` 配置和 `--no-clean-cache` 参数已移除，升级前应删除。
 
 设置容器环境变量 `CONFIG_URL`（仅支持 HTTP(S)）时，程序直接加载远程配置，下载超时为 30 秒；HTTP 错误、响应不完整或配置解析失败会阻止启动。远程配置不会覆盖 `/app/config.toml` 或宿主机挂载文件，也不会保存为本地配置副本；未设置时继续读取本地配置。
 

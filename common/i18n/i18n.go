@@ -1,4 +1,4 @@
-// [TODO] complete the i18n support
+// Package i18n localizes Telegram Bot messages.
 
 package i18n
 

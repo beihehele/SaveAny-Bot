@@ -354,5 +354,7 @@
   "fileResultMeaning": "统计单位为文件。“未保存”包含失败与按重名策略跳过的文件；取消、中断、未尝试单独计数。",
   "copyCountUnit": "按消息 / 媒体组统计",
   "fileCountUnit": "按文件统计",
-  "executionEnded": "执行结束"
+  "executionEnded": "执行结束",
+  "taskSubmissionUnknown": "尚未确认任务是否已创建。请先查看任务列表，避免重复提交。",
+  "setting_scan_timeout": "历史扫描单页时限"
 }

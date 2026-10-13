@@ -10,7 +10,7 @@ import (
 
 func TestCreateUserRespectsContextAndLookupErrors(t *testing.T) {
 	previous := db
-	db = migrationDB(t)
+	db = testDatabase(t)
 	t.Cleanup(func() { db = previous })
 	if err := db.AutoMigrate(&User{}, &Dir{}, &Rule{}, &WatchChat{}); err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestCreateUserRespectsContextAndLookupErrors(t *testing.T) {
 
 func TestUpdateUserPreferencesDoesNotRestoreDeletedAssociations(t *testing.T) {
 	previous := db
-	db = migrationDB(t)
+	db = testDatabase(t)
 	t.Cleanup(func() { db = previous })
 	if err := db.AutoMigrate(&User{}, &Dir{}, &Rule{}); err != nil {
 		t.Fatal(err)
@@ -129,7 +129,7 @@ func TestUpdateUserPreferencesDoesNotRestoreDeletedAssociations(t *testing.T) {
 
 func TestPreferencePatchesPreserveUnrelatedChangesAndRejectUnsafeFields(t *testing.T) {
 	previous := db
-	db = migrationDB(t)
+	db = testDatabase(t)
 	t.Cleanup(func() { db = previous })
 	if err := db.AutoMigrate(&User{}, &Dir{}, &Rule{}, &WatchChat{}); err != nil {
 		t.Fatal(err)

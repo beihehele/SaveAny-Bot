@@ -46,7 +46,9 @@ func CreateAndAddTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor storage
 		if !matched {
 			goto startCreateTask
 		}
-		if matchedDirPath != "" {
+		if matchedDirPath.NeedNewForAlbum() {
+			dirPath = path.Join(dirPath, strings.TrimSuffix(path.Base(file.Name()), path.Ext(file.Name())))
+		} else if matchedDirPath != "" {
 			dirPath = matchedDirPath.String()
 		}
 		if matchedStorageName.Usable() {
@@ -229,9 +231,6 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 		}
 	}
 	for _, afiles := range albumFiles {
-		if len(afiles) <= 1 {
-			continue
-		}
 		// 对于需要新建目录的文件, 将第一个文件的文件名(去除扩展名)作为目录名
 		// 存储以第一个文件的存储为准
 		albumDir := strings.TrimSuffix(path.Base(afiles[0].file.Name()), path.Ext(afiles[0].file.Name()))

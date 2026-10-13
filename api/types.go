@@ -28,8 +28,6 @@ type CreateTaskRequest struct {
 	Path    string            `json:"path"`
 	Webhook string            `json:"webhook,omitempty"`
 	Params  json.RawMessage   `json:"params"`
-	// ResultPolicy is retained only to reject unsupported options explicitly.
-	ResultPolicy string `json:"result_policy,omitempty"`
 }
 
 // CreateTaskResponse 创建任务响应

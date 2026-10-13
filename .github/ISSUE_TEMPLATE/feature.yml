@@ -18,11 +18,6 @@ body:
         本分支提供 Telegram 文件本地保存、聊天监听、历史复制、媒体组、Topic、
         规则和可选管理后台。请描述具体使用场景、现有行为及预期结果。
 
-        Website parsers, remote storage backends, local-file uploads to Telegram,
-        and Bot/CLI self-update have been removed from this version.
-        网站解析器、远端存储、本地文件再次上传 Telegram 和 Bot/CLI 自更新
-        已从当前版本移除。
-
         Explain how the feature preserves album boundaries, forwarding semantics,
         and existing local saves. Use content you are authorized to access.
         请说明如何保留媒体组边界、转发语义及现有本地保存行为，

@@ -9,7 +9,7 @@ import (
 func TestTelegramListsPersistAndInvalidateObsoleteTopics(t *testing.T) {
 	previous := db
 	path := filepath.Join(t.TempDir(), "lists.db")
-	db = migrationDBAt(t, path)
+	db = testDatabaseAt(t, path)
 	t.Cleanup(func() { db = previous })
 	if err := db.AutoMigrate(&TelegramList{}); err != nil {
 		t.Fatal(err)
@@ -31,7 +31,7 @@ func TestTelegramListsPersistAndInvalidateObsoleteTopics(t *testing.T) {
 	if err := conn.Close(); err != nil {
 		t.Fatal(err)
 	}
-	db = migrationDBAt(t, path)
+	db = testDatabaseAt(t, path)
 	row, err := GetTelegramList(t.Context(), 10, -1001)
 	if err != nil || row == nil || string(row.Data) != `[{"id":2,"title":"topic"}]` {
 		t.Fatalf("snapshot not durable: %+v %v", row, err)
