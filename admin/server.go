@@ -196,7 +196,7 @@ func (s *Server) asset(w http.ResponseWriter, r *http.Request) {
 	file := r.PathValue("file")
 	contentType := ""
 	switch file {
-	case "app.js":
+	case "app.js", "management.js":
 		contentType = "text/javascript; charset=utf-8"
 	case "style.css":
 		contentType = "text/css; charset=utf-8"

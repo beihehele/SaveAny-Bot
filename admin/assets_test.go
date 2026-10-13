@@ -2,9 +2,41 @@ package admin
 
 import (
 	"encoding/json"
+	"net/http"
 	"regexp"
+	"strings"
 	"testing"
 )
+
+func TestConsoleLinkedAssets(t *testing.T) {
+	s := testServer(t)
+	index := perform(s, "GET", "/admin/", "", nil, "", "")
+	if index.Code != http.StatusOK {
+		t.Fatalf("index status = %d", index.Code)
+	}
+	links := regexp.MustCompile(`(?:src|href)="(/admin/assets/[^"]+)"`).FindAllStringSubmatch(index.Body.String(), -1)
+	if len(links) == 0 {
+		t.Fatal("console has no linked assets")
+	}
+	for _, link := range links {
+		t.Run(link[1], func(t *testing.T) {
+			response := perform(s, "GET", link[1], "", nil, "", "")
+			if response.Code != http.StatusOK || response.Body.Len() == 0 {
+				t.Fatalf("asset status = %d, bytes = %d", response.Code, response.Body.Len())
+			}
+			mime := "text/css"
+			if strings.HasSuffix(link[1], ".js") {
+				mime = "text/javascript"
+			}
+			if !strings.HasPrefix(response.Header().Get("Content-Type"), mime) {
+				t.Fatalf("asset MIME = %q, want %s", response.Header().Get("Content-Type"), mime)
+			}
+			if response.Header().Get("X-Content-Type-Options") != "nosniff" {
+				t.Fatal("asset missing nosniff protection")
+			}
+		})
+	}
+}
 
 func TestConsoleTranslations(t *testing.T) {
 	translations := make(map[string]map[string]string)
