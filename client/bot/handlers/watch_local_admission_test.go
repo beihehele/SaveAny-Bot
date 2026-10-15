@@ -121,7 +121,7 @@ func TestWatchAlbumAdmissionPreservesCaptionNamingAndRules(t *testing.T) {
 			if strategy == fnamest.Message.String() {
 				firstName = "shared_caption.mp4"
 			}
-			wantPaths := []string{"base/" + firstName, "last-match/shared_caption_102.mp4", "base/shared_caption_103.mp4"}
+			wantPaths := []string{"base/shared_caption/" + firstName, "last-match/shared_caption/shared_caption_102.mp4", "base/shared_caption/shared_caption_103.mp4"}
 			qe.Close()
 			for index, want := range wantPaths {
 				wrapped, err := qe.Get()
@@ -190,18 +190,18 @@ func TestWatchAlbumAdmissionKeepsFolderGroupsAndDirectories(t *testing.T) {
 		watchAdmissionFile(t, 5, 101, "singleton.mp4", "singleton"),
 	}
 	processWatchLocalAlbumTasks(ctx, user, watchAdmissionStorage{}, "base", files, enqueue)
-	if len(*groups) != 2 {
-		t.Fatal("independent albums were combined or singleton selection changed")
+	if len(*groups) != 3 {
+		t.Fatal("independent albums were combined or singleton selection was dropped")
 	}
-	want := map[int64][]string{99: {"base/first/first.mp4", "override/first/second.mp4"}, 100: {"base/other/other.mp4", "base/other/last.mp4"}}
+	want := map[int64][]string{99: {"base/first/first.mp4", "override/first/second.mp4"}, 100: {"base/other/other.mp4", "base/other/last.mp4"}, 101: {"base/singleton/singleton.mp4"}}
 	for _, group := range *groups {
-		if len(group) != 2 {
-			t.Fatal("folder album split")
-		}
 		id := group[0].(*coretfile.Task).File.(tfile.TGFileMessage).Message().GroupedID
 		paths, ok := want[id]
 		if !ok {
 			t.Fatalf("unexpected or repeated group %d", id)
+		}
+		if len(group) != len(paths) {
+			t.Fatal("folder album split")
 		}
 		for index, task := range group {
 			if task.(*coretfile.Task).Path != paths[index] {
@@ -209,6 +209,34 @@ func TestWatchAlbumAdmissionKeepsFolderGroupsAndDirectories(t *testing.T) {
 			}
 		}
 		delete(want, id)
+	}
+}
+
+func TestWatchAlbumsReuseCaptionDirectoryAcrossGroups(t *testing.T) {
+	for _, ruleEnabled := range []bool{false, true} {
+		ctx, _ := watchAdmissionContext(t)
+		_, enqueue, groups := watchAdmissionQueue(t, ctx, false)
+		user := &database.User{ChatID: 42, ApplyRule: ruleEnabled}
+		if ruleEnabled {
+			user.Rules = []database.Rule{{Type: rule.IsAlbum.String(), Data: "true", DirPath: rule.RuleDirPathNewForAlbum}}
+		}
+		for _, id := range []int{100, 200} {
+			files := []tfile.TGFileMessage{watchAdmissionFile(t, id, int64(id), "original.mp4", "旅行 / 照片"), watchAdmissionFile(t, id+1, int64(id), "other.mp4", "")}
+			processWatchLocalAlbumTasks(ctx, user, watchAdmissionStorage{}, "base", files, enqueue)
+		}
+		if len(*groups) != 2 {
+			t.Fatal("separate albums were combined")
+		}
+		for _, group := range *groups {
+			if len(group) != 2 {
+				t.Fatal("album lost a member")
+			}
+			for _, task := range group {
+				if !strings.HasPrefix(task.(*coretfile.Task).Path, "base/旅行_照片/") {
+					t.Fatal("equal captions used different directories", task.Title())
+				}
+			}
+		}
 	}
 }
 

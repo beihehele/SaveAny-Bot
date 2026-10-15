@@ -12,13 +12,15 @@ import (
 
 const (
 	// Local is a StorageType of type local.
-	Local StorageType = "local"
+	Local     StorageType = "local"
+	Shardreel StorageType = "shardreel"
 )
 
 var ErrInvalidStorageType = fmt.Errorf("not a valid StorageType, try [%s]", strings.Join(_StorageTypeNames, ", "))
 
 var _StorageTypeNames = []string{
 	string(Local),
+	string(Shardreel),
 }
 
 // StorageTypeNames returns a list of possible string values of StorageType.
@@ -32,6 +34,7 @@ func StorageTypeNames() []string {
 func StorageTypeValues() []StorageType {
 	return []StorageType{
 		Local,
+		Shardreel,
 	}
 }
 
@@ -48,7 +51,8 @@ func (x StorageType) IsValid() bool {
 }
 
 var _StorageTypeValue = map[string]StorageType{
-	"local": Local,
+	"local":     Local,
+	"shardreel": Shardreel,
 }
 
 // ParseStorageType attempts to convert a string to a StorageType.

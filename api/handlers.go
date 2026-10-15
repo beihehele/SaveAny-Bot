@@ -91,6 +91,12 @@ func (h *Handlers) ListTasksHandler(w http.ResponseWriter, r *http.Request) {
 		info := convertTaskProgressToResponse(task)
 		response = append(response, info)
 	}
+	uploads, err := uploadResponses(r.Context())
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "storage_failed", "failed to read upload tasks")
+		return
+	}
+	response = mergeUploadResponses(response, uploads)
 
 	// Map iteration is unordered. Task IDs keep timestamp ties deterministic.
 	sort.Slice(response, func(i, j int) bool {
@@ -119,6 +125,13 @@ func (h *Handlers) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if response, found, err := uploadTask(r.Context(), taskID); err != nil {
+		WriteError(w, 500, "storage_failed", "failed to read upload task")
+		return
+	} else if found {
+		WriteJSON(w, 200, response)
+		return
+	}
 	task, ok := GetTask(taskID)
 	if !ok {
 		WriteError(w, http.StatusNotFound, "task_not_found", "task not found: "+taskID)
@@ -142,6 +155,17 @@ func (h *Handlers) CancelTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, found, err := uploadTask(r.Context(), taskID); err != nil {
+		WriteError(w, 500, "storage_failed", "failed to read upload task")
+		return
+	} else if found {
+		if err := taskcontrol.CancelTask(r.Context(), taskID); err != nil {
+			WriteError(w, 409, "cancel_failed", err.Error())
+			return
+		}
+		WriteJSON(w, 200, map[string]string{"message": "cancellation requested"})
+		return
+	}
 	task, ok := GetTask(taskID)
 	if !ok {
 		WriteError(w, http.StatusNotFound, "task_not_found", "task not found: "+taskID)

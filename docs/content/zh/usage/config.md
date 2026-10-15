@@ -14,7 +14,7 @@ SaveAny-Bot 支持在 Telegram 中通过 `/config` 和 `/fnametmpl` 命令自定
 - **文件名策略** — 保存文件的命名方式
 - **重名文件保存策略** — 目标存储中已存在同名文件时的处理方式
 
-设置按用户分别保存, 对该用户后续所有的本地保存任务生效.
+设置按用户分别保存，对该用户后续的 local 或 ShardReel 文件保存任务生效。
 
 ### 文件名策略
 
@@ -34,7 +34,7 @@ SaveAny-Bot 支持在 Telegram 中通过 `/config` 和 `/fnametmpl` 命令自定
 | `始终跳过` | 对重名文件不做处理 |
 
 {{< hint info >}}
-当前支持的 Local 存储能够检测已有文件；上述重名策略用于 Telegram 文件保存到本地，不控制 `/watch` 或 `/copy` 的消息转发。
+local 和 ShardReel 均能检测已有文件；上述重名策略用于 Telegram 文件保存，不控制 `/watch` 或 `/copy` 的消息转发。媒体组在所选基础目录内按有效 caption 名归目录，文件名仍按上述策略生成；有效目录名相同的媒体组复用同一文件夹。
 {{< /hint >}}
 
 ## `/fnametmpl` — 自定义文件名模板

@@ -6,6 +6,7 @@ import (
 
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
+	storenum "github.com/krau/SaveAny-Bot/pkg/enums/storage"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
 	"github.com/krau/SaveAny-Bot/storage"
@@ -31,6 +32,9 @@ func (t *Task) Title() string {
 func (t *Task) Type() tasktype.TaskType {
 	return tasktype.TaskTypeTgfiles
 }
+
+// UsesShardReel reports whether completion must wait for durable upload handoff.
+func (t *Task) UsesShardReel() bool { return t.Storage.Type() == storenum.Shardreel }
 
 func NewTGFileTask(
 	id string,

@@ -141,7 +141,7 @@ bot:
       help_usage: "Usage: /dir <op> <args...>"
       info_create_dir_success: Directory created successfully
       info_delete_dir_success: Directory deleted successfully
-    help_text_fmt: "Save Any Bot - Save your Telegram files\nVersion: %s , Commit: %s\n\nCommands:\n/start - Start using the bot\n/help - Show help\n/silent - Toggle silent mode\n/storage - Set default storage\n/save [custom filename] - Save file\n/dir - Manage storage directories\n/rule - Manage rules\n/config - Modify configuration\n/fnametmpl - Set custom filename template\n/task - Manage task queue\n/cancel - Cancel a task\n/watch - Watch chats and auto save (UserBot)\n/copy - Copy history messages to a target chat (UserBot)\n/unwatch - Stop watching chats (UserBot)\n/lswatch - List watched chats (UserBot)\n/lschannel - List channels (UserBot)\n/lsgroup - List groups (UserBot)\n/lstopic - List forum topics (UserBot)\n/syncpeers - Sync peer chats (UserBot)\n\nUsage guide: https://sabot.unv.app/usage\n"
+    help_text_fmt: "Save Any Bot - Save Telegram files to local storage or ShardReel\nVersion: %s , Commit: %s\n\nCommands:\n/start - Start using the bot\n/help - Show help\n/silent - Toggle silent mode\n/storage - Set default storage\n/save [custom filename] - Save file\n/dir - Manage storage directories\n/rule - Manage rules\n/config - Modify configuration\n/fnametmpl - Set custom filename template\n/task - Manage task queue\n/cancel - Cancel a task\n/watch - Watch chats and auto save (UserBot)\n/copy - Copy history messages to a target chat (UserBot)\n/unwatch - Stop watching chats (UserBot)\n/lswatch - List watched chats (UserBot)\n/lschannel - List channels (UserBot)\n/lsgroup - List groups (UserBot)\n/lstopic - List forum topics (UserBot)\n/syncpeers - Sync peer chats (UserBot)\n\nUsage guide: https://sabot.unv.app/usage\n"
     lschannel:
       error_list_failed: "Failed to list channels: {{.Error}}"
       info_list_empty: No channels to list
@@ -164,6 +164,11 @@ bot:
       info_group_found_files_select_storage: Total {{.Count}} files, please select storage
       info_saving_files: Saving files...
     progress:
+      shardreel_queued: Files downloaded and queued for ShardReel. View upload status or cancel in the admin console.
+      shardreel_completed: saved
+      shardreel_failed: failed
+      shardreel_cancelled: cancelled
+      shardreel_result: "ShardReel {{.Status}}: saved {{.Succeeded}}, skipped {{.Skipped}}, failed {{.Failed}}, cancelled {{.Cancelled}}. {{.Error}}"
       avg_speed_prefix: "\nAverage speed: "
       batch_done_prefix: "Completed\nFile count: "
       batch_processing_prefix: "Processing batch download task\nTotal size: "
@@ -287,5 +292,5 @@ bot:
         Current watches:
       info_watch_route_started: "Started watching: {{.Source}} → {{.Target}}"
       info_watch_route_stopped: "Stopped watching: [{{.ID}}]"
-      target_local: Local
+      target_local: Default storage
     watch_help_text: "Use /watch to watch a chat. target=0 (or omitted) saves to default storage; a non-zero target is copied via UserBot DropAuthor with a clickable [转] link at the start (source deletion does not affect the copy). Use target:topicId for a forum topic.\n\nSyntax:\n/watch <source_id> [target_id[:topicId]] [filter]\n/lswatch\n/unwatch <id>\n/lschannel\n/lsgroup\n/lstopic <group_id>\n\nParameters:\n- <source_id>: Source chat ID or username\n- [target_id[:topicId]]: Target chat ID; 0 means save to default storage; :topicId is forum topic ID (from /lstopic)\n- [filter]: Optional msgre:<boolean expression> (& | ! () keywords, case-insensitive)\n\nExamples:\n/watch -1002229835658\n/watch -1002229835658 0 msgre:plana|planb\n/watch -1002229835658 -1003333444555\n/watch -1002229835658 -1003333444555:12345\n/watch -1002229835658 -1003333444555:12345 msgre:plana&(planb|planc)\n"

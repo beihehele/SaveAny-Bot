@@ -103,7 +103,7 @@ When the container environment variable `CONFIG_URL` is set to an HTTP(S) URL, t
 
 ## Updates
 
-Before upgrading, stop the service and copy the configuration, the entire `data` directory and private deployment files to a separate backup directory, including database and Bot/UserBot sessions. Retain the old binary or image digest. Do not delete the database to bypass migration failures. Roll back while stopped using a verified complete backup and the old program; a migrated database is not guaranteed to work with an older version. Removing users from configuration still invokes the existing user synchronization and associated-data deletion, so check the user list first.
+Before upgrading, stop the service and copy the configuration, the entire `data` directory and private deployment files to a separate backup directory, including database and Bot/UserBot sessions. When using ShardReel, also back up and restore `spool_path`, mounted separately from the host's `shardreel` directory in the current Compose. Retain the old binary or image digest. Do not delete the database to bypass migration failures. Roll back while stopped using a verified complete backup and the old program; a migrated database is not guaranteed to work with an older version. Removing users from configuration still invokes the existing user synchronization and associated-data deletion, so check the user list first.
 
 For binary deployments, back up configuration and data, stop the service, replace the binary with a verified release, and restart. Use the current configuration examples and retain the matching binary and data backup.
 

@@ -61,7 +61,7 @@ func TestTelegramSaveEndToEnd(t *testing.T) {
 	const modeEnv = "SAVEANY_LOCAL_SAVE_TEST_MODE"
 	mode := os.Getenv(modeEnv)
 	if mode == "" {
-		for _, scenario := range []string{"single-buffered", "album-buffered", "single-stream", "album-stream", "failure", "cancel", "mixed-input-results"} {
+		for _, scenario := range []string{"single-buffered", "album-buffered", "album-reuse", "album-photos", "album-nameless", "single-stream", "album-stream", "failure", "cancel", "mixed-input-results"} {
 			t.Run(scenario, func(t *testing.T) {
 				binary, err := os.Executable()
 				if err != nil {
@@ -97,6 +97,9 @@ func TestTelegramSaveEndToEnd(t *testing.T) {
 	if strings.HasPrefix(mode, "album") {
 		count = 2
 	}
+	if mode == "album-reuse" {
+		count = 4
+	}
 	started := make(chan struct{}, 1)
 	factory := NewTaskFactoryWithExtractor(serviceCtx, func(ctx context.Context, links []string) ([]filemodel.TGFileMessage, error) {
 		if ctx != requestCtx || len(links) != 1 {
@@ -104,10 +107,26 @@ func TestTelegramSaveEndToEnd(t *testing.T) {
 		}
 		var files []filemodel.TGFileMessage
 		for i := 1; i <= count; i++ {
-			media := &tg.MessageMediaDocument{Document: &tg.Document{ID: int64(i), Size: 4, Attributes: []tg.DocumentAttributeClass{&tg.DocumentAttributeFilename{FileName: fmt.Sprintf("asset-%d.bin", i)}}}}
-			file, err := filemodel.FromMediaMessage(media, saveTestClient{mode: mode, started: started}, &tg.Message{ID: i, GroupedID: 99})
+			var media tg.MessageMediaClass = &tg.MessageMediaDocument{Document: &tg.Document{ID: int64(i), Size: 4, Attributes: []tg.DocumentAttributeClass{&tg.DocumentAttributeFilename{FileName: fmt.Sprintf("asset-%d.bin", i)}}}}
+			if mode == "album-nameless" {
+				media.(*tg.MessageMediaDocument).Document.(*tg.Document).Attributes = nil
+			}
+			if mode == "album-photos" {
+				media = &tg.MessageMediaPhoto{Photo: &tg.Photo{ID: int64(i), Sizes: []tg.PhotoSizeClass{&tg.PhotoSizeProgressive{Type: "y", Sizes: []int{2, 4}}}}}
+			}
+			msg := &tg.Message{ID: i}
+			if count > 1 {
+				msg.SetGroupedID(99 + int64((i-1)/2))
+				if i%2 == 1 {
+					msg.Message = "Shared / Album"
+				}
+			}
+			file, err := filemodel.FromMediaMessage(media, saveTestClient{mode: mode, started: started}, msg)
 			if err != nil {
 				return nil, err
+			}
+			if mode == "album-photos" {
+				file.SetName(fmt.Sprintf("asset-%d.bin", i))
 			}
 			files = append(files, file)
 		}
@@ -204,8 +223,26 @@ func TestTelegramSaveEndToEnd(t *testing.T) {
 			t.Fatal("save did not finish")
 		}
 	}
+	if mode == "album-nameless" {
+		dir := filepath.Join(root, "saved", "albums", "Shared_Album")
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) != count {
+			t.Fatalf("nameless album escaped caption directory: entries=%v error=%v", entries, err)
+		}
+		for _, entry := range entries {
+			data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+			if err != nil || string(data) != "data" {
+				t.Fatalf("nameless media was not saved: bytes=%q error=%v", data, err)
+			}
+		}
+		return
+	}
 	for i := 1; i <= count; i++ {
-		path := filepath.Join(root, "saved", "albums", fmt.Sprintf("asset-%d.bin", i))
+		albumDir := ""
+		if count > 1 {
+			albumDir = "Shared_Album"
+		}
+		path := filepath.Join(root, "saved", "albums", albumDir, fmt.Sprintf("asset-%d.bin", i))
 		data, err := os.ReadFile(path)
 		if mode == "cancel" || mode == "failure" {
 			if !errors.Is(err, os.ErrNotExist) {

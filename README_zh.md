@@ -2,7 +2,7 @@
 
 # <img src="docs/static/logo.png" width="45" align="center"> Save Any Bot
 
-> **保存 Telegram 文件到本地，管理聊天监听和历史消息复制**
+> **保存 Telegram 文件到本地或 ShardReel，管理聊天监听和历史消息复制**
 
 [![Release Date](https://img.shields.io/github/release-date/beihehele/SaveAny-Bot?label=release)](https://github.com/beihehele/SaveAny-Bot/releases)
 [![tag](https://img.shields.io/github/v/tag/beihehele/SaveAny-Bot.svg)](https://github.com/beihehele/SaveAny-Bot/releases)
@@ -17,11 +17,11 @@
 
 ## 功能
 
-- 保存 Telegram 文档、图片、视频和媒体组到本地目录。
+- 保存 Telegram 文档、图片、视频和媒体组到本地目录或 ShardReel。
 - 监听聊天、复制历史消息，保留过滤、媒体组边界和 Topic。
 - 使用目录规则、命名模板及文件冲突策略整理本地保存。
 - 通过 Telegram 或可选网页后台查询和取消任务。
-- 支持多个命名 Local 根目录及用户存储访问范围。
+- 支持命名存储、用户存储访问范围，以及 ShardReel 上传重试和重启恢复。
 
 ## 快速开始
 
@@ -59,12 +59,15 @@ docker build -t saveany-bot:local .
 docker run -d --name saveany-bot --restart unless-stopped \
     -v ./config.toml:/app/config.toml \
     -v ./data:/app/data \
+    -v ./shardreel:/app/data/shardreel \
     -v ./cache:/app/cache \
     -v ./downloads:/app/downloads \
     saveany-bot:local
 ```
 
-`data` 保存数据库和 Telegram 会话, 重建容器时必须保留; `cache` 仅用于临时文件. 稳定部署应固定到已验收的镜像版本或 digest.
+`data` 保存数据库和 Telegram 会话，ShardReel 待上传文件保存在独立的 `shardreel` 挂载内。重建容器时保留这两个目录，停服备份也应同时包含两者；`cache` 仅用于临时文件。稳定部署应固定到已验收的镜像版本或 digest。
+
+ShardReel 接入配置、上传与清理说明见[存储端配置](docs/content/zh/deployment/configuration/storages.md#shardreel)。
 
 
 使用远端镜像时，选择已验收的 tag 或 digest，并使用对应发布 tag/commit 的配置和示例。远端 Compose 示例要求设置 `SAVEANY_IMAGE`；`latest` 可能对应不同产品版本。尚未发布的本地修改需自行构建。

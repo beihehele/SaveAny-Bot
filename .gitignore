@@ -2,6 +2,7 @@ config.toml
 logs/
 tmp/
 data/
+/shardreel/
 downloads/
 session.*
 cache.db

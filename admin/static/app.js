@@ -124,7 +124,7 @@
     next.disabled = offset + 100 >= total;
     target.append(previous, next);
   }
-  function scopeLabel(task) { return t(task.scope === "tracked" ? "trackedScope" : task.scope === "history" ? "historyScope" : "queueScope"); }
+  function scopeLabel(task) { return t(task.scope === "upload" ? "scope_upload" : task.scope === "tracked" ? "trackedScope" : task.scope === "history" ? "historyScope" : "queueScope"); }
   function inputLines(report) {
     const lines = (report.input_results || []).map((result) =>
       '#' + result.index + ' · ' + t('input_status_' + result.status) + ' · ' + t('input_code_' + result.code) + ' · ' + t("inputNewFiles") + ': ' + result.new_files +
@@ -161,13 +161,19 @@
         [t("runningItems"), counts.running], [t("resultMeaning"), t("fileResultMeaning")]);
     }
     if (task.copy_outcome) values.push([t("result"), t(`copyOutcome_${task.copy_outcome}`)]);
+    for (const file of task.upload_files || []) {
+      values.push([file.saved_path || file.path, `${t(`upload_${file.status}`)} · ${bytes(file.uploaded_bytes)} / ${bytes(file.size)}`]);
+      if (file.next_attempt_at && file.status === "retry_wait") values.push([t("nextRetry"), date(file.next_attempt_at)]);
+      if (file.error) values.push([t("error"), file.error]);
+      if (file.cleanup_error) values.push([t("cleanupPending"), file.cleanup_error]);
+    }
     definitions($("task-details"), values);
     $("task-detail-error").textContent = task.error || "";
     $("task-detail-error").hidden = !task.error;
     if (!$("task-dialog").open) $("task-dialog").showModal();
   }
   async function cancelTask(task, trigger) {
-    if (!window.confirm(t("confirmCancel"))) return;
+    if (!window.confirm(t(task.upload_files?.length && task.status === "failed" ? "confirmDiscardUpload" : "confirmCancel"))) return;
     trigger.disabled = true;
     try {
       const result = await request(`tasks/${encodeURIComponent(task.task_id)}/cancel`, { method: "POST" });
@@ -197,8 +203,16 @@
       const actions = node("div", null, "table-actions");
       actions.append(button(t("details"), () => taskDetails(task)));
       if (task.can_cancel) {
-        const cancel = button(t("cancel"), () => cancelTask(task, cancel), "danger-button small-button");
+        const cancel = button(t(task.upload_files?.length && task.status === "failed" ? "discardUpload" : "cancel"), () => cancelTask(task, cancel), "danger-button small-button");
         actions.append(cancel);
+      }
+      if (task.can_retry) {
+        const retry = button(t("retryUpload"), async () => {
+          retry.disabled = true;
+          try { await request(`tasks/${encodeURIComponent(task.task_id)}/retry`, { method: "POST" }); toast(t("queued")); await loadPage(); }
+          catch (error) { toast(error.message); } finally { retry.disabled = false; }
+        });
+        actions.append(retry);
       }
       return [title, taskStatus(task), progress, task.storage || "—", date(task.created_at), actions];
     }));
@@ -206,7 +220,7 @@
   function storageSelectors() {
     for (const id of ["target-storage", "file-storage"]) {
       const select = $(id), selected = select.value;
-      const storages = id === "file-storage" ? state.storages.filter((storage) => storage.type === "local" && storage.listable) : state.storages;
+      const storages = id === "file-storage" ? state.storages.filter((storage) => storage.listable) : state.storages;
       select.replaceChildren();
       storages.forEach((storage) => { const option = node("option", storage.name); option.value = storage.name; select.append(option); });
       if (storages.some((storage) => storage.name === selected)) select.value = selected;
@@ -249,9 +263,17 @@
       const values = node("dl", null, "definition-list");
       definitions(values, [[t("readable"), storage.readable], [t("listable"), storage.listable], [t("stream"), storage.stream], [t("detectExistence"), storage.detect_existence]]);
       card.append(values);
-      if (storage.type === "local" && storage.listable) card.append(button(t("browseFiles"), () => {
+      if (storage.listable) card.append(button(t("browseFiles"), () => {
         $("file-storage").value = storage.name; $("file-path").value = "/"; state.fileOffset = 0; location.hash = "files";
       }));
+      if (storage.type === "shardreel") {
+        const check = button(t("checkConnection"), async () => {
+          check.disabled = true;
+          try { const result = await request(`storages/${encodeURIComponent(storage.name)}/check`, { method: "POST" }); toast(`${t("connectionReady")}: ${result.root}`); }
+          catch (error) { toast(error.message); } finally { check.disabled = false; }
+        });
+        card.append(check);
+      }
       $("storage-cards").append(card);
     });
   }
@@ -263,6 +285,16 @@
     return value;
   }
   function taskStatusKey(task) {
+    if (task.upload_files?.length) {
+      if (task.status === "completed") {
+        if (task.upload_files.every((f) => f.status === "skipped")) return "upload_skipped";
+        return task.upload_files.some((f) => !f.local_clean) ? "upload_saved_cleanup" : "upload_saved";
+      }
+      if (task.status === "failed") return "upload_attention";
+      if (task.status === "cancelled" || task.status === "cancelling") return task.status;
+      const file = task.upload_files.find((f) => ["uploading", "processing", "cancelling"].includes(f.status)) || task.upload_files.find((f) => ["preparing", "queued", "retry_wait"].includes(f.status));
+      if (file) return `upload_${file.status}`;
+    }
     const incomplete = task.result_summary && task.result_summary.succeeded < task.result_summary.total;
     return task.status === "completed" && (incomplete || (task.type === "copy" && task.copy_outcome !== "succeeded")) ? "executionEnded" : task.status;
   }

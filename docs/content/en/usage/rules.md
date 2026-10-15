@@ -86,7 +86,7 @@ Similar to the above, but matches based on the text content of the message itsel
 
 Matches album messages (media groups). Rule content can only be `true` or `false`.
 
-If the path in the rule uses `NEW-FOR-ALBUM`, the bot will create a new folder for each media group and store all files of that group there. See: https://github.com/krau/SaveAny-Bot/issues/87
+If the path uses `NEW-FOR-ALBUM`, the bot organizes the selected media group under its caption directory, relative to the selected base path.
 
 For example:
 
@@ -94,4 +94,4 @@ For example:
 IS-ALBUM true archive NEW-FOR-ALBUM
 ```
 
-This will save media-group messages to the storage named `archive`, creating a new folder (generated from the first file) for each album.
+This saves media-group messages to `archive` under their cleaned, truncated caption directory. Equal effective captions reuse the same folder; empty captions use a stable chat/group ID fallback. Album saves already append this caption directory by default, so the rule chooses the storage and base path without appending another directory.

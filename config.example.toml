@@ -1,4 +1,4 @@
-# Telegram 文件本地保存与监听转发；配置文件使用 UTF-8。
+# Telegram 文件保存与监听转发；配置文件使用 UTF-8。
 # 完整选项见 config.example.full.toml。
 lang = "zh-Hans"
 workers = 4
@@ -58,6 +58,16 @@ name = "本机1"
 type = "local"
 enable = true
 base_path = "./downloads"
+
+# 可选：ShardReel 的局域网存储 API；接收端需启用 Worker。
+# [[storages]]
+# name = "我的网盘"
+# type = "shardreel"
+# enable = true
+# url = "http://YOUR_SHARDREEL_HOST:8080"
+# api_key = "YOUR_STORAGE_API_KEY_WITH_AT_LEAST_32_BYTES"
+# spool_path = "./data/shardreel"
+# max_pending_bytes = 21474836480
 
 [[users]]
 id = 114514

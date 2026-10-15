@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"errors"
+	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -111,11 +112,11 @@ func TestDiskSamplingDoesNotCreateMissingPath(t *testing.T) {
 		t.Skip("disk observations are unavailable on this platform")
 	}
 	base := t.TempDir()
-	if _, err := availableDiskBytes(base); err != nil {
+	if _, err := fsutil.AvailableDiskBytes(base); err != nil {
 		t.Fatal(err)
 	}
 	missing := filepath.Join(base, "missing")
-	if _, err := availableDiskBytes(missing); err == nil {
+	if _, err := fsutil.AvailableDiskBytes(missing); err == nil {
 		t.Fatal("missing disk path accepted")
 	}
 	if _, err := os.Stat(missing); !os.IsNotExist(err) {

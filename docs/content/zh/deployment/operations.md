@@ -40,12 +40,12 @@ test "$(docker inspect --format '{{.State.Running}}' "$SERVICE_ID")" = false
 umask 077
 mkdir -p "$BACKUP_DIR"
 BACKUP_FILE=$(mktemp "$BACKUP_DIR/saveany-XXXXXXXX.tar.gz")
-tar -czf "$BACKUP_FILE" -- config.toml docker-compose.yml .env data downloads cache
+tar -czf "$BACKUP_FILE" -- config.toml docker-compose.yml .env data shardreel downloads cache
 sha256sum "$BACKUP_FILE" > "$BACKUP_FILE.sha256"
 sha256sum -c "$BACKUP_FILE.sha256"
 ```
 
-此模板假设固定镜像写在 `.env`；若不使用 `.env`，从归档清单中去掉它，并另外记录实际镜像 digest。任何路径缺失或 `tar` 报错都表示备份失败，不得继续升级。还要核对其他实例/进程已停止写入，SQLite 的 WAL/SHM 随完整目录一起备份。备份目录应位于部署目录之外，并限制权限；备份包含账号会话与秘密配置，不随源码、镜像或公开验收报告发布。
+此模板假设固定镜像写在 `.env`；若不使用 `.env`，从归档清单中去掉它，并另外记录实际镜像 digest。当前 Compose 中 `shardreel` 是独立挂载，启用 ShardReel 时必须与 `data` 同时备份和恢复；自定义 `spool_path` 时把实际待上传目录加入清单。未启用该后端且目录不存在时，可去掉 `shardreel`。任何必要路径缺失或 `tar` 报错都表示备份失败，不得继续升级。还要核对其他实例/进程已停止写入，SQLite 的 WAL/SHM 随完整目录一起备份。备份目录应位于部署目录之外，并限制权限；备份包含账号会话与秘密配置，不随源码、镜像或公开验收报告发布。
 
 ## 更新与回退
 

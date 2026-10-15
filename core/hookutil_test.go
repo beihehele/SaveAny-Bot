@@ -23,6 +23,19 @@ func TestHookHelperProcess(t *testing.T) {
 	if mode == "" {
 		return
 	}
+	if mode == "upload-complete" {
+		file, err := os.OpenFile(os.Getenv("SAVEANY_TEST_HOOK_UPLOAD_MARKER"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := file.WriteString("completed\n"); err != nil {
+			t.Fatal(err)
+		}
+		if err := file.Close(); err != nil {
+			t.Fatal(err)
+		}
+		os.Exit(0)
+	}
 	if mode == "child" {
 		writeHookFixture(t, os.Getenv("SAVEANY_TEST_HOOK_CHILD_READY"), strconv.Itoa(os.Getpid()))
 		time.Sleep(time.Minute)

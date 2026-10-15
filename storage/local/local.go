@@ -202,18 +202,24 @@ func renameFile(ctx context.Context, root interface{ Rename(string, string) erro
 	}
 }
 
-func (l *Local) Exists(ctx context.Context, storagePath string) bool {
+func (l *Local) Exists(ctx context.Context, storagePath string) (bool, error) {
 	storagePath, err := localPath(storagePath)
-	if err != nil || ctx.Err() != nil {
-		return false
+	if err != nil {
+		return false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
 	}
 	root, err := os.OpenRoot(l.config.BasePath)
 	if err != nil {
-		return false
+		return false, err
 	}
 	defer root.Close()
 	_, err = root.Stat(storagePath)
-	return err == nil
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // ListFiles implements StorageListable interface

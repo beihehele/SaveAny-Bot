@@ -34,7 +34,7 @@ Settings are stored per user and apply to all of that user's subsequent save tas
 | `Always skip` | Do nothing for conflicting files |
 
 {{< hint info >}}
-The supported Local backend detects existing files. These strategies apply to Telegram files saved locally, not message forwarding through `/watch` or `/copy`.
+Local and ShardReel detect existing files. These strategies apply to Telegram file saves, not message forwarding through `/watch` or `/copy`. Albums use a cleaned caption directory below the selected base path; filenames keep the selected strategy, and equal effective directory names reuse the same folder.
 {{< /hint >}}
 
 ## `/fnametmpl` — Custom Filename Template

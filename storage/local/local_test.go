@@ -39,7 +39,7 @@ func TestLocalPaths(t *testing.T) {
 			if _, err := l.ListFiles(t.Context(), p); err == nil {
 				t.Fatal("accepted escaping listing")
 			}
-			if l.Exists(t.Context(), p) {
+			if exists, err := l.Exists(t.Context(), p); exists || err == nil {
 				t.Fatal("escaping path exists")
 			}
 		})
@@ -60,7 +60,7 @@ func TestLocalPaths(t *testing.T) {
 	if err != nil || len(files) != 1 || files[0].Path != filepath.Join("/photos", "a.txt") {
 		t.Fatalf("files=%v err=%v", files, err)
 	}
-	if !l.Exists(t.Context(), "/photos/a.txt") {
+	if exists, err := l.Exists(t.Context(), "/photos/a.txt"); !exists || err != nil {
 		t.Fatal("saved file missing")
 	}
 }
@@ -170,7 +170,7 @@ func TestLocalSymlinkContainment(t *testing.T) {
 	if _, err := l.ListFiles(t.Context(), "escape"); err == nil {
 		t.Fatal("symlink listing escaped")
 	}
-	if l.Exists(t.Context(), "escape/file.txt") {
+	if exists, err := l.Exists(t.Context(), "escape/file.txt"); exists || err == nil {
 		t.Fatal("symlink existence escaped")
 	}
 	b, _ := os.ReadFile(filepath.Join(out, "file.txt"))

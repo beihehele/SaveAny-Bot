@@ -4,7 +4,7 @@ title: "存储端配置"
 
 # 本地存储
 
-目前只支持 `local`，可以配置多个不同名称、不同根目录的本地存储。
+支持 `local` 和 `shardreel`，可以保留本地存储并另行配置 ShardReel。
 
 ```toml
 [[storages]]
@@ -16,4 +16,35 @@ base_path = "./downloads"
 
 名称唯一，启用时 `base_path` 必填。容器中使用 `/app/downloads` 对应的挂载目录。用户 `storages` 为允许/排除的名称列表，`blacklist` 控制列表含义。
 
-用 `/storage` 选择默认存储，`/dir` 登记常用相对目录；`/rule` 可以选择其中任一本地存储。已保存文件不因删除目录登记而删除。网页提供目录浏览和文件下载。
+用 `/storage` 选择默认存储，`/dir` 登记常用相对目录；`/rule` 可以选择已配置的存储。已保存文件不因删除目录登记而删除。网页提供目录浏览和文件下载。
+
+## ShardReel
+
+两个服务可以部署在不同的局域网机器上，数据库各自独立。ShardReel 设置 `SR_STORAGE_API_KEY`（至少 32 字节）及 `SR_STORAGE_ROOT=Telegram`，保持 Worker 启用。Bot 中使用：
+
+```toml
+[[storages]]
+name = "我的网盘"
+type = "shardreel"
+enable = true
+url = "http://YOUR_SHARDREEL_HOST:8080"
+api_key = "YOUR_STORAGE_API_KEY_WITH_AT_LEAST_32_BYTES"
+spool_path = "./data/shardreel"
+max_pending_bytes = 21474836480
+```
+
+`spool_path` 必须位于持久化挂载内，默认在 `data/shardreel/<存储名称>`，待上传空间默认上限 20 GiB。每个存储使用一个后台上传执行器。Telegram 完整下载后进入持久化队列，下载执行槽位释放，最终成功通知和 hook 等待远端入库及 SHA-256 校验。即使启用 `stream`，该后端也使用缓存下载。
+
+两个 Compose 文件均显式挂载 `./shardreel:/app/data/shardreel`。容器重建时保留宿主机的 `data` 和 `shardreel` 目录，停服备份也应同时包含这两个目录。自定义 `spool_path` 到其他位置时需调整对应挂载。
+
+Bot、网页/API 和监听保存媒体组时，在选定的基础目录内按 caption 建立子目录。使用组内消息 ID 最小的有效 caption，清理非法路径字符、控制字符及多余空白，截断为最多 64 个字符且不超过 180 个 UTF-8 字节；不添加消息 ID、日期或随机后缀。同一存储和基础目录下，有效名相同的不同媒体组会保存到同一文件夹，文件重名仍按原策略处理。caption 清理后为空时使用 `album_<聊天ID>_<媒体组ID>`，避免无标题相册混在一起。该规则同时适用于 local 与 ShardReel，不影响 Telegram 聊天间转发。下载缓存及待上传 payload 仍按任务 ID 隔离，数据库记录对应的目标目录。
+
+确认成功后立即删除本地副本；清理失败单独展示并每小时重试，不重新上传。临时失败按 1 分钟、5 分钟、15 分钟、1 小时、3 小时重试，最多 5 次；鉴权、参数及校验错误需要处理。后台可立即重试或放弃并清理，成功成员不会重复上传。失败文件保留至主动放弃，空间不足时拒绝新增下载。
+
+重启恢复完整落盘的上传，查询原请求后继续；未完整下载的文件需重新下载。停服保留任务。从未发起远端请求的任务取消无需联网；已发起请求的任务需确认远端取消或完成后再清理。在 ShardReel 后台取消待接收的上传也会保留取消回执，Bot 不会重新发起该上传。保存原始字节，播放优化由 ShardReel 的派生缓存承担。
+
+ShardReel 加密格式不接收空文件，该后端会在下载前明确拒绝；空文件仍可保存到本地。
+
+成功、跳过和取消的历史每小时清理，保留 7 天、最多 1000 条；本地清理或远端回执确认未完成时保留记录。失败及未完成任务不按年龄删除。停服备份应同时包含数据库和 `spool_path`。有待办文件时不要改换存储名称、URL、待上传目录或 ShardReel 的 `SR_STORAGE_ROOT`。
+
+`/watch <来源> 0` 仍跟随默认存储及已启用的规则；修改默认值影响后续监听保存。`/copy` 仍是 Telegram 聊天间转发。

@@ -5,6 +5,7 @@
 .vscode/
 downloads/
 data/
+/shardreel/
 cache/
 docs/
 config.example.toml

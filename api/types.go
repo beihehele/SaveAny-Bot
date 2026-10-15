@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
@@ -52,17 +53,20 @@ type TaskProgress struct {
 // TaskInfoResponse 任务信息响应
 type TaskInfoResponse struct {
 	inputresult.Report
-	TaskID        string             `json:"task_id"`
-	Type          tasktype.TaskType  `json:"type"`
-	Status        TaskStatus         `json:"status"`
-	Title         string             `json:"title"`
-	Progress      *TaskProgress      `json:"progress,omitempty"`
-	Storage       string             `json:"storage"`
-	Path          string             `json:"path"`
-	Error         string             `json:"error,omitempty"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     time.Time          `json:"updated_at"`
-	ResultSummary *taskresult.Counts `json:"result_summary,omitempty"`
+	TaskID        string                   `json:"task_id"`
+	Type          tasktype.TaskType        `json:"type"`
+	Status        TaskStatus               `json:"status"`
+	Title         string                   `json:"title"`
+	Source        string                   `json:"source,omitempty"`
+	Progress      *TaskProgress            `json:"progress,omitempty"`
+	Storage       string                   `json:"storage"`
+	Path          string                   `json:"path"`
+	Error         string                   `json:"error,omitempty"`
+	CreatedAt     time.Time                `json:"created_at"`
+	UpdatedAt     time.Time                `json:"updated_at"`
+	ResultSummary *taskresult.Counts       `json:"result_summary,omitempty"`
+	UploadFiles   []database.ShardReelFile `json:"upload_files,omitempty"`
+	CanRetry      bool                     `json:"can_retry,omitempty"`
 }
 
 // TasksListResponse 任务列表响应

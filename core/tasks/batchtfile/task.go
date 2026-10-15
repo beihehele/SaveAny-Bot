@@ -8,6 +8,7 @@ import (
 
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
+	storenum "github.com/krau/SaveAny-Bot/pkg/enums/storage"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
@@ -109,3 +110,13 @@ func (t *Task) resultElements() []taskresult.Element {
 
 // ResultSummary reports file outcomes without changing scheduling or hooks.
 func (t *Task) ResultSummary() taskresult.Summary { return t.results.Snapshot() }
+
+// UsesShardReel reports whether any file requires durable upload handoff.
+func (t *Task) UsesShardReel() bool {
+	for _, elem := range t.elems {
+		if elem.Storage.Type() == storenum.Shardreel {
+			return true
+		}
+	}
+	return false
+}

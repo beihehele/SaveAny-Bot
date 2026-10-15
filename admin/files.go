@@ -94,6 +94,9 @@ type fileView struct {
 }
 
 func (s *Server) files(w http.ResponseWriter, r *http.Request) {
+	if s.remoteFiles(w, r) {
+		return
+	}
 	stor, base, dir, ok := s.localStorage(w, r)
 	if !ok {
 		return
@@ -135,6 +138,9 @@ func (s *Server) files(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) download(w http.ResponseWriter, r *http.Request) {
+	if s.remoteDownload(w, r) {
+		return
+	}
 	stor, base, filePath, ok := s.localStorage(w, r)
 	if !ok {
 		return

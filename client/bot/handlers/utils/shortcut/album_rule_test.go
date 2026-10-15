@@ -34,9 +34,9 @@ type albumRuleStorage struct {
 	checked []string
 }
 
-func (s *albumRuleStorage) Exists(_ context.Context, path string) bool {
+func (s *albumRuleStorage) Exists(_ context.Context, path string) (bool, error) {
 	s.checked = append(s.checked, path)
-	return false
+	return false, nil
 }
 
 func TestAlbumDirectoryRuleKeepsSingleRemainingMember(t *testing.T) {
@@ -91,11 +91,15 @@ func TestAlbumDirectoryRuleKeepsSingleRemainingMember(t *testing.T) {
 	peers.AddPeer(42, 1, peerstore.TypeUser, "owner")
 	ctx := ext.NewContext(t.Context(), raw, peers, &tg.User{ID: 9000}, message.NewSender(raw), &tg.Entities{}, false)
 	var single tfile.TGFileMessage
+	var album []tfile.TGFileMessage
 	for count := 1; count <= 2; count++ {
 		var files []tfile.TGFileMessage
 		for id := 1; id <= count; id++ {
 			media := &tg.MessageMediaDocument{Document: &tg.Document{ID: int64(id), Size: 4, Attributes: []tg.DocumentAttributeClass{&tg.DocumentAttributeFilename{FileName: fmt.Sprintf("%d.bin", id)}}}}
 			msg := &tg.Message{ID: id, Media: media, PeerID: &tg.PeerChannel{ChannelID: 111}}
+			if id == 1 {
+				msg.Message = "Shared / Album"
+			}
 			msg.SetGroupedID(int64(count))
 			file, err := tfile.FromMediaMessage(media, raw, msg)
 			if err != nil {
@@ -104,6 +108,7 @@ func TestAlbumDirectoryRuleKeepsSingleRemainingMember(t *testing.T) {
 			files = append(files, file)
 		}
 		single = files[0]
+		album = files
 		stor.checked = nil
 		if err := CreateAndAddBatchTGFileTaskWithEdit(ctx, 42, stor, "/", files, 99, tcbdata.ConflictStrategyAsk); err != nil && !errors.Is(err, dispatcher.EndGroups) {
 			t.Fatal(err)
@@ -112,7 +117,7 @@ func TestAlbumDirectoryRuleKeepsSingleRemainingMember(t *testing.T) {
 		if len(queued) != count || !strings.Contains(queued[count-1].Title, fmt.Sprintf("%d files/", count)) {
 			t.Fatalf("album directory rule discarded members: selected=%d queued=%+v", count, queued)
 		}
-		if len(stor.checked) != count || stor.checked[0] != "/1/1.bin" {
+		if len(stor.checked) != count || stor.checked[0] != "/Shared_Album/1.bin" {
 			t.Fatalf("album directory rule chose wrong paths: %v", stor.checked)
 		}
 	}
@@ -120,7 +125,36 @@ func TestAlbumDirectoryRuleKeepsSingleRemainingMember(t *testing.T) {
 	if err := CreateAndAddTGFileTaskWithEdit(ctx, 42, stor, "/", single, 99, tcbdata.ConflictStrategyAsk); err != nil && !errors.Is(err, dispatcher.EndGroups) {
 		t.Fatal(err)
 	}
-	if len(core.GetQueuedTasks(t.Context())) != 3 || len(stor.checked) != 1 || stor.checked[0] != "/1/1.bin" {
+	if len(core.GetQueuedTasks(t.Context())) != 3 || len(stor.checked) != 1 || stor.checked[0] != "/Shared_Album/1.bin" {
 		t.Fatalf("single-file selection did not use its album directory: %v", stor.checked)
+	}
+	if err := database.UpdateUserApplyRule(t.Context(), 42, false); err != nil {
+		t.Fatal(err)
+	}
+	stor.checked = nil
+	if err := CreateAndAddBatchTGFileTaskWithEdit(ctx, 42, stor, "/", album, 99, tcbdata.ConflictStrategyAsk); err != nil && !errors.Is(err, dispatcher.EndGroups) {
+		t.Fatal(err)
+	}
+	if len(core.GetQueuedTasks(t.Context())) != 4 || len(stor.checked) != 2 || stor.checked[0] != "/Shared_Album/1.bin" || stor.checked[1] != "/Shared_Album/2.bin" {
+		t.Fatalf("ordinary album did not reuse caption directory: %v", stor.checked)
+	}
+	if err := database.CreateRule(t.Context(), &database.Rule{UserID: u.ID, Type: rule.IsAlbum.String(), Data: "false", StorageName: rule.RuleStorNameChosen, DirPath: rule.RuleDirPathNewForAlbum}); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.UpdateUserApplyRule(t.Context(), 42, true); err != nil {
+		t.Fatal(err)
+	}
+	msg := *single.Message()
+	msg.SetGroupedID(0)
+	ordinary, err := tfile.FromMediaMessage(msg.Media, raw, &msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stor.checked = nil
+	if err := CreateAndAddBatchTGFileTaskWithEdit(ctx, 42, stor, "/", []tfile.TGFileMessage{ordinary}, 99, tcbdata.ConflictStrategyAsk); err != nil && !errors.Is(err, dispatcher.EndGroups) {
+		t.Fatal(err)
+	}
+	if len(core.GetQueuedTasks(t.Context())) != 5 || len(stor.checked) != 1 || stor.checked[0] != "/1/1.bin" {
+		t.Fatalf("album directory rule dropped an ordinary selected file: %v", stor.checked)
 	}
 }

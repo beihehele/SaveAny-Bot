@@ -4,7 +4,7 @@ This document provides essential information for AI coding agents working on the
 
 ## Project Overview
 
-SaveAny-Bot is a Telegram bot written in Go that saves Telegram files locally and manages chat watching and history copying, with an optional administrator web console. Local is the only supported storage backend.
+SaveAny-Bot is a Telegram bot written in Go that saves Telegram files and manages chat watching and history copying, with an optional administrator web console. Local and ShardReel are the supported storage backends. ShardReel uses a persistent local outbox and its HTTP storage API.
 
 **Tech Stack**: Go 1.25.0 minimum (see `go.mod`), gotd/td (Telegram MTProto), Cobra (CLI), Viper (config), GORM (ORM), SQLite
 
@@ -227,7 +227,7 @@ func GetUserByChatID(ctx context.Context, chatID int64) (*User, error) {
 
 ### Storage Backends
 - **Interface**: Defined in `config/storage/types.go` and `storage/`
-- **Supported implementation**: local; preserve directory reads, listing, overwrite and atomic save behavior.
+- **Supported implementations**: local and ShardReel. Preserve local directory reads, listing, overwrite and atomic save behavior. ShardReel completion requires confirmed remote ingest; cleanup errors must never cause another upload.
 - **Adding new storage**:
   1. Add enum to `pkg/enums/storage`
   2. Create config struct in `config/storage/` with `Validate()` method

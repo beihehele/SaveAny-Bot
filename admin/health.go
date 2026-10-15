@@ -3,6 +3,7 @@ package admin
 import (
 	"sort"
 
+	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
 	"github.com/krau/SaveAny-Bot/config"
 	storcfg "github.com/krau/SaveAny-Bot/config/storage"
 	"github.com/krau/SaveAny-Bot/storage"
@@ -22,7 +23,7 @@ func localDiskObservations() []diskObservation {
 		if !ok {
 			continue
 		}
-		available, err := availableDiskBytes(local.BasePath)
+		available, err := fsutil.AvailableDiskBytes(local.BasePath)
 		result = append(result, diskObservation{Storage: name, Available: err == nil, AvailableBytes: available})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Storage < result[j].Storage })

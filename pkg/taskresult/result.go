@@ -74,6 +74,8 @@ func (t *Tracker) Finish(index int, err, parentErr error) {
 	element := &t.elements[index]
 	element.Error = ""
 	switch {
+	case errors.Is(err, storagetypes.ErrSaveQueued):
+		element.State = Pending
 	case err == nil:
 		element.State = Succeeded
 	case errors.Is(err, storagetypes.ErrSaveSkipped):

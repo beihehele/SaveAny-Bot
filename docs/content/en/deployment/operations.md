@@ -40,12 +40,12 @@ test "$(docker inspect --format '{{.State.Running}}' "$SERVICE_ID")" = false
 umask 077
 mkdir -p "$BACKUP_DIR"
 BACKUP_FILE=$(mktemp "$BACKUP_DIR/saveany-XXXXXXXX.tar.gz")
-tar -czf "$BACKUP_FILE" -- config.toml docker-compose.yml .env data downloads cache
+tar -czf "$BACKUP_FILE" -- config.toml docker-compose.yml .env data shardreel downloads cache
 sha256sum "$BACKUP_FILE" > "$BACKUP_FILE.sha256"
 sha256sum -c "$BACKUP_FILE.sha256"
 ```
 
-The example assumes `.env` stores the pinned image. If it is not used, remove it from the archive list and separately record the actual image digest. A missing path or a `tar` error means the backup failed: do not upgrade. Ensure other instances and processes have stopped writing; copy SQLite WAL/SHM with their complete directories. Keep backups outside the deployment directory with restricted permissions. Backups contain sessions and secrets and must not be published with source, images, or acceptance reports.
+The example assumes `.env` stores the pinned image. If it is not used, remove it from the archive list and separately record the actual image digest. The current Compose mounts `shardreel` separately: back up and restore it together with `data` when using ShardReel. Add the actual outbox directory for a custom `spool_path`; omit `shardreel` only if that backend is unused and the directory does not exist. A missing required path or a `tar` error means the backup failed: do not upgrade. Ensure other instances and processes have stopped writing; copy SQLite WAL/SHM with their complete directories. Keep backups outside the deployment directory with restricted permissions. Backups contain sessions and secrets and must not be published with source, images, or acceptance reports.
 
 ## Upgrade and rollback
 

@@ -2,6 +2,7 @@ package tfile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -13,10 +14,21 @@ import (
 	"github.com/krau/SaveAny-Bot/common/utils/retryutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/ctxkey"
+	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 )
 
 func (t *Task) Execute(ctx context.Context) (err error) {
 	logger := log.FromContext(ctx).WithPrefix(fmt.Sprintf("file[%s]", t.File.Name()))
+	meta := storagetypes.SaveRequestFrom(ctx)
+	if meta.TaskID == "" {
+		meta.TaskID = t.ID
+		meta.Title = t.File.Name()
+	}
+	meta.FileID = t.ID
+	if progress, ok := t.Progress.(interface{ UploadDestination() (int64, int) }); ok {
+		meta.ChatID, meta.MessageID = progress.UploadDestination()
+	}
+	ctx = storagetypes.WithSaveRequest(ctx, meta)
 	if t.Progress != nil {
 		t.Progress.OnStart(ctx, t)
 	}
@@ -28,6 +40,14 @@ func (t *Task) Execute(ctx context.Context) (err error) {
 			t.Progress.OnDone(ctx, t, err)
 		}
 	}()
+
+	if capacity, ok := t.Storage.(interface {
+		Reserve(context.Context, int64, string) error
+	}); ok {
+		if err := capacity.Reserve(ctx, t.File.Size(), t.Path); err != nil {
+			return err
+		}
+	}
 
 	logger.Info("Starting file download")
 	// Allocate only after Execute starts: rejected/queued tasks own no files,
@@ -71,6 +91,9 @@ func (t *Task) Execute(ctx context.Context) (err error) {
 		}
 		return nil
 	}, retry.RetryTimes(uint(config.C().Retry)), retry.Context(vctx))
+	if errors.Is(err, storagetypes.ErrSaveQueued) {
+		return storagetypes.ErrSaveQueued
+	}
 	if err != nil {
 		return fmt.Errorf("failed to save file after retries: %w", err)
 	}

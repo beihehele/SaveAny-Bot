@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ type acknowledgedActionInvoker struct {
 	answers       []*tg.MessagesSetBotCallbackAnswerRequest
 	edits         int
 	deliveryError bool
+	markup        *tg.ReplyInlineMarkup
 }
 
 func (i *acknowledgedActionInvoker) Invoke(ctx context.Context, in bin.Encoder, out bin.Decoder) error {
@@ -49,6 +51,9 @@ func (i *acknowledgedActionInvoker) Invoke(ctx context.Context, in bin.Encoder, 
 			return fmt.Errorf("edit before callback acknowledgement")
 		}
 		i.edits++
+		if markup, ok := req.ReplyMarkup.(*tg.ReplyInlineMarkup); ok {
+			i.markup = markup
+		}
 		// Editing is best effort; an acknowledgement failure must not undo an action.
 		return errors.New("edit unavailable")
 	default:
@@ -86,6 +91,8 @@ func TestCallbackActionsAcknowledgeWithoutBreakingTasksOrAlerts(t *testing.T) {
 	core.Prepare()
 	peers := peerstore.NewPeerStorage(nil, true)
 	peers.AddPeer(42, 1, peerstore.TypeUser, "test")
+	var lastMarkup *tg.ReplyInlineMarkup
+	var lastTaskTitle string
 	run := func(name, data string, handler func(*ext.Context, *ext.Update) error, alert, deliveryError bool, tasks int) {
 		t.Helper()
 		t.Run(name, func(t *testing.T) {
@@ -94,6 +101,7 @@ func TestCallbackActionsAcknowledgeWithoutBreakingTasksOrAlerts(t *testing.T) {
 			update := &ext.Update{CallbackQuery: &tg.UpdateBotCallbackQuery{QueryID: 123, UserID: 42, MsgID: 7, Data: []byte(data)}}
 			before := core.GetLength(ctx)
 			err := handler(ctx, update)
+			lastMarkup = invoker.markup
 			if ctx.Err() != nil {
 				t.Fatal("callback acknowledgement cancelled the action context")
 			}
@@ -108,6 +116,13 @@ func TestCallbackActionsAcknowledgeWithoutBreakingTasksOrAlerts(t *testing.T) {
 			}
 			if got := core.GetLength(ctx) - before; got != tasks {
 				t.Fatalf("added %d tasks, want %d", got, tasks)
+			}
+			if tasks > 0 {
+				queued := core.GetQueuedTasks(ctx)
+				if len(queued) == 0 {
+					t.Fatal("accepted task disappeared while callback was active")
+				}
+				lastTaskTitle = queued[len(queued)-1].Title
 			}
 		})
 	}
@@ -130,7 +145,7 @@ func TestCallbackActionsAcknowledgeWithoutBreakingTasksOrAlerts(t *testing.T) {
 	if user.DefaultStorage != "callback-local" {
 		t.Fatalf("default storage = %q", user.DefaultStorage)
 	}
-	files := []tfile.TGFileMessage{watchAdmissionFile(t, 101, 99, "a.bin", ""), watchAdmissionFile(t, 102, 99, "b.bin", "")}
+	files := []tfile.TGFileMessage{watchAdmissionFile(t, 101, 99, "a.bin", "album caption"), watchAdmissionFile(t, 102, 99, "b.bin", "")}
 	for _, batch := range []bool{false, true} {
 		key := fmt.Sprintf("files-%v", batch)
 		set(key, tcbdata.Add{TaskType: tasktype.TaskTypeTgfiles, SelectedStorName: "callback-local", Files: files, AsBatch: batch, SettedDir: true})
@@ -138,11 +153,27 @@ func TestCallbackActionsAcknowledgeWithoutBreakingTasksOrAlerts(t *testing.T) {
 	}
 	set("delivery-failure", tcbdata.Add{TaskType: tasktype.TaskTypeTgfiles, SelectedStorName: "callback-local", Files: files, SettedDir: true})
 	run("ack failure still adds once", "add delivery-failure", handleAddCallback, false, true, 1)
-	if err := os.WriteFile(filepath.Join(local, "a.bin"), []byte("existing"), 0600); err != nil {
+	if err := os.Mkdir(filepath.Join(local, "album_caption"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(local, "album_caption", "a.bin"), []byte("existing"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	set("conflict", tcbdata.Add{TaskType: tasktype.TaskTypeTgfiles, SelectedStorName: "callback-local", Files: files, SettedDir: true, ConflictStrategy: tcbdata.ConflictStrategyAsk})
 	run("file conflict prompt", "add conflict", handleAddCallback, false, false, 0)
+	if lastMarkup == nil || len(lastMarkup.Rows) == 0 || len(lastMarkup.Rows[0].Buttons) == 0 {
+		t.Fatal("conflict prompt did not provide an action")
+	}
+	action := lastMarkup.Rows[0].Buttons[0].(*tg.KeyboardButtonCallback)
+	parts := strings.Fields(string(action.Data))
+	data, exists := cache.Get[tcbdata.Add](parts[1])
+	if !exists || data.SelectedDirPath != "" {
+		t.Fatalf("conflict prompt must preserve the base directory: %+v", data)
+	}
+	run("album conflict action", string(action.Data), handleAddCallback, false, false, 1)
+	if strings.Count(lastTaskTitle, "album_caption") != 1 {
+		t.Fatal("conflict action appended the caption directory twice")
+	}
 	if err := database.CreateDirForUser(t.Context(), user.ID, "callback-local", "folder"); err != nil {
 		t.Fatal(err)
 	}

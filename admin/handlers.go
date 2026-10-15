@@ -25,12 +25,12 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/queue"
 	"github.com/krau/SaveAny-Bot/pkg/taskhistory"
 	"github.com/krau/SaveAny-Bot/storage"
+	"github.com/krau/SaveAny-Bot/storage/shardreel"
 )
 
 type taskRow struct {
 	api.TaskInfoResponse
 	Scope       string `json:"scope"`
-	Source      string `json:"source,omitempty"`
 	Executing   bool   `json:"executing"`
 	CanCancel   bool   `json:"can_cancel"`
 	CopyOutcome string `json:"copy_outcome,omitempty"`
@@ -96,6 +96,13 @@ func (s *Server) taskRows(ctx context.Context) []taskRow {
 	}
 	for _, info := range core.GetRunningTasks(ctx) {
 		add(info, true)
+	}
+	for id, row := range byID {
+		if len(row.UploadFiles) > 0 {
+			row.Scope = "upload"
+			row.CanCancel = row.Status != api.TaskStatusCompleted && row.Status != api.TaskStatusCancelled
+			byID[id] = row
+		}
 	}
 	rows := make([]taskRow, 0, len(byID))
 	for _, row := range byID {
@@ -210,14 +217,42 @@ func (s *Server) cancelTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if info, ok := api.GetTask(id); ok {
-		info.UpdateStatus(api.TaskStatusCancelled)
+		if len(s.uploadFiles(r.Context(), id)) == 0 {
+			info.UpdateStatus(api.TaskStatusCancelled)
+		}
 	}
 	status := "cancelled"
 	if core.IsTaskExecuting(id) {
 		status = "cancelling"
 	}
+	if len(s.uploadFiles(r.Context(), id)) > 0 {
+		status = "cancelling"
+	}
 	s.audit.add("cancel_task", id, "ok")
 	s.write(w, http.StatusOK, map[string]string{"status": status})
+}
+
+func (s *Server) uploadFiles(ctx context.Context, id string) []database.ShardReelFile {
+	db := database.ShardReelDB(ctx)
+	if db == nil || !db.Migrator().HasTable(&database.ShardReelFile{}) {
+		return nil
+	}
+	var rows []database.ShardReelFile
+	if err := db.Where("task_id = ?", id).Find(&rows).Error; err != nil {
+		log.FromContext(ctx).Warn("Read upload files", "error", err)
+	}
+	return rows
+}
+
+func (s *Server) retryUpload(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := shardreel.Retry(r.Context(), id); err != nil {
+		s.fail(w, http.StatusConflict, "upload_retry_failed")
+		return
+	}
+	api.ResetUploadObserver(id)
+	s.audit.add("retry_upload", id, "ok")
+	s.write(w, http.StatusOK, map[string]string{"status": "queued"})
 }
 
 type userPreferences struct {

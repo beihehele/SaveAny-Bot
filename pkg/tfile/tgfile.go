@@ -94,6 +94,11 @@ func FromMedia(media tg.MessageMediaClass, client downloader.Client, opts ...TGF
 			fileName,
 			opts...,
 		)
+		if file.Name() == "" {
+			// Apply caller naming options first; a missing leaf must never turn
+			// the intended caption directory into the saved file itself.
+			file.SetName(fmt.Sprintf("document_%d", document.ID))
+		}
 		return file, nil
 	case *tg.MessageMediaPhoto:
 		photo, ok := m.Photo.AsNotEmpty()
@@ -114,6 +119,17 @@ func FromMedia(media tg.MessageMediaClass, client downloader.Client, opts ...TGF
 		location.AccessHash = photo.GetAccessHash()
 		location.FileReference = photo.GetFileReference()
 		location.ThumbSize = size.GetType()
+		var fileSize int64
+		switch size := photoSize.(type) {
+		case *tg.PhotoSize:
+			fileSize = int64(size.Size)
+		case *tg.PhotoSizeProgressive:
+			for _, prefixSize := range size.Sizes {
+				fileSize = max(fileSize, int64(prefixSize))
+			}
+		case *tg.PhotoCachedSize:
+			fileSize = int64(len(size.Bytes))
+		}
 		fileName, err := functions.GetMediaFileName(m)
 		if err != nil {
 			fileName = fmt.Sprintf("photo_%d.png", photo.GetID())
@@ -121,7 +137,7 @@ func FromMedia(media tg.MessageMediaClass, client downloader.Client, opts ...TGF
 		file := NewTGFile(
 			location,
 			client,
-			0, // Photo size is not available in InputPhotoFileLocation
+			fileSize,
 			fileName,
 			opts...,
 		)

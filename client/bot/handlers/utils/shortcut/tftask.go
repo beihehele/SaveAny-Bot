@@ -25,6 +25,14 @@ import (
 	"github.com/rs/xid"
 )
 
+func reportStorageInspection(ctx *ext.Context, userID int64, messageID int, err error) error {
+	request := &tg.MessagesEditMessageRequest{ID: messageID}
+	request.SetMessage(i18n.T(i18nk.BotMsgCommonErrorGetStorageFailed, map[string]any{"Error": err.Error()}))
+	request.SetEntities(nil)
+	tgutil.EditProgress(tgutil.ExtWithContext(ctx.Context, ctx), userID, request, true)
+	return dispatcher.EndGroups
+}
+
 // 创建一个 tfile.TGFileTask 并添加到任务队列中, 以编辑消息的方式反馈结果
 func CreateAndAddTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor storage.Storage, dirPath string, file tfile.TGFileMessage, trackMsgID int, conflictStrategy ...string) error {
 	logger := log.FromContext(ctx)
@@ -41,13 +49,16 @@ func CreateAndAddTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor storage
 		return dispatcher.EndGroups
 	}
 	strategy = conflictutil.ResolveStrategy(user, strategy)
+	albumDir := tfile.AlbumDirectories([]tfile.TGFileMessage{file})[file.Message()]
 	if user.ApplyRule && user.Rules != nil {
 		matched, matchedStorageName, matchedDirPath := ruleutil.ApplyRule(ctx, user.Rules, ruleutil.NewInput(file))
 		if !matched {
 			goto startCreateTask
 		}
 		if matchedDirPath.NeedNewForAlbum() {
-			dirPath = path.Join(dirPath, strings.TrimSuffix(path.Base(file.Name()), path.Ext(file.Name())))
+			if albumDir == "" {
+				albumDir = strings.TrimSuffix(path.Base(file.Name()), path.Ext(file.Name()))
+			}
 		} else if matchedDirPath != "" {
 			dirPath = matchedDirPath.String()
 		}
@@ -66,12 +77,15 @@ func CreateAndAddTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor storage
 		}
 	}
 startCreateTask:
-	storagePath := path.Join(dirPath, file.Name())
+	storagePath := path.Join(dirPath, albumDir, file.Name())
 	if strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip {
 		if !storage.CanDetectExistence(stor) {
 			logger.Warnf("storage %s cannot detect existence; ask/skip conflict strategy ignored", stor.Name())
 		} else {
-			exists := stor.Exists(ctx, storagePath)
+			exists, err := stor.Exists(ctx, storagePath)
+			if err != nil {
+				return reportStorageInspection(ctx, userID, trackMsgID, err)
+			}
 			if exists && strategy == tcbdata.ConflictStrategyAsk {
 				return promptTGFileConflictStrategy(ctx, userID, stor.Name(), dirPath, []tfile.TGFileMessage{file}, false, []string{conflictutil.FormatPath(stor.Name(), storagePath)}, trackMsgID)
 			}
@@ -144,6 +158,7 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 	strategy = conflictutil.ResolveStrategy(user, strategy)
 
 	useRule := user.ApplyRule && user.Rules != nil
+	albumDirs := tfile.AlbumDirectories(files)
 
 	applyRule := func(file tfile.TGFileMessage) (string, ruleutil.MatchedDirPath) {
 		if !useRule {
@@ -168,7 +183,7 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 		storage storage.Storage
 		dirPath string
 	}
-	albumFiles := make(map[int64][]albumFile, 0)
+	albumFiles := make(map[[2]int64][]albumFile)
 	for _, file := range files {
 		storName, matchedDirPath := applyRule(file)
 		fileStor := stor
@@ -185,10 +200,16 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 				return dispatcher.EndGroups
 			}
 		}
+		if matchedDirPath.NeedNewForAlbum() && albumDirs[file.Message()] == "" {
+			matchedDirPath = ruleutil.MatchedDirPath(path.Join(dirPath, strings.TrimSuffix(path.Base(file.Name()), path.Ext(file.Name()))))
+		}
 		if !matchedDirPath.NeedNewForAlbum() {
-			storPath := path.Join(matchedDirPath.String(), file.Name())
+			storPath := path.Join(matchedDirPath.String(), albumDirs[file.Message()], file.Name())
 			if (strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip) && storage.CanDetectExistence(fileStor) {
-				exists := fileStor.Exists(ctx, storPath)
+				exists, err := fileStor.Exists(ctx, storPath)
+				if err != nil {
+					return reportStorageInspection(ctx, userID, trackMsgID, err)
+				}
 				if exists && strategy == tcbdata.ConflictStrategyAsk {
 					conflicts = append(conflicts, conflictutil.FormatPath(fileStor.Name(), storPath))
 					continue
@@ -216,29 +237,25 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 				logger.Warnf("File %s is not in a group, skipping album handling", file.Name())
 				continue
 			}
-			fileDirPath := matchedDirPath.String()
-			if matchedDirPath.NeedNewForAlbum() {
-				fileDirPath = dirPath
-			}
-			if _, ok := albumFiles[groupId]; !ok {
-				albumFiles[groupId] = make([]albumFile, 0)
-			}
-			albumFiles[groupId] = append(albumFiles[groupId], albumFile{
+			key := tfile.AlbumKey(file.Message())
+			albumFiles[key] = append(albumFiles[key], albumFile{
 				file:    file,
 				storage: fileStor,
-				dirPath: fileDirPath,
+				dirPath: dirPath,
 			})
 		}
 	}
 	for _, afiles := range albumFiles {
-		// 对于需要新建目录的文件, 将第一个文件的文件名(去除扩展名)作为目录名
-		// 存储以第一个文件的存储为准
-		albumDir := strings.TrimSuffix(path.Base(afiles[0].file.Name()), path.Ext(afiles[0].file.Name()))
+		// Keep the existing rule's chosen storage; caption names are shared by all members.
+		albumDir := albumDirs[afiles[0].file.Message()]
 		albumStor := afiles[0].storage
 		for _, af := range afiles {
 			afstorPath := path.Join(af.dirPath, albumDir, af.file.Name())
 			if (strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip) && storage.CanDetectExistence(albumStor) {
-				exists := albumStor.Exists(ctx, afstorPath)
+				exists, err := albumStor.Exists(ctx, afstorPath)
+				if err != nil {
+					return reportStorageInspection(ctx, userID, trackMsgID, err)
+				}
 				if exists && strategy == tcbdata.ConflictStrategyAsk {
 					conflicts = append(conflicts, conflictutil.FormatPath(albumStor.Name(), afstorPath))
 					continue

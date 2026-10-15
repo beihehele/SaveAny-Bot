@@ -65,6 +65,18 @@ func NewStore(limit int, retention time.Duration) *Store {
 // Default is the instance-wide observation store.
 var Default = NewStore(TerminalLimit, Retention)
 
+// CompleteUpload updates an existing observation after durable remote completion.
+func (s *Store) CompleteUpload(id string, status, message string, counts taskresult.Counts) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if entry := s.records[id]; entry != nil {
+		entry.record.Status, entry.record.Error = status, message
+		entry.record.UpdatedAt = s.now()
+		entry.record.ResultSummary = &counts
+	}
+	s.pruneLocked()
+}
+
 func terminal(status string) bool {
 	return status == "completed" || status == "failed" || status == "cancelled"
 }

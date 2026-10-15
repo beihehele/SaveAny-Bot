@@ -2,6 +2,7 @@ package batchtfile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/dlutil"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
@@ -33,6 +35,8 @@ type Progress struct {
 	lastUpdatePercent atomic.Int32
 	skippedFiles      []string
 }
+
+func (p *Progress) UploadDestination() (int64, int) { return p.ChatID, p.MessageID }
 
 func (p *Progress) OnStart(ctx context.Context, info TaskInfo) {
 	p.start = time.Now()
@@ -118,6 +122,13 @@ func (p *Progress) OnProgress(ctx context.Context, info TaskInfo) {
 }
 
 func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
+	if errors.Is(err, storagetypes.ErrSaveQueued) {
+		request := &tg.MessagesEditMessageRequest{ID: p.MessageID}
+		request.SetMessage(i18n.T(i18nk.BotMsgProgressShardreelQueued))
+		request.SetEntities(nil)
+		tgutil.EditProgress(ctx, p.ChatID, request, false)
+		return
+	}
 	if err != nil {
 		log.FromContext(ctx).Errorf("Batch task %s failed: %s", info.TaskID(), err)
 	} else {

@@ -5,5 +5,6 @@ package storage
 // StorageType
 /* ENUM(
 local
+shardreel
 ) */
 type StorageType string

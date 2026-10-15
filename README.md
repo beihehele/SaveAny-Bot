@@ -4,7 +4,7 @@
 
 **English** | [简体中文](./README_zh.md)
 
-> **Save Telegram files locally and manage chat watches and history copies.**
+> **Save Telegram files locally or to ShardReel, and manage chat watches and history copies.**
 
 [![Release Date](https://img.shields.io/github/release-date/beihehele/SaveAny-Bot?label=release)](https://github.com/beihehele/SaveAny-Bot/releases)
 [![tag](https://img.shields.io/github/v/tag/beihehele/SaveAny-Bot.svg)](https://github.com/beihehele/SaveAny-Bot/releases)
@@ -19,7 +19,7 @@
 
 ## Features
 
-- Save Telegram documents, photos, videos and albums to local directories.
+- Save Telegram documents, photos, videos and albums to local directories or a ShardReel endpoint.
 - Watch chats and copy history, retaining filters, album boundaries and topics.
 - Organize local saves with directory rules and filename templates.
 - Inspect and cancel tasks through Telegram or the optional admin console.
@@ -62,12 +62,13 @@ Run it with Docker:
 docker run -d --name saveany-bot --restart unless-stopped \
     -v ./config.toml:/app/config.toml \
     -v ./data:/app/data \
+    -v ./shardreel:/app/data/shardreel \
     -v ./cache:/app/cache \
     -v ./downloads:/app/downloads \
     saveany-bot:local
 ```
 
-The `data` directory contains the database and Telegram sessions. Keep it when recreating the container; use `cache` only for temporary files. Pin an image version or digest that you have verified for stable deployments.
+The `data` directory contains the database and Telegram sessions. ShardReel pending uploads persist in the separate `shardreel` mount; back it up together with `data` while the service is stopped. Keep both when recreating the container; use `cache` only for temporary files. Pin an image version or digest that you have verified for stable deployments.
 
 
 For prebuilt images, select a verified tag or digest and use configuration/examples from its matching release tag or commit. The remote Compose example requires `SAVEANY_IMAGE`; `latest` may refer to a different product revision. Unpublished local changes require a local build.

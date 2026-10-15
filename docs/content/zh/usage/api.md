@@ -9,11 +9,11 @@ weight: 20
 
 | 方法和路径 | 用途 |
 |---|---|
-| `POST /api/v1/tasks` | 从 Telegram 消息链接创建本地保存任务 |
-| `GET /api/v1/tasks` | 查看 API 任务 |
+| `POST /api/v1/tasks` | 从 Telegram 消息链接创建 local 或 ShardReel 保存任务 |
+| `GET /api/v1/tasks` | 查看 API 任务及持久化 ShardReel 上传任务 |
 | `GET /api/v1/tasks/{id}` | 查询详情 |
 | `DELETE /api/v1/tasks/{id}` | 取消任务 |
-| `GET /api/v1/storages` | 查看已加载本地存储 |
+| `GET /api/v1/storages` | 查看已加载存储及能力 |
 | `GET /api/v1/task-types` | 当前可创建类型及客户端就绪情况 |
 | `GET /health` | 健康检查 |
 
@@ -21,11 +21,13 @@ weight: 20
 {"type":"tgfiles","storage":"本机1","path":"albums","params":{"message_links":["https://t.me/c/123456789/123"]}}
 ```
 
-`path` 是目标目录，单文件及媒体组均在其下按文件名保存。Bot/Userbot 必须能访问源消息；媒体组链接默认提取整组，`?single` 只保存指定成员。接口不创建监听或复制路由。
+`path` 是基础目标目录。普通文件直接保存在其下，媒体组按清理、截断后的 caption 建立子目录，同名 caption 共用目录；详见[存储端配置](../../deployment/configuration/storages/#shardreel)。Bot/Userbot 必须能访问源消息；媒体组链接默认提取整组，`?single` 只保存指定成员。接口不创建监听或复制路由。
 
 同一次提交中，重叠链接按聊天和消息 ID 去重，每条媒体消息只保存一次；不同聊天中的相同消息 ID 不会合并。`?single` 不展开媒体组，但同一次提交中另一个不带该参数的链接仍可选择整组。去重仅限本次请求，不影响之后的独立保存任务。链接查询阶段响应 HTTP 请求取消；取消后不会把已提取的部分文件入队，也不会取消共享 Bot/Userbot 客户端。
 
-可选 `webhook` 接收任务终态事件；后台无 webhook 表单。请求及任务参数只接受当前文档定义的字段和单个 JSON 值。任务、进度和近期结果只在内存中，重启清空。网页/API 共享最多 1000 条终态历史、最长约 24 小时，超限先清理最早更新的记录；淘汰后的详情查询返回 404。排队及仍在执行的任务（含取消收尾）不因历史额度或期限被淘汰。历史清理不影响已决定的 webhook 发送及重试。任务被接纳后，HTTP 请求结束不会取消任务。
+可选 `webhook` 接收任务终态事件；后台无 webhook 表单。请求及任务参数只接受当前文档定义的字段和单个 JSON 值。普通任务、进度和近期结果只在内存中，重启清空。网页/API 共享最多 1000 条终态历史、最长约 24 小时，超限先清理最早更新的记录；淘汰后的详情查询返回 404。排队及仍在执行的任务（含取消收尾）不因历史额度或期限被淘汰。历史清理不影响已决定的 webhook 发送及重试。任务被接纳后，HTTP 请求结束不会取消任务。
+
+ShardReel 任务和逐文件结果保存在 SQLite，查询附带 `upload_files`、可重试时的 `can_retry` 及取消收尾状态 `cancelling`。下载完成只是进入上传队列，最终结果及 webhook 等待远端入库校验；上传期间可通过上述删除任务接口请求取消。后台提供保留文件的重试和放弃操作。已清理终态历史保留 7 天、最多 1000 条，失败、未完成或未清理的记录保留。`input_results` 和 webhook 注册仍在内存中，重启后不会补发丢失的 webhook；上传恢复不依赖它们。
 
 
 批量任务执行结束后，查询响应及正常终态 webhook 可包含 `result_summary`，统计 total/pending/running/succeeded/failed/cancelled/interrupted；failed 包括存储策略跳过的文件。这些计数仅描述逐文件结果，不改变任务终态或触发重试。未执行的任务或无法提供有效计数的任务省略该字段。提前取消的 webhook 可能不含最终计数，之后可查询补全结果，不会为补全再发一次 webhook。

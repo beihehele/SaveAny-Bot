@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./data:/app/data
+      # 持久化待上传文件；备份时与 data 一起保留。
+      - ./shardreel:/app/data/shardreel
       - ./config.toml:/app/config.toml
       - ./downloads:/app/downloads
       - ./cache:/app/cache

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sync/atomic"
 
 	"github.com/charmbracelet/log"
 	"github.com/duke-git/lancet/v2/retry"
@@ -23,6 +24,16 @@ import (
 
 func (t *Task) Execute(ctx context.Context) error {
 	logger := log.FromContext(ctx).WithPrefix(fmt.Sprintf("batch_file[%s]", t.ID))
+	meta := storagetypes.SaveRequestFrom(ctx)
+	if meta.TaskID == "" {
+		meta.TaskID = t.ID
+		meta.Title = t.Title()
+	}
+	meta.ExpectedFiles = len(t.elems)
+	if progress, ok := t.Progress.(interface{ UploadDestination() (int64, int) }); ok {
+		meta.ChatID, meta.MessageID = progress.UploadDestination()
+	}
+	ctx = storagetypes.WithSaveRequest(ctx, meta)
 	logger.Info("Starting batch file task")
 	t.results.Reset(t.resultElements())
 	if t.Progress != nil {
@@ -31,6 +42,7 @@ func (t *Task) Execute(ctx context.Context) error {
 	workers := config.C().Workers
 	eg, gctx := errgroup.WithContext(ctx)
 	eg.SetLimit(workers)
+	var staged atomic.Bool
 	for index, elem := range t.elems {
 		eg.Go(func() (err error) {
 			t.results.Start(index)
@@ -54,10 +66,12 @@ func (t *Task) Execute(ctx context.Context) error {
 				t.processingMu.Unlock()
 			}()
 			err = t.processElement(gctx, elem)
+			if errors.Is(err, storagetypes.ErrSaveQueued) {
+				staged.Store(true)
+			}
 			resultErr = err
-			if errors.Is(err, storagetypes.ErrSaveSkipped) && ctx.Err() == nil {
-				// A policy skip must not cancel the remaining album files. Keep
-				// the skip for the deferred result while returning nil to errgroup.
+			if (errors.Is(err, storagetypes.ErrSaveSkipped) || errors.Is(err, storagetypes.ErrSaveQueued)) && ctx.Err() == nil {
+				// Skipping or staging one member must not cancel its siblings.
 				return nil
 			}
 			return err
@@ -70,8 +84,13 @@ func (t *Task) Execute(ctx context.Context) error {
 		"pending", summary.Pending, "running", summary.Running)
 	if err != nil {
 		logger.Errorf("Error during batch file processing: %v", err)
+	} else if staged.Load() {
+		logger.Info("Batch files staged for ShardReel upload")
 	} else {
 		logger.Info("Batch file task completed successfully")
+	}
+	if staged.Load() {
+		err = errors.Join(err, storagetypes.ErrSaveQueued)
 	}
 	if t.Progress != nil {
 		t.Progress.OnDone(ctx, t, err)
@@ -80,6 +99,9 @@ func (t *Task) Execute(ctx context.Context) error {
 }
 
 func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
+	meta := storagetypes.SaveRequestFrom(ctx)
+	meta.FileID = elem.ID
+	ctx = storagetypes.WithSaveRequest(ctx, meta)
 	logger := log.FromContext(ctx).WithPrefix(fmt.Sprintf("file[%s]", elem.File.Name()))
 	if elem.stream {
 		pr, pw := io.Pipe()
@@ -131,6 +153,13 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 		return nil
 	}
 	logger.Info("Starting file download")
+	if capacity, ok := elem.Storage.(interface {
+		Reserve(context.Context, int64, string) error
+	}); ok {
+		if err := capacity.Reserve(ctx, elem.File.Size(), elem.Path); err != nil {
+			return err
+		}
+	}
 	localFile, err := fsutil.CreateTempFile(elem.cacheDir, "telegram-*")
 	if err != nil {
 		return fmt.Errorf("failed to create local file: %w", err)
@@ -178,7 +207,9 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 		}
 		defer file.Close()
 		if err = elem.Storage.Save(vctx, file, elem.Path); err != nil {
-			logger.Errorf("Failed to save file: %s, retrying...", err)
+			if !errors.Is(err, storagetypes.ErrSaveQueued) && !errors.Is(err, storagetypes.ErrSaveSkipped) {
+				logger.Errorf("Failed to save file: %s, retrying...", err)
+			}
 			return err
 		}
 		return nil

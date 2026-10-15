@@ -144,9 +144,10 @@ func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req 
 	}
 
 	var task core.Executable
+	albumDirs := filemodel.AlbumDirectories(files)
 
 	if len(files) == 1 {
-		tfileTask, err := tfile.NewTGFileTask(taskID, files[0], stor, path.Join(req.Path, files[0].Name()), nil)
+		tfileTask, err := tfile.NewTGFileTask(taskID, files[0], stor, path.Join(req.Path, albumDirs[files[0].Message()], files[0].Name()), nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tfile task: %w", err)
 		}
@@ -154,7 +155,7 @@ func (f *TaskFactory) createTGFilesTask(taskID string, createdAt time.Time, req 
 	} else {
 		elems := make([]batchtfile.TaskElement, 0, len(files))
 		for _, file := range files {
-			elem, err := batchtfile.NewTaskElement(stor, path.Join(req.Path, file.Name()), file)
+			elem, err := batchtfile.NewTaskElement(stor, path.Join(req.Path, albumDirs[file.Message()], file.Name()), file)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create task element: %w", err)
 			}

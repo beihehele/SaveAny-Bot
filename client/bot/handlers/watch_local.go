@@ -200,13 +200,15 @@ func resolveWatchLocalStorage(ctx context.Context, userID uint) (*database.User,
 	return user, stor, defaultDirPath, nil
 }
 
-func buildWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Storage, defaultDirPath string, file tfile.TGFileMessage) (*coretfile.Task, error) {
+func buildWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Storage, defaultDirPath string, file tfile.TGFileMessage, albumDir string) (*coretfile.Task, error) {
 	dirPath := defaultDirPath
 	fileStor := stor
 	if user.ApplyRule && user.Rules != nil {
 		matched, matchedStorageName, matchedDirPath := ruleutil.ApplyRule(ctx, user.Rules, ruleutil.NewInput(file))
 		if matched {
-			dirPath = matchedDirPath.String()
+			if !matchedDirPath.NeedNewForAlbum() {
+				dirPath = matchedDirPath.String()
+			}
 			if matchedStorageName.Usable() {
 				var err error
 				fileStor, err = storage.GetStorageByUserIDAndName(ctx, user.ChatID, matchedStorageName.String())
@@ -216,14 +218,14 @@ func buildWatchLocalTask(ctx *ext.Context, user *database.User, stor storage.Sto
 			}
 		}
 	}
-	storagePath := path.Join(dirPath, file.Name())
+	storagePath := path.Join(dirPath, albumDir, file.Name())
 	taskid := xid.New().String()
 	return coretfile.NewTGFileTask(taskid, file, fileStor, storagePath, nil)
 }
 
 func createWatchLocalTask(ctx *ext.Context, route database.WatchChat, user *database.User, stor storage.Storage, defaultDirPath string, file tfile.TGFileMessage) {
 	logger := log.FromContext(ctx)
-	task, err := buildWatchLocalTask(ctx, user, stor, defaultDirPath, file)
+	task, err := buildWatchLocalTask(ctx, user, stor, defaultDirPath, file, "")
 	if err != nil {
 		logger.Errorf("create task failed: %s", err)
 		return
@@ -251,6 +253,7 @@ type watchAlbumEnqueue func(context.Context, ...core.Executable) error
 
 func processWatchLocalAlbumTasks(ctx *ext.Context, user *database.User, stor storage.Storage, defaultDirPath string, files []tfile.TGFileMessage, enqueue watchAlbumEnqueue) {
 	logger := log.FromContext(ctx)
+	albumDirs := tfile.AlbumDirectories(files)
 	caption := albumCaptionText(files)
 	for _, f := range files {
 		applyWatchFilename(ctx, user, f, caption)
@@ -266,7 +269,7 @@ func processWatchLocalAlbumTasks(ctx *ext.Context, user *database.User, stor sto
 	}
 	tasks := make([]core.Executable, 0, len(files))
 	for _, f := range files {
-		task, err := buildWatchLocalTask(ctx, user, stor, defaultDirPath, f)
+		task, err := buildWatchLocalTask(ctx, user, stor, defaultDirPath, f, albumDirs[f.Message()])
 		if err != nil {
 			logger.Error("Prepare watch album file failed", "user_id", user.ChatID, "file", f.Name(), "error", err)
 			continue
@@ -310,6 +313,7 @@ func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.
 	if len(files) == 0 {
 		return
 	}
+	albumDirs := tfile.AlbumDirectories(files)
 
 	useRule := user.ApplyRule && user.Rules != nil
 
@@ -378,12 +382,7 @@ func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.
 	// Process album files with folder creation
 	totalTasks := 0
 	for groupID, afiles := range albumFiles {
-		if len(afiles) <= 1 {
-			continue
-		}
-
-		// Use first file's name (without extension) as album folder name
-		albumDir := strings.TrimSuffix(path.Base(afiles[0].file.Name()), path.Ext(afiles[0].file.Name()))
+		albumDir := albumDirs[afiles[0].file.Message()]
 		albumStor := afiles[0].storage
 
 		logger.Infof("Creating album folder for group %d: %s with %d files", groupID, albumDir, len(afiles))

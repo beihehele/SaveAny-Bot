@@ -86,7 +86,7 @@ FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ archive /视频
 
 匹配相册消息 (media group), 规则内容只能为 `true` 或 `false`.
 
-规则中的路径若使用 "NEW-FOR-ALBUM" , 则表示为该组消息新建一个文件夹来存储它们. 见: https://github.com/krau/SaveAny-Bot/issues/87
+规则中的路径若使用 "NEW-FOR-ALBUM"，则在选定的基础路径内使用媒体组的 caption 目录来存储它们。
 
 例如:
 
@@ -94,4 +94,4 @@ FILENAME-REGEX (?i)\.(mp4|mkv|ts|avi|flv)$ archive /视频
 IS-ALBUM true archive NEW-FOR-ALBUM
 ```
 
-这将会把以 media group 形式发送的消息保存到名为 archive 的存储下, 并为每个相册新建一个文件夹(由第一个文件生成)来存储它们.
+这将会把以 media group 形式发送的消息保存到名为 archive 的存储下，以该组 caption 清理截断后的有效名作为文件夹名。有效名相同的媒体组复用同一目录；caption 为空时使用聊天 ID 和媒体组 ID 生成稳定的后备目录名。媒体组保存默认就会追加此 caption 目录，此规则用于选择存储和基础路径，不会重复追加目录。

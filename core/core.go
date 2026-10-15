@@ -10,9 +10,11 @@ import (
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/queue"
+	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 	"github.com/krau/SaveAny-Bot/pkg/taskhistory"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
+	"github.com/krau/SaveAny-Bot/storage/shardreel"
 )
 
 var queueInstance *queue.TaskQueue[Executable]
@@ -63,6 +65,11 @@ func worker(ctx context.Context, qe *queue.TaskQueue[Executable]) {
 		}
 		exe := qtask.Data
 		taskCtx := qtask.Context()
+		expectedFiles := 1
+		if counter, ok := exe.(interface{ Count() int }); ok {
+			expectedFiles = max(1, counter.Count())
+		}
+		taskCtx = storagetypes.WithSaveRequest(taskCtx, storagetypes.SaveRequest{TaskID: exe.TaskID(), Title: exe.Title(), Source: taskhistory.Source(taskCtx), ExpectedFiles: expectedFiles})
 		logger.Infof("Processing task: %s", exe.TaskID())
 		taskevent.Emit(taskCtx, taskevent.Event{TaskID: exe.TaskID(), Phase: taskevent.PhaseStart})
 		err = taskCtx.Err()
@@ -83,11 +90,26 @@ func worker(ctx context.Context, qe *queue.TaskQueue[Executable]) {
 			}
 		}
 		var resultSummary *taskresult.Counts
+		var fileSummary taskresult.Summary
 		if executed {
 			if provider, ok := exe.(taskresult.Provider); ok {
-				counts := provider.ResultSummary().Counts()
+				fileSummary = provider.ResultSummary()
+				counts := fileSummary.Counts()
 				if counts.Valid() {
 					resultSummary = &counts
+				}
+			}
+			if task, ok := exe.(interface{ UsesShardReel() bool }); ok && task.UsesShardReel() {
+				handedOff, handoffErr := finishShardReelHandoff(ctx, taskCtx, exe.TaskID(), fileSummary, err, shardreel.FinishDownload, time.Second)
+				if handoffErr != nil {
+					logger.Error("Upload handoff record failed; startup recovery will reconcile it", "error", handoffErr)
+				}
+				if handedOff {
+					if handoffErr == nil {
+						taskevent.Emit(taskCtx, taskevent.Event{TaskID: exe.TaskID(), Phase: taskevent.PhaseProgress})
+					}
+					qe.Done(qtask.ID)
+					continue
 				}
 			}
 		}
@@ -114,6 +136,46 @@ func worker(ctx context.Context, qe *queue.TaskQueue[Executable]) {
 		}
 		taskevent.Emit(taskCtx, taskevent.Event{TaskID: exe.TaskID(), Phase: taskevent.PhaseDone, Err: err, Outcome: outcome, ResultSummary: resultSummary})
 		qe.Done(qtask.ID)
+	}
+}
+
+type shardReelFinisher func(context.Context, string, taskresult.Summary, error) (bool, error)
+
+// finishShardReelHandoff keeps an executed Telegram task owned until its durable
+// upload state is recorded. Shutdown recovery handles the bounded final failure.
+func finishShardReelHandoff(ctx, taskCtx context.Context, taskID string, summary taskresult.Summary, taskErr error, finish shardReelFinisher, retryDelay time.Duration) (bool, error) {
+	attempt := func(parent context.Context) (bool, error) {
+		handoffCtx, cancel := context.WithTimeout(context.WithoutCancel(parent), 5*time.Second)
+		defer cancel()
+		return finish(handoffCtx, taskID, summary, taskErr)
+	}
+
+	warned := false
+	for {
+		handedOff, err := attempt(taskCtx)
+		if err == nil {
+			return handedOff, nil
+		}
+		if !warned {
+			log.FromContext(ctx).Warn("ShardReel completion record is not durable yet; retrying", "task", taskID, "error", err)
+			warned = true
+		}
+		if ctx.Err() != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return finish(shutdownCtx, taskID, summary, taskErr)
+		}
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return finish(shutdownCtx, taskID, summary, taskErr)
+		case <-timer.C:
+		}
 	}
 }
 
@@ -203,11 +265,22 @@ func AddTasks(ctx context.Context, tasks ...Executable) error {
 }
 
 func CancelTask(ctx context.Context, id string) error {
+	pending, pendingErr := shardreel.RequestCancel(ctx, id)
+	if pendingErr != nil {
+		return pendingErr
+	}
 	qe := currentQueue()
 	if qe == nil {
+		if pending {
+			return nil
+		}
 		return errors.New("task queue is not initialized")
 	}
-	return qe.CancelTask(id)
+	err := qe.CancelTask(id)
+	if pending {
+		return nil
+	}
+	return err
 }
 
 // IsTaskExecuting reports whether the task has been checked out by a worker

@@ -66,6 +66,12 @@ func Run(cmd *cobra.Command, _ []string) {
 		}
 	}()
 
+	uploadsDone, err := startShardReel(ctx)
+	if err != nil {
+		logger.Error("ShardReel recovery failed", "error", err)
+		cancel()
+		return
+	}
 	workersDone := core.Run(ctx)
 
 	<-ctx.Done()
@@ -80,6 +86,11 @@ func Run(cmd *cobra.Command, _ []string) {
 	}
 	if err := botHandlers.WaitWatchForwards(shutdownCtx); err != nil {
 		logger.Warn("Watch forwarding shutdown deadline exceeded")
+	}
+	select {
+	case <-uploadsDone:
+	case <-shutdownCtx.Done():
+		logger.Warn("Upload shutdown deadline exceeded; staged files are preserved")
 	}
 	// Tasks remove their own temporary files. Never recursively clear a configured
 	// directory here: it may contain unrelated files or tasks still shutting down.

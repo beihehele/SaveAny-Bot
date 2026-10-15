@@ -1,10 +1,11 @@
 //go:build linux
 
-package admin
+package fsutil
 
 import "syscall"
 
-func availableDiskBytes(path string) (uint64, error) {
+// AvailableDiskBytes reports space available to the current process.
+func AvailableDiskBytes(path string) (uint64, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(path, &stat); err != nil {
 		return 0, err
