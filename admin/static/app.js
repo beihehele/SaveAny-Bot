@@ -50,6 +50,7 @@
     $("login-error").hidden = !message;
     $("task-dialog").close();
     $("input-dialog").close();
+    preferences.close();
     $("password").focus();
   }
   async function request(path, options = {}) {
@@ -328,8 +329,15 @@
     const storages = state.storages.map((item) => [item.name, item.name]);
     if (!storages.some(([name]) => name === user.default_storage)) storages.unshift([user.default_storage, user.default_storage || t("unset")]);
     const storage = add("default_storage", "defaultStorage", user.default_storage, storages);
-    const dir = add("default_dir", "defaultDirectory", user.default_dir || 0, [[0, t("unset")], ...user.directories.map((item) => [item.id, `${item.storage}: ${item.path}`])]);
-    storage.addEventListener("change", () => { dir.value = "0"; });
+    const dir = add("default_dir", "defaultDirectory", user.default_dir || 0, []);
+    function directoryChoices() {
+      dir.replaceChildren();
+      [[0, t("storageRoot")], ...user.directories.filter((item) => item.storage === storage.value).map((item) => [item.id, item.path])].forEach(([value, label]) => {
+        const option = node("option", label); option.value = String(value); dir.append(option);
+      });
+    }
+    directoryChoices(); dir.value = String(user.default_dir || 0); dir.dataset.original = dir.value;
+    storage.addEventListener("change", directoryChoices);
     add("filename_strategy", "filenameStrategy", user.filename_strategy || "default", [["default", t("namingDefault")], ["message", t("namingMessage")], ["template", t("namingTemplate")]]);
     add("filename_template", "filenameTemplate", user.filename_template);
     add("conflict_strategy", "conflictStrategy", user.conflict_strategy || "rename", ["rename", "skip", "overwrite", "ask"].map((value) => [value, t(`conflict_${value}`)]));
@@ -345,21 +353,19 @@
     });
     return form;
   }
-  function userPreferences(users) {
+  const preferences = SaveAnyPreferences.init({ $, t, node, button, table, request, toast, storages: () => state.storages, reload: () => loadPage() });
+  function userPreferences(users, presets) {
     $("preference-cards").replaceChildren();
     if (!users.length) { $("preference-cards").append(node("p", t("empty"), "empty")); return; }
     users.forEach((user) => {
       const panel = node("article", null, "panel"); panel.append(node("h2", `${t("telegramUser")} ${user.chat_id}`));
       const values = node("dl", null, "definition-list");
       const defaultDir = user.directories.find((directory) => directory.id === user.default_dir);
-      definitions(values, [[t("defaultStorage"), user.default_storage || t("unset")], [t("defaultDirectory"), defaultDir?.path || t("unset")],
+      definitions(values, [[t("defaultStorage"), user.default_storage || t("unset")], [t("defaultDirectory"), defaultDir?.path || t("storageRoot")],
         [t("silent"), user.silent], [t("applyRules"), user.apply_rule], [t("filenameStrategy"), user.filename_strategy || t("unset")],
         [t("filenameTemplate"), user.filename_template || t("unset")], [t("conflictStrategy"), user.conflict_strategy || t("unset")]]);
-      panel.append(values, preferenceEditor(user), node("h2", t("directories")));
-      const dirs = node("div"); table(dirs, ["storage", "path"], user.directories.map((directory) => [directory.storage, directory.path]));
-      panel.append(dirs, node("h2", t("rules")));
-      const rules = node("div"); table(rules, ["ruleType", "ruleData", "storage", "path"], user.rules.map((rule) => [rule.type, rule.data, rule.storage, rule.path]));
-      panel.append(rules); $("preference-cards").append(panel);
+      panel.append(values, preferenceEditor(user));
+      preferences.render(panel, user, presets); $("preference-cards").append(panel);
     });
   }
   function userRoutes(users) {
@@ -400,6 +406,7 @@
     state.loading = true;
     const page = pages.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
     state.page = page;
+    if (page !== "preferences") preferences.close();
     $("refresh").disabled = true;
     $(`page-${page}`).setAttribute("aria-busy", "true");
     $("page-title").textContent = t(page);
@@ -441,7 +448,7 @@
       } else if (page === "routes" || page === "preferences") {
         const data = await request("preferences", { signal });
         if (sequence !== state.sequence) return;
-        userSelectors(data.users); if (page === "routes") userRoutes(data.users); else userPreferences(data.users);
+        userSelectors(data.users); if (page === "routes") userRoutes(data.users); else userPreferences(data.users, data.rule_presets);
       } else if (page === "diagnostics") {
         const data = await request("diagnostics", { signal });
         if (sequence !== state.sequence) return;

@@ -6,6 +6,7 @@
   <title>SaveAny · Admin</title>
   <link rel="stylesheet" href="/admin/assets/style.css">
   <script src="/admin/assets/management.js" defer></script>
+  <script src="/admin/assets/preferences.js" defer></script>
   <script src="/admin/assets/app.js" defer></script>
 </head>
 <body>
@@ -82,5 +83,6 @@
   <dialog id="task-dialog"><div class="panel-heading"><h2 data-i18n="taskDetails"></h2><button id="close-dialog" class="secondary" data-i18n="close"></button></div><dl id="task-details" class="definition-list"></dl><p id="task-detail-error" class="error" hidden></p></dialog>
   <dialog id="input-dialog"><div class="panel-heading"><h2 id="input-heading"></h2><button id="close-input-dialog" class="secondary" data-i18n="close"></button></div><pre id="input-details" class="small"></pre></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="settings-dialog" aria-labelledby="settings-heading"><div class="panel-heading"><h2 id="settings-heading"></h2><button id="settings-close" type="button" class="secondary" data-i18n="cancelEdit"></button></div><form id="settings-form"><div id="settings-fields" class="settings-fields"></div><p id="settings-error" class="error" role="alert" hidden></p><button id="settings-submit" type="submit" class="primary" data-i18n="saveSetting"></button></form></dialog>
 </body>
 </html>

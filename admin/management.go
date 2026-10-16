@@ -42,6 +42,14 @@ func (s *Server) control(w http.ResponseWriter, r *http.Request, action string, 
 			status, code = http.StatusConflict, "management_conflict"
 		} else if errors.Is(err, botHandlers.ErrListSyncBusy) {
 			status, code = http.StatusTooManyRequests, "list_sync_busy"
+		} else if errors.Is(err, errSaveSettingMissing) {
+			status, code = http.StatusNotFound, "setting_not_found"
+		} else if errors.Is(err, errSavePath) {
+			code = "invalid_save_path"
+		} else if errors.Is(err, errRuleData) {
+			code = "invalid_rule_data"
+		} else if errors.Is(err, errSaveStorage) {
+			code = "save_storage_unavailable"
 		}
 		s.fail(w, status, code)
 		return

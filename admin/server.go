@@ -91,6 +91,12 @@ func NewServer(ctx context.Context, cfg config.AdminConfig) (*Server, error) {
 	s.route(mux, "GET /admin/api/v1/download", s.download)
 	s.route(mux, "GET /admin/api/v1/preferences", s.preferences)
 	s.route(mux, "PATCH /admin/api/v1/preferences", s.updatePreferences)
+	s.route(mux, "POST /admin/api/v1/directories", s.saveDirectory)
+	s.route(mux, "PUT /admin/api/v1/directories/{id}", s.saveDirectory)
+	s.route(mux, "DELETE /admin/api/v1/directories/{id}", s.deleteDirectory)
+	s.route(mux, "POST /admin/api/v1/rules", s.saveRule)
+	s.route(mux, "PUT /admin/api/v1/rules/{id}", s.saveRule)
+	s.route(mux, "DELETE /admin/api/v1/rules/{id}", s.deleteSaveRule)
 	s.route(mux, "POST /admin/api/v1/routes", s.createRoute)
 	s.route(mux, "POST /admin/api/v1/routes/{id}/stop", s.stopRoute)
 	s.route(mux, "POST /admin/api/v1/copies", s.createCopy)
@@ -198,7 +204,7 @@ func (s *Server) asset(w http.ResponseWriter, r *http.Request) {
 	file := r.PathValue("file")
 	contentType := ""
 	switch file {
-	case "app.js", "management.js":
+	case "app.js", "management.js", "preferences.js":
 		contentType = "text/javascript; charset=utf-8"
 	case "style.css":
 		contentType = "text/css; charset=utf-8"

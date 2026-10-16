@@ -70,7 +70,8 @@ func (s *Store) CannotStream() string {
 	return "persistent file staging is required for retry and restart recovery"
 }
 
-func validPath(value string) (string, error) {
+// ValidatePath checks a remote path without accessing the database or network.
+func ValidatePath(value string) (string, error) {
 	if strings.Contains(value, "\\") || len(value) > 2048 {
 		return "", errors.New("invalid remote path")
 	}
@@ -104,7 +105,7 @@ func (s *Store) Reserve(ctx context.Context, size int64, target string) error {
 	if size == 0 {
 		return errors.New("ShardReel does not support empty files; select local storage")
 	}
-	target, err := validPath(target)
+	target, err := ValidatePath(target)
 	if err != nil {
 		return err
 	}
@@ -174,7 +175,7 @@ func (s *Store) Save(ctx context.Context, reader io.Reader, target string) error
 		}
 		return storagetypes.ErrSaveQueued
 	}
-	target, err := validPath(target)
+	target, err := ValidatePath(target)
 	if err != nil {
 		return err
 	}
@@ -253,7 +254,7 @@ func (r *contextReader) Read(p []byte) (int, error) {
 }
 
 func (s *Store) Exists(ctx context.Context, target string) (bool, error) {
-	if _, err := validPath(target); err != nil {
+	if _, err := ValidatePath(target); err != nil {
 		return false, err
 	}
 	var response struct {
@@ -294,7 +295,7 @@ func (s *Store) ListFiles(ctx context.Context, dir string) ([]storagetypes.FileI
 }
 
 func (s *Store) OpenFile(ctx context.Context, target string) (io.ReadCloser, int64, error) {
-	if _, err := validPath(target); err != nil {
+	if _, err := ValidatePath(target); err != nil {
 		return nil, 0, err
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", s.cfg.URL+"/v1/storage/download?path="+query(target), nil)

@@ -90,10 +90,10 @@ func TestUpdateUserPreferencesDoesNotRestoreDeletedAssociations(t *testing.T) {
 	if err := user.UnwatchByID(t.Context(), stale.WatchChats[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := DeleteDirByID(t.Context(), stale.Dirs[0].ID); err != nil {
+	if err := DeleteDirForUser(t.Context(), user.ID, stale.Dirs[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := DeleteRule(t.Context(), stale.Rules[0].ID); err != nil {
+	if err := DeleteRuleForUser(t.Context(), user.ID, stale.Rules[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	// Other commands have changed associations since this preference snapshot.

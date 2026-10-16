@@ -23,6 +23,7 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/queue"
+	"github.com/krau/SaveAny-Bot/pkg/rule"
 	"github.com/krau/SaveAny-Bot/pkg/taskhistory"
 	"github.com/krau/SaveAny-Bot/storage"
 	"github.com/krau/SaveAny-Bot/storage/shardreel"
@@ -310,7 +311,7 @@ func (s *Server) preferences(w http.ResponseWriter, r *http.Request) {
 			view.Dirs = append(view.Dirs, directoryView{dir.ID, dir.StorageName, dir.Path})
 		}
 		for _, rule := range user.Rules {
-			view.Rules = append(view.Rules, ruleView{rule.ID, rule.Type, s.redact(rule.Data), rule.StorageName, rule.DirPath})
+			view.Rules = append(view.Rules, ruleView{rule.ID, rule.Type, s.redactSecrets(rule.Data), rule.StorageName, rule.DirPath})
 		}
 		for _, route := range user.WatchChats {
 			view.Routes = append(view.Routes, routeView{route.ID, route.ChatID, route.SourceName, route.TargetID,
@@ -319,7 +320,11 @@ func (s *Server) preferences(w http.ResponseWriter, r *http.Request) {
 		result = append(result, view)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ChatID < result[j].ChatID })
-	s.write(w, http.StatusOK, map[string]any{"users": result})
+	presets := make([]map[string]string, 0)
+	for _, preset := range rule.PresetCategories("") {
+		presets = append(presets, map[string]string{"name": preset.Name, "data": preset.Regex})
+	}
+	s.write(w, http.StatusOK, map[string]any{"users": result, "rule_presets": presets})
 }
 
 func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {

@@ -62,6 +62,7 @@ func TestConsoleTranslations(t *testing.T) {
 		"index.html":    `data-i18n(?:-placeholder|-aria-label)?="([^"]+)"`,
 		"app.js":        `\bt\("([^"]+)"\)`,
 		"management.js": `\bt\("([^"]+)"\)`,
+		"preferences.js": `\bt\("([^"]+)"\)`,
 	} {
 		content, err := assets.ReadFile("static/" + file)
 		if err != nil {

@@ -6,6 +6,15 @@
 
 .preference-editor { display: grid; gap: 8px; margin: 20px 0; }
 .preference-editor button { justify-self: start; margin-top: 8px; }
+#page-preferences .panel { min-width:0; overflow-wrap:anywhere; }
+.settings-section { border-top:1px solid var(--line); margin-top:24px; padding-top:18px; }
+.settings-section .panel-heading { flex-wrap:wrap; gap:10px; }
+.settings-section .panel-heading h2 { margin:0; }
+.settings-fields { display:grid; gap:14px; margin:18px 0; }
+.settings-fields label { margin:0 0 7px; }
+.settings-fields p { margin:0; }
+.row-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.danger-text { color:var(--danger); }
 
 .input-action { display:flex; gap:8px; align-items:center; }
 .input-action input,.input-action select { flex:1; min-width:0; }

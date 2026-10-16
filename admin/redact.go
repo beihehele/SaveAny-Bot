@@ -63,6 +63,11 @@ func (s *Server) redact(text string) string {
 		value.User, value.RawQuery, value.Fragment = nil, "", ""
 		return value.String()
 	})
+	return s.redactSecrets(text)
+}
+
+// redactSecrets keeps editable expressions intact except for configured credentials.
+func (s *Server) redactSecrets(text string) string {
 	for _, secret := range s.secrets {
 		text = strings.ReplaceAll(text, secret, "[redacted]")
 	}

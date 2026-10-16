@@ -37,6 +37,7 @@ jobs:
         run: |
           node --check admin/static/app.js
           node --check admin/static/management.js
+          node --check admin/static/preferences.js
           node --test tests/admin_management_test.cjs
       - name: Test and vet
         run: |
