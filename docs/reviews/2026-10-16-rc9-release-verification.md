@@ -2,6 +2,8 @@
 
 2026-10-16。用户授权将已验收的 ShardReel 接入和媒体组 caption 目录功能发布为新候选，并将 NAS 从开发镜像切换到可重新拉取的发布镜像。默认保存位置保持 `local`。
 
+后续 [备份与业务专项复验](2026-10-16-rc9-followup-verification.md) 发现 SQLite 并发锁冲突及后台远端冒号路径问题。本页保留发布时检查范围；当前发布判断以该后续记录为准，rc.9 暂不建议提升正式版。
+
 ## 发布身份与质量检查
 
 - 候选：[v2.0.0-rc.9](https://github.com/beihehele/SaveAny-Bot/releases/tag/v2.0.0-rc.9)，GitHub 预发布。

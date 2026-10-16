@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -185,6 +186,28 @@ func TestConsoleTaskFilesAndReadOnlyPreferences(t *testing.T) {
 	t.Chdir(root)
 	viper.Reset()
 	t.Cleanup(viper.Reset)
+	remotePayload := "original remote bytes\x00"
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer isolated-shardreel-storage-test-key" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/storage/list":
+			if r.URL.Query().Get("path") != "/folder:one" {
+				t.Errorf("unexpected remote directory: %q", r.URL.Query().Get("path"))
+			}
+			fmt.Fprintf(w, `{"files":[{"name":"video:part.mp4","size":%d}],"total":1}`, len(remotePayload))
+		case "/v1/storage/download":
+			if r.URL.Query().Get("path") != "/folder:one/video:part.mp4" {
+				t.Errorf("unexpected remote file: %q", r.URL.Query().Get("path"))
+			}
+			fmt.Fprint(w, remotePayload)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer remote.Close()
 	configuration := `workers=1
 [telegram]
 token='0:private-test-bot-token'
@@ -203,6 +226,7 @@ base_path='.'
 id=42
 blacklist=true
 `
+	configuration += fmt.Sprintf("\n[[storages]]\nname='console-shardreel'\ntype='shardreel'\nenable=true\nurl=%q\napi_key='isolated-shardreel-storage-test-key'\n", remote.URL)
 	if err := os.WriteFile("config.toml", []byte(configuration), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -303,6 +327,26 @@ blacklist=true
 	}
 	if response := perform(s, "GET", "/admin/api/v1/download?storage=console-local&path=../outside", "", cookie, "", ""); response.Code != 400 {
 		t.Fatal("parent traversal allowed")
+	}
+	if response := perform(s, "GET", "/admin/api/v1/download?storage=console-local&path=C%3A/private", "", cookie, "", ""); response.Code != 400 {
+		t.Fatal("local drive-qualified path allowed", response.Code)
+	}
+	for _, endpoint := range []string{"files?path=" + url.QueryEscape("/folder:one"), "download?path=" + url.QueryEscape("/folder:one/video:part.mp4")} {
+		response := perform(s, "GET", "/admin/api/v1/"+endpoint+"&storage=console-shardreel", "", cookie, "", "")
+		if response.Code != 200 {
+			t.Fatalf("remote colon path rejected: %s %d %s", endpoint, response.Code, response.Body.String())
+		}
+		if strings.HasPrefix(endpoint, "download") && response.Body.String() != remotePayload {
+			t.Fatal("remote download changed original bytes")
+		}
+	}
+	for _, path := range []string{"../outside", "//host/share", "\x00"} {
+		for _, endpoint := range []string{"files", "download"} {
+			response := perform(s, "GET", "/admin/api/v1/"+endpoint+"?storage=console-shardreel&path="+url.QueryEscape(path), "", cookie, "", "")
+			if response.Code != 400 {
+				t.Fatalf("unsafe remote path accepted: %q %s %d", path, endpoint, response.Code)
+			}
+		}
 	}
 	if err := os.Link(filepath.Join(root, "config.toml"), filepath.Join(root, "alias.txt")); err == nil {
 		if response := perform(s, "GET", "/admin/api/v1/download?storage=console-local&path=alias.txt", "", cookie, "", ""); response.Code != 403 {

@@ -36,7 +36,7 @@ func protectedPaths() []string {
 
 func storagePath(raw string) (string, error) {
 	raw = strings.ReplaceAll(raw, "\\", "/")
-	if len(raw) > 4096 || strings.HasPrefix(raw, "//") || strings.ContainsAny(raw, ":\x00") {
+	if len(raw) > 4096 || strings.HasPrefix(raw, "//") || strings.ContainsRune(raw, '\x00') {
 		return "", errors.New("invalid storage path")
 	}
 	for _, part := range strings.Split(raw, "/") {
@@ -55,8 +55,9 @@ func (s *Server) localStorage(w http.ResponseWriter, r *http.Request) (storage.S
 		s.fail(w, http.StatusBadRequest, "local_storage_required")
 		return nil, "", "", false
 	}
-	filePath, err := storagePath(r.URL.Query().Get("path"))
-	if err != nil {
+	rawPath := r.URL.Query().Get("path")
+	filePath, err := storagePath(rawPath)
+	if err != nil || strings.Contains(rawPath, ":") {
 		s.fail(w, http.StatusBadRequest, "invalid_path")
 		return nil, "", "", false
 	}

@@ -34,6 +34,13 @@ func Init(ctx context.Context) {
 	if err != nil {
 		logger.Fatal("Failed to open database: ", err)
 	}
+	connection, err := db.DB()
+	if err != nil {
+		logger.Fatal("Failed to access database connection: ", err)
+	}
+	// Serialize SQLite operations so a reservation's read-then-write transaction
+	// cannot race the upload worker and fail while upgrading its read lock.
+	connection.SetMaxOpenConns(1)
 	logger.Debug("Database connected")
 	models := []any{&User{}, &Dir{}, &Rule{}, &WatchChat{}, &TelegramList{}}
 	for _, storage := range config.C().Storages {
