@@ -2,6 +2,8 @@
 
 2026-10-16。承接 [rc.9 发布验收](2026-10-16-rc9-release-verification.md)，执行用户授权的 NAS 备份脚本修补、大文件回读和最小业务验收。NAS 整机重启暂缓。默认保存位置保持 `local`，原始 Compose、应用配置和运行镜像不变；未修改 ShardReel 程序。
 
+后续两项程序修复已发布并部署为 rc.10，在线补验通过；新的文件传输定位边界见 [rc.10 发布与 NAS 补验](2026-10-16-rc10-release-verification.md)。本文保留修复前的验收快照。
+
 ## 已完成的运维修补
 
 NAS 的 `scripts/manage.sh backup` 原先遗漏了独立挂载的 `shardreel` 和 `secrets` 目录。已直接修补部署脚本：
