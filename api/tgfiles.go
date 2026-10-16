@@ -169,7 +169,7 @@ func getMessageFromClients(ctx context.Context, chatID int64, msgID int, botCtx,
 
 // getGroupedMessagesWithContext retains the original client and reports only known
 // original-message fallback; a successful query does not prove album completeness.
-func getGroupedMessagesWithContext(ctx context.Context, source *MessageContext, chatID int64) ([]*tg.Message, bool, error) {
+func getGroupedMessagesWithContext(ctx context.Context, source *MessageContext, chatID int64, albums *tgutil.AlbumLookup) ([]*tg.Message, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
@@ -182,7 +182,7 @@ func getGroupedMessagesWithContext(ctx context.Context, source *MessageContext, 
 	}
 
 	// 使用获取原始消息的同一个 client 获取媒体组
-	msgs, err := tgutil.GetGroupedMessages(clientCtx, chatID, msg)
+	msgs, err := albums.Get(clientCtx, chatID, msg)
 	if ctx.Err() != nil {
 		return nil, false, ctx.Err()
 	}
@@ -223,6 +223,7 @@ func extractFilesFromLinksReport(ctx context.Context, links []string,
 	var report inputresult.Report
 	logger := log.FromContext(ctx)
 	var files tfile.LinkedFiles
+	var albums tgutil.AlbumLookup
 	for index, link := range links {
 		if err := ctx.Err(); err != nil {
 			return nil, report, err
@@ -271,7 +272,7 @@ func extractFilesFromLinksReport(ctx context.Context, links []string,
 		}
 		groupID, isGroup := msg.GetGroupedID()
 		if isGroup && groupID != 0 && !single {
-			groupMsgs, albumFallback, err := getGroupedMessagesWithContext(ctx, msgCtx, chatID)
+			groupMsgs, albumFallback, err := getGroupedMessagesWithContext(ctx, msgCtx, chatID, &albums)
 			if ctx.Err() != nil {
 				return nil, report, ctx.Err()
 			}

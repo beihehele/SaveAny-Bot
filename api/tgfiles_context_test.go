@@ -19,6 +19,7 @@ import (
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/tg"
 	"github.com/krau/SaveAny-Bot/common/cache"
+	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/config"
 )
 
@@ -116,7 +117,7 @@ func TestSourceCancellationStopsBotAndAlbumFallback(t *testing.T) {
 			userClient := sourceClient(t, userInvoker)
 			var err error
 			if album {
-				_, _, err = getGroupedMessagesWithContext(ctx, &MessageContext{Message: sourceMessage(42), Client: botClient}, -1000000000111)
+				_, _, err = getGroupedMessagesWithContext(ctx, &MessageContext{Message: sourceMessage(42), Client: botClient}, -1000000000111, &tgutil.AlbumLookup{})
 			} else {
 				_, err = getMessageFromClients(ctx, -1000000000111, 42, botClient, userClient)
 			}
@@ -140,7 +141,7 @@ func TestSourceFallbackKeepsSuccessfulClientForDownloading(t *testing.T) {
 	if err != nil || source.Client != userClient || userInvoker.queries == 0 {
 		t.Fatalf("fallback failed: %v %+v", err, source)
 	}
-	msgs, fallback, err := getGroupedMessagesWithContext(ctx, source, -1000000000111)
+	msgs, fallback, err := getGroupedMessagesWithContext(ctx, source, -1000000000111, &tgutil.AlbumLookup{})
 	if err != nil || fallback || len(msgs) != 3 || userInvoker.groups != 1 {
 		t.Fatalf("album lost successful client: %v %v", msgs, err)
 	}
@@ -165,7 +166,7 @@ func TestAlbumLookupDiagnosticsPreserveFallbackAndCancellation(t *testing.T) {
 				msg = &tg.Message{ID: 42}
 			}
 			source := &MessageContext{Message: msg, Client: client}
-			messages, fallback, err := getGroupedMessagesWithContext(ctx, source, -1000000000111)
+			messages, fallback, err := getGroupedMessagesWithContext(ctx, source, -1000000000111, &tgutil.AlbumLookup{})
 			if fallback != (mode == "query_error" || mode == "empty_result") {
 				t.Fatalf("incorrect fallback flag for %s: %t", mode, fallback)
 			}
@@ -204,20 +205,24 @@ func TestAlbumLookupDiagnosticsPreserveFallbackAndCancellation(t *testing.T) {
 
 func TestLinkExtractionDeduplicatesOverlapAndPreservesSingle(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		links []string
-		want  []int
+		name       string
+		links      []string
+		want       []int
+		wantGroups int
 	}{
-		{"single", []string{"https://t.me/c/111/42?single"}, []int{42}},
-		{"overlapping album", []string{"https://t.me/c/111/40", "https://t.me/c/111/42"}, []int{40, 42, 44}},
-		{"duplicate single", []string{"https://t.me/c/111/42?single", "https://t.me/c/111/42?single"}, []int{42}},
-		{"single then album", []string{"https://t.me/c/111/42?single", "https://t.me/c/111/40"}, []int{42, 40, 44}},
-		{"cross chat same group and IDs", []string{"https://t.me/c/111/42?single", "https://t.me/c/222/42?single"}, []int{42, 42}},
+		{"single", []string{"https://t.me/c/111/42?single"}, []int{42}, 0},
+		{"overlapping album", []string{"https://t.me/c/111/40", "https://t.me/c/111/42", "https://t.me/c/111/44"}, []int{40, 42, 44}, 1},
+		{"duplicate single", []string{"https://t.me/c/111/42?single", "https://t.me/c/111/42?single"}, []int{42}, 0},
+		{"single then album", []string{"https://t.me/c/111/42?single", "https://t.me/c/111/40", "https://t.me/c/111/44"}, []int{42, 40, 44}, 1},
+		{"album then single", []string{"https://t.me/c/111/40", "https://t.me/c/111/42?single"}, []int{40, 42, 44}, 1},
+		{"cross chat same group and IDs", []string{"https://t.me/c/111/42?single", "https://t.me/c/222/42?single"}, []int{42, 42}, 0},
+		{"cross chat albums", []string{"https://t.me/c/111/40", "https://t.me/c/222/40", "https://t.me/c/111/42", "https://t.me/c/222/42"}, []int{40, 42, 44, 40, 42, 44}, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := sourceRequest(t)
 			defer cancel()
-			client := sourceClient(t, &sourceInvoker{})
+			invoker := &sourceInvoker{}
+			client := sourceClient(t, invoker)
 			files, err := extractFilesFromLinks(ctx, tc.links, ParseMessageLink, func(ctx context.Context, chatID int64, msgID int) (*MessageContext, error) {
 				return getMessageFromClients(ctx, chatID, msgID, client, nil)
 			})
@@ -248,6 +253,73 @@ func TestLinkExtractionDeduplicatesOverlapAndPreservesSingle(t *testing.T) {
 			}
 			if !reflect.DeepEqual(gotCounts, wantCounts) {
 				t.Fatalf("selection changed: %v", ids)
+			}
+			if invoker.groups != tc.wantGroups {
+				t.Fatalf("album queries=%d want=%d", invoker.groups, tc.wantGroups)
+			}
+		})
+	}
+}
+
+func TestAlbumLookupRetainsClientAliasesAndRequestBoundaries(t *testing.T) {
+	ctx, cancel := sourceRequest(t)
+	defer cancel()
+	firstInvoker, secondInvoker := &sourceInvoker{}, &sourceInvoker{}
+	first, second := sourceClient(t, firstInvoker), sourceClient(t, secondInvoker)
+	var albums tgutil.AlbumLookup
+	for _, selection := range []struct {
+		client *ext.Context
+		chatID int64
+		msgID  int
+	}{
+		{first, -1000000000111, 40},
+		{first, 111, 42}, // Public/private aliases refer to the actual channel peer.
+		{second, -1000000000111, 44},
+	} {
+		messages, fallback, err := getGroupedMessagesWithContext(ctx,
+			&MessageContext{Message: sourceMessage(selection.msgID), Client: selection.client}, selection.chatID, &albums)
+		if err != nil || fallback || len(messages) != 3 {
+			t.Fatalf("album selection changed: messages=%v fallback=%t err=%v", messages, fallback, err)
+		}
+	}
+	if firstInvoker.groups != 1 || secondInvoker.groups != 1 {
+		t.Fatalf("aliases repeated queries or clients shared results: %d/%d", firstInvoker.groups, secondInvoker.groups)
+	}
+	// A new submission must query again, including edits/deletions since the last one.
+	firstInvoker.onlySelected = true
+	messages, fallback, err := getGroupedMessagesWithContext(ctx,
+		&MessageContext{Message: sourceMessage(42), Client: first}, -1000000000111, &tgutil.AlbumLookup{})
+	if err != nil || fallback || len(messages) != 1 || firstInvoker.groups != 2 {
+		t.Fatalf("new submission reused old members: messages=%v fallback=%t err=%v", messages, fallback, err)
+	}
+	// Cancellation also wins over a warm lookup, without cancelling the shared client.
+	cancel()
+	messages, fallback, err = getGroupedMessagesWithContext(ctx,
+		&MessageContext{Message: sourceMessage(42), Client: first}, -1000000000111, &albums)
+	if !errors.Is(err, context.Canceled) || messages != nil || fallback || firstInvoker.groups != 2 || first.Err() != nil {
+		t.Fatalf("warm lookup ignored cancellation: messages=%v fallback=%t err=%v", messages, fallback, err)
+	}
+}
+
+func TestAlbumLookupRetriesFailedEmptyAndPreviouslyUnseenMembers(t *testing.T) {
+	for _, mode := range []string{"query error", "empty result", "unseen member"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx, cancel := sourceRequest(t)
+			defer cancel()
+			invoker := &sourceInvoker{fail: mode == "query error", emptyAlbum: mode == "empty result", onlySelected: mode == "unseen member"}
+			client := sourceClient(t, invoker)
+			var albums tgutil.AlbumLookup
+			messages, fallback, err := getGroupedMessagesWithContext(ctx,
+				&MessageContext{Message: sourceMessage(42), Client: client}, -1000000000111, &albums)
+			if err != nil || len(messages) != 1 || fallback != (mode != "unseen member") {
+				t.Fatalf("initial result changed: messages=%v fallback=%t err=%v", messages, fallback, err)
+			}
+			previous := invoker.groups
+			invoker.fail, invoker.emptyAlbum, invoker.onlySelected = false, false, false
+			messages, fallback, err = getGroupedMessagesWithContext(ctx,
+				&MessageContext{Message: sourceMessage(44), Client: client}, -1000000000111, &albums)
+			if err != nil || fallback || len(messages) != 3 || invoker.groups != previous+1 {
+				t.Fatalf("failed/partial result hid later members: messages=%v fallback=%t queries=%d err=%v", messages, fallback, invoker.groups, err)
 			}
 		})
 	}

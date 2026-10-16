@@ -26,6 +26,7 @@ import (
 type linkResultInvoker struct {
 	sent           []string
 	warningFailure bool
+	groups         int
 }
 
 func (i *linkResultInvoker) Invoke(ctx context.Context, in bin.Encoder, out bin.Decoder) error {
@@ -44,6 +45,9 @@ func (i *linkResultInvoker) Invoke(ctx context.Context, in bin.Encoder, out bin.
 		out.(*tg.UpdatesBox).Updates = &tg.UpdateShortSentMessage{ID: 100 + len(i.sent)}
 		return nil
 	case *tg.ChannelsGetMessagesRequest:
+		if len(req.ID) > 1 {
+			i.groups++
+		}
 		var msgs []tg.MessageClass
 		for _, id := range req.ID {
 			mid := id.(*tg.InputMessageID).ID
@@ -115,6 +119,9 @@ func TestBotLinkWarningsPreserveSelectionEvenWhenDeliveryFails(t *testing.T) {
 		}
 		if len(invoker.sent) != 2 || !strings.Contains(invoker.sent[1], "Link 3:") || !strings.Contains(invoker.sent[1], "Link 4:") || !strings.Contains(invoker.sent[1], "Link 5:") {
 			t.Fatalf("missing skipped input positions: %+v", invoker.sent)
+		}
+		if invoker.groups != 1 {
+			t.Fatalf("album was queried %d times for overlapping member links", invoker.groups)
 		}
 	}
 }

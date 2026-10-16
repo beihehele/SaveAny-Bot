@@ -86,6 +86,7 @@ func GetFilesFromUpdateLinkMessageWithReplyEdit(ctx *ext.Context, update *ext.Up
 		return nil, nil, nil, dispatcher.EndGroups
 	}
 	var selected tfile.LinkedFiles
+	var albums tgutil.AlbumLookup
 	var report inputresult.Report
 	addFile := func(chatID int64, client downloader.Client, msg *tg.Message) string {
 		if msg == nil || msg.Media == nil {
@@ -131,7 +132,7 @@ func GetFilesFromUpdateLinkMessageWithReplyEdit(ctx *ext.Context, update *ext.Up
 		code := "ready"
 		groupID, isGroup := msg.GetGroupedID()
 		if isGroup && groupID != 0 && !linkUrl.Query().Has("single") {
-			gmsgs, err := tgutil.GetGroupedMessages(tctx, chatId, msg)
+			gmsgs, err := albums.Get(tctx, chatId, msg)
 			if err != nil {
 				logger.Errorf("failed to get grouped messages: %s", err)
 				code = "album_unavailable"
