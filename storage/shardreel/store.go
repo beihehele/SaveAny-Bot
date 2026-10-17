@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rs/xid"
 	"gorm.io/gorm"
@@ -72,13 +73,18 @@ func (s *Store) CannotStream() string {
 
 // ValidatePath checks a remote path without accessing the database or network.
 func ValidatePath(value string) (string, error) {
-	if strings.Contains(value, "\\") || len(value) > 2048 {
+	if !utf8.ValidString(value) || strings.Contains(value, "\\") || len(value) > 2048 {
 		return "", errors.New("invalid remote path")
 	}
 	parts := strings.Split(strings.Trim(value, "/"), "/")
 	for _, part := range parts {
-		if part == "" || part == "." || part == ".." || strings.TrimSpace(part) != part || strings.ContainsAny(part, "\x00\r\n") {
+		if part == "" || part == "." || part == ".." || strings.TrimSpace(part) != part || utf8.RuneCountInString(part) > 512 {
 			return "", errors.New("invalid remote path")
+		}
+		for _, ch := range part {
+			if ch < 32 {
+				return "", errors.New("invalid remote path")
+			}
 		}
 	}
 	return "/" + strings.Join(parts, "/"), nil
@@ -145,6 +151,8 @@ func (s *Store) Reserve(ctx context.Context, size int64, target string) error {
 		overwrite, _ := ctx.Value(ctxkey.OverwriteExisting).(bool)
 		if overwrite {
 			row.Conflict = "replace"
+		} else if storagetypes.SkipExisting(ctx) {
+			row.Conflict = "skip"
 		}
 		return db.Create(&row).Error
 	})
@@ -253,19 +261,42 @@ func (r *contextReader) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
 }
 
-func (s *Store) Exists(ctx context.Context, target string) (bool, error) {
+type remoteStat struct {
+	IsDir  bool   `json:"is_dir"`
+	Status string `json:"status"`
+}
+
+func (s *Store) stat(ctx context.Context, target string) (*remoteStat, error) {
 	if _, err := ValidatePath(target); err != nil {
-		return false, err
+		return nil, err
 	}
-	var response struct {
-		Name string `json:"name"`
-	}
+	var response remoteStat
 	err := s.call(ctx, "GET", "/stat?path="+query(target), nil, nil, &response)
 	var remote *httpError
 	if errors.As(err, &remote) && remote.status == 404 && remote.code == "PATH_NOT_FOUND" {
-		return false, nil
+		return nil, nil
 	}
-	return err == nil, err
+	if err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+func (s *Store) Exists(ctx context.Context, target string) (bool, error) {
+	response, err := s.stat(ctx, target)
+	return response != nil, err
+}
+
+// CanSkip requires a completed file; an occupied path alone is insufficient.
+func (s *Store) CanSkip(ctx context.Context, target string) (bool, error) {
+	response, err := s.stat(ctx, target)
+	if err != nil || response == nil {
+		return false, err
+	}
+	if response.IsDir || response.Status != "ready" {
+		return false, errors.New("ShardReel target is not a completed file; wait for it to finish or choose another name")
+	}
+	return true, nil
 }
 
 // ListFiles reads the remote directory; staged payloads are never browseable.

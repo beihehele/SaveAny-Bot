@@ -39,6 +39,17 @@ func CanDetectExistence(s Storage) bool {
 	return !ok
 }
 
+// CanSkip checks completed files where a backend distinguishes them from
+// occupied paths. Other backends retain their existing conflict behavior.
+func CanSkip(ctx context.Context, s Storage, storagePath string) (bool, error) {
+	if checker, ok := s.(interface {
+		CanSkip(context.Context, string) (bool, error)
+	}); ok {
+		return checker.CanSkip(ctx, storagePath)
+	}
+	return s.Exists(ctx, storagePath)
+}
+
 // StorageListable 表示支持列举目录内容的存储
 type StorageListable interface {
 	Storage

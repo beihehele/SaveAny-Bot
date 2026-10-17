@@ -21,6 +21,13 @@ func isTransferMissing(err error) bool {
 	var value *httpError
 	return errors.As(err, &value) && value.status == http.StatusNotFound && value.code == "TRANSFER_NOT_FOUND"
 }
+
+func isTransferStateConflict(err error) bool {
+	var value *httpError
+	return errors.As(err, &value) && value.status == http.StatusConflict &&
+		(value.code == "TRANSFER_NOT_WRITABLE" || value.code == "TRANSFER_CANCELLED")
+}
+
 func query(value string) string { return url.QueryEscape(value) }
 
 // Check performs an explicit read-only connection and Worker check.
@@ -96,4 +103,5 @@ type remoteResult struct {
 	Size      int64  `json:"size"`
 	SHA256    string `json:"sha256"`
 	ErrorCode string `json:"error_code"`
+	CanRetry  bool   `json:"can_retry"`
 }

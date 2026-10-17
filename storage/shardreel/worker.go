@@ -163,11 +163,20 @@ func (s *Store) step(ctx context.Context, uploadAllowed bool) error {
 		return s.update(context.WithoutCancel(ctx), row.ID, map[string]any{"cleanup_error": err.Error()})
 	}
 	if ctx.Err() != nil {
-		return s.update(context.WithoutCancel(ctx), row.ID, map[string]any{"status": "queued"})
+		status := row.Status
+		if status != "processing" && status != "cancelling" {
+			status = "queued"
+		}
+		return s.update(context.WithoutCancel(ctx), row.ID, map[string]any{"status": status})
+	}
+	if errors.Is(err, errObservation) {
+		// An accepted remote job remains observable even after the retry budget
+		// is spent. A temporary status-query failure must not abandon it.
+		return s.update(ctx, row.ID, map[string]any{"status": row.Status, "error": err.Error(), "next_attempt_at": time.Now().Add(time.Minute)})
 	}
 	var remote *httpError
 	permanent := errors.As(err, &remote) && remote.status >= 400 && remote.status < 500 && remote.status != 429
-	if row.Attempts >= len(retryDelays) || permanent || errors.Is(err, errIntegrity) {
+	if row.Attempts >= len(retryDelays) || permanent || errors.Is(err, errIntegrity) || errors.Is(err, errRetryStopped) {
 		return s.update(ctx, row.ID, map[string]any{"status": "failed", "error": err.Error()})
 	}
 	next := time.Now().Add(retryDelays[row.Attempts])
@@ -175,6 +184,19 @@ func (s *Store) step(ctx context.Context, uploadAllowed bool) error {
 }
 
 var errIntegrity = errors.New("staged file integrity check failed; upload stopped")
+var errRetryStopped = errors.New("remote ingest cannot be retried automatically")
+var errObservation = errors.New("remote status temporarily unavailable")
+
+// observe handles receipts shared by GET, initialization, retry and completion.
+func (s *Store) observe(ctx context.Context, row *database.ShardReelFile, remote remoteResult) (bool, error) {
+	switch remote.Status {
+	case "succeeded", "skipped", "cancelled":
+		return true, s.finish(ctx, row, remote)
+	case "processing", "cancelling":
+		return true, s.update(ctx, row.ID, map[string]any{"status": remote.Status, "error": "", "next_attempt_at": time.Now().Add(2 * time.Second)})
+	}
+	return false, nil
+}
 
 func (s *Store) cancelled(ctx context.Context, taskID string) (bool, error) {
 	var task database.ShardReelTask
@@ -192,6 +214,11 @@ func (s *Store) upload(ctx context.Context, row *database.ShardReelFile) error {
 	if row.RemoteStarted {
 		err := s.call(ctx, "GET", suffix, nil, nil, &remote)
 		if err != nil && !isTransferMissing(err) {
+			var failure *httpError
+			if (row.Status == "processing" || row.Status == "cancelling") &&
+				(!errors.As(err, &failure) || failure.status >= 500 || failure.status == 429) {
+				return fmt.Errorf("%w: %w", errObservation, err)
+			}
 			return err
 		}
 	}
@@ -213,20 +240,37 @@ func (s *Store) upload(ctx context.Context, row *database.ShardReelFile) error {
 		}
 		return s.clean(ctx, row)
 	}
-	if remote.Status == "succeeded" || remote.Status == "skipped" || remote.Status == "cancelled" {
-		return s.finish(ctx, row, remote)
-	}
-	if remote.Status == "processing" || remote.Status == "cancelling" {
-		return s.update(ctx, row.ID, map[string]any{"status": remote.Status, "error": "", "next_attempt_at": time.Now().Add(2 * time.Second)})
+	if handled, err := s.observe(ctx, row, remote); handled {
+		return err
 	}
 	if remote.Status == "failed" {
 		if remote.ErrorCode == "FILE_CHECKSUM_MISMATCH" {
 			return errIntegrity
 		}
-		if err := s.call(ctx, "POST", suffix+"/retry", nil, nil, &remote); err != nil {
+		if !remote.CanRetry || (row.Attempts >= len(retryDelays) && row.Status != "retry_wait") {
+			return fmt.Errorf("%w (%s); inspect the remote task or download the file again", errRetryStopped, remote.ErrorCode)
+		}
+		if row.Status != "retry_wait" {
+			return errors.New("remote ingest failed; retry scheduled")
+		}
+		// retry_wait already reserved this attempt and waited for its delay.
+		// Persist observation before sending: a lost reply may still have
+		// started remote work, including on the last permitted attempt.
+		if err := s.update(ctx, row.ID, map[string]any{"status": "processing"}); err != nil {
 			return err
 		}
-		return errors.New("remote ingest failed; retry requested")
+		row.Status = "processing"
+		if err := s.call(ctx, "POST", suffix+"/retry", nil, nil, &remote); err != nil {
+			var failure *httpError
+			if !errors.As(err, &failure) || failure.status >= 500 || failure.status == 429 {
+				return fmt.Errorf("%w: %w", errObservation, err)
+			}
+			return err
+		}
+		if handled, err := s.observe(ctx, row, remote); handled {
+			return err
+		}
+		return errRetryStopped
 	}
 	root, err := os.OpenRoot(s.cfg.SpoolPath)
 	if err != nil {
@@ -255,8 +299,15 @@ func (s *Store) upload(ctx context.Context, row *database.ShardReelFile) error {
 		if err := s.call(ctx, "POST", "/uploads", body, nil, &remote); err != nil {
 			return err
 		}
-		if remote.Status == "succeeded" || remote.Status == "skipped" {
-			return s.finish(ctx, row, remote)
+		if remote.Status != "uploading" {
+			// Close before observing a terminal receipt so Windows can remove it.
+			if err := file.Close(); err != nil {
+				return err
+			}
+			if handled, err := s.observe(ctx, row, remote); handled {
+				return err
+			}
+			return errors.New("unexpected remote initialization state")
 		}
 	}
 	if remote.Received < 0 || remote.Received > row.Size {
@@ -283,6 +334,9 @@ func (s *Store) upload(ctx context.Context, row *database.ShardReelFile) error {
 			Received int64 `json:"received"`
 		}
 		if err := s.call(ctx, "PUT", suffix, buffer[:length], headers, &ack); err != nil {
+			if isTransferStateConflict(err) {
+				return s.update(ctx, row.ID, map[string]any{"status": "processing", "error": "", "next_attempt_at": time.Now().Add(2 * time.Second)})
+			}
 			return err
 		}
 		if ack.Received != remote.Received+length {
@@ -293,6 +347,9 @@ func (s *Store) upload(ctx context.Context, row *database.ShardReelFile) error {
 			return err
 		}
 	}
+	if err := file.Close(); err != nil {
+		return err
+	}
 	cancel, err = s.cancelled(ctx, row.TaskID)
 	if err != nil {
 		return err
@@ -301,12 +358,15 @@ func (s *Store) upload(ctx context.Context, row *database.ShardReelFile) error {
 		return s.update(ctx, row.ID, map[string]any{"status": "cancelling"})
 	}
 	if err := s.call(ctx, "POST", suffix+"/complete", nil, nil, &remote); err != nil {
+		if isTransferStateConflict(err) {
+			return s.update(ctx, row.ID, map[string]any{"status": "processing", "error": "", "next_attempt_at": time.Now().Add(2 * time.Second)})
+		}
 		return err
 	}
-	if remote.Status == "succeeded" || remote.Status == "skipped" {
-		return s.finish(ctx, row, remote)
+	if handled, err := s.observe(ctx, row, remote); handled {
+		return err
 	}
-	return s.update(ctx, row.ID, map[string]any{"status": "processing", "error": "", "next_attempt_at": time.Now().Add(2 * time.Second)})
+	return errors.New("unexpected remote completion state")
 }
 
 func (s *Store) finish(ctx context.Context, row *database.ShardReelFile, remote remoteResult) error {

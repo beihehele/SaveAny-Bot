@@ -19,6 +19,7 @@ import (
 	tftask "github.com/krau/SaveAny-Bot/core/tasks/tfile"
 	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
+	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 	"github.com/krau/SaveAny-Bot/pkg/tcbdata"
 	"github.com/krau/SaveAny-Bot/pkg/tfile"
 	"github.com/krau/SaveAny-Bot/storage"
@@ -31,6 +32,13 @@ func reportStorageInspection(ctx *ext.Context, userID int64, messageID int, err 
 	request.SetEntities(nil)
 	tgutil.EditProgress(tgutil.ExtWithContext(ctx.Context, ctx), userID, request, true)
 	return dispatcher.EndGroups
+}
+
+func inspectConflict(ctx *ext.Context, stor storage.Storage, target, strategy string) (bool, error) {
+	if strategy == tcbdata.ConflictStrategySkip {
+		return storage.CanSkip(ctx, stor, target)
+	}
+	return stor.Exists(ctx, target)
 }
 
 // 创建一个 tfile.TGFileTask 并添加到任务队列中, 以编辑消息的方式反馈结果
@@ -82,7 +90,7 @@ startCreateTask:
 		if !storage.CanDetectExistence(stor) {
 			logger.Warnf("storage %s cannot detect existence; ask/skip conflict strategy ignored", stor.Name())
 		} else {
-			exists, err := stor.Exists(ctx, storagePath)
+			exists, err := inspectConflict(ctx, stor, storagePath, strategy)
 			if err != nil {
 				return reportStorageInspection(ctx, userID, trackMsgID, err)
 			}
@@ -104,6 +112,8 @@ startCreateTask:
 	injectCtx := tgutil.ExtWithContext(ctx.Context, ctx)
 	if strategy == tcbdata.ConflictStrategyOverwrite {
 		injectCtx = storage.WithOverwrite(injectCtx)
+	} else if strategy == tcbdata.ConflictStrategySkip {
+		injectCtx = storagetypes.WithSkipExisting(injectCtx)
 	}
 	taskid := xid.New().String()
 	task, err := tftask.NewTGFileTask(taskid, file, stor, storagePath,
@@ -206,7 +216,7 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 		if !matchedDirPath.NeedNewForAlbum() {
 			storPath := path.Join(matchedDirPath.String(), albumDirs[file.Message()], file.Name())
 			if (strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip) && storage.CanDetectExistence(fileStor) {
-				exists, err := fileStor.Exists(ctx, storPath)
+				exists, err := inspectConflict(ctx, fileStor, storPath, strategy)
 				if err != nil {
 					return reportStorageInspection(ctx, userID, trackMsgID, err)
 				}
@@ -252,7 +262,7 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 		for _, af := range afiles {
 			afstorPath := path.Join(af.dirPath, albumDir, af.file.Name())
 			if (strategy == tcbdata.ConflictStrategyAsk || strategy == tcbdata.ConflictStrategySkip) && storage.CanDetectExistence(albumStor) {
-				exists, err := albumStor.Exists(ctx, afstorPath)
+				exists, err := inspectConflict(ctx, albumStor, afstorPath, strategy)
 				if err != nil {
 					return reportStorageInspection(ctx, userID, trackMsgID, err)
 				}
@@ -287,6 +297,8 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 	injectCtx := tgutil.ExtWithContext(ctx.Context, ctx)
 	if strategy == tcbdata.ConflictStrategyOverwrite {
 		injectCtx = storage.WithOverwrite(injectCtx)
+	} else if strategy == tcbdata.ConflictStrategySkip {
+		injectCtx = storagetypes.WithSkipExisting(injectCtx)
 	}
 	if len(elems) == 0 {
 		ctx.EditMessage(userID, &tg.MessagesEditMessageRequest{
