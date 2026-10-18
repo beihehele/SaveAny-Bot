@@ -431,5 +431,10 @@
   "audit_save_directory": "Save directory configuration",
   "audit_delete_directory": "Delete directory configuration",
   "audit_save_rule": "Save rule",
-  "audit_delete_rule": "Delete rule"
+  "audit_delete_rule": "Delete rule",
+  "outboxTitle": "ShardReel outbox",
+  "outboxPending": "Unfinished files",
+  "outboxFailed": "Failed files",
+  "outboxUsage": "Reserved space / limit",
+  "outboxNote": "Reserved space includes downloads and files awaiting upload or cleanup, rather than measured directory size. Successful uploads are cleaned automatically; failed files remain available to retry or discard from Tasks."
 }

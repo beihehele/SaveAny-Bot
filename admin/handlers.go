@@ -39,18 +39,27 @@ type taskRow struct {
 
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 	cfg := config.C()
+	outboxes, err := uploadOutboxes(r.Context())
+	if err != nil {
+		if !errors.Is(r.Context().Err(), context.Canceled) {
+			log.FromContext(r.Context()).Error("Read upload outbox summary", "error", err)
+		}
+		s.fail(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
 	s.write(w, http.StatusOK, map[string]any{
 		"version": config.Version, "commit": config.GitCommit, "build_time": config.BuildTime,
 		"uptime_seconds": int(time.Since(s.started).Seconds()), "workers": cfg.Workers,
 		"queued": len(core.GetQueuedTasks(r.Context())), "running": len(core.GetRunningTasks(r.Context())),
 		"storages": len(storage.AllStorages()), "go_version": runtime.Version(),
 		"platform": runtime.GOOS + "/" + runtime.GOARCH,
+		"outboxes": outboxes,
 	})
 }
 
 func (s *Server) taskRows(ctx context.Context) []taskRow {
 	byID := make(map[string]taskRow)
-	for _, info := range api.TaskSnapshots() {
+	for _, info := range api.TaskSnapshots(ctx) {
 		info.Title, info.Error = s.redact(info.Title), s.redact(info.Error)
 		byID[info.TaskID] = taskRow{TaskInfoResponse: info, Scope: "tracked"}
 	}
@@ -158,10 +167,14 @@ func page(r *http.Request, total int) (int, int, error) {
 
 func (s *Server) tasks(w http.ResponseWriter, r *http.Request) {
 	rows := s.taskRows(r.Context())
+	hasActiveTasks := false
 	filtered := make([]taskRow, 0, len(rows))
 	query := strings.ToLower(r.URL.Query().Get("q"))
 	status := r.URL.Query().Get("status")
 	for _, row := range rows {
+		if row.Executing || row.Status == api.TaskStatusQueued || row.Status == api.TaskStatusRunning || row.Status == "cancelling" {
+			hasActiveTasks = true
+		}
 		if status != "" && string(row.Status) != status {
 			continue
 		}
@@ -175,7 +188,7 @@ func (s *Server) tasks(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	s.write(w, http.StatusOK, map[string]any{"tasks": filtered[start:end], "total": len(filtered), "offset": start})
+	s.write(w, http.StatusOK, map[string]any{"tasks": filtered[start:end], "total": len(filtered), "offset": start, "has_active_tasks": hasActiveTasks})
 }
 
 func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {

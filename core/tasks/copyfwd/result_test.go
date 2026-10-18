@@ -1,6 +1,7 @@
 package copyfwd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,12 +9,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/celestix/gotgproto/ext"
 	peerstore "github.com/celestix/gotgproto/storage"
+	"github.com/charmbracelet/log"
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/constant"
 	"github.com/gotd/td/telegram"
@@ -107,6 +110,10 @@ func TestCopyLogicalCountsReachWorkerHistory(t *testing.T) {
 		t.Run(tc.mode, func(t *testing.T) {
 			caller, cancel := context.WithCancel(t.Context())
 			defer cancel()
+			var logs bytes.Buffer
+			logger := log.New(&logs)
+			logger.SetFormatter(log.JSONFormatter)
+			caller = log.WithContext(caller, logger)
 			album := &tg.Message{ID: 42, Message: "album caption", Media: &tg.MessageMediaPhoto{Photo: &tg.Photo{ID: 1}}}
 			album.SetGroupedID(99)
 			member := &tg.Message{ID: 41, Media: &tg.MessageMediaPhoto{Photo: &tg.Photo{ID: 2}}}
@@ -232,6 +239,13 @@ func TestCopyLogicalCountsReachWorkerHistory(t *testing.T) {
 				}
 			case <-time.After(15 * time.Second):
 				t.Fatal("copy worker did not finish")
+			}
+			hasErrorLog := strings.Contains(logs.String(), `"level":"error"`)
+			if tc.mode == "cancel_first_rpc" && hasErrorLog {
+				t.Fatalf("normal forward cancellation logged as failure: %s", logs.String())
+			}
+			if (tc.mode == "ordinary_then_cancel" || tc.mode == "internal_deadline") && !hasErrorLog {
+				t.Fatalf("real forward failure lost error log: %s", logs.String())
 			}
 			// Event sinks run in order. Shutdown joins the worker at test cleanup;
 			// wait for its history sink without fixed sleeps or racing observations.

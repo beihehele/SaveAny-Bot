@@ -35,7 +35,10 @@ func executeStream(ctx context.Context, task *Task) error {
 		logger.Info("Starting file download in stream mode")
 		_, err := tdler.NewDownloader(task.File).Stream(uploadCtx, wr)
 		if err != nil {
-			logger.Errorf("Failed to download file: %v", err)
+			cancelled := errors.Is(uploadCtx.Err(), context.Canceled) && (errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe))
+			if !cancelled {
+				logger.Errorf("Failed to download file: %v", err)
+			}
 			pw.CloseWithError(err)
 		}
 		return err

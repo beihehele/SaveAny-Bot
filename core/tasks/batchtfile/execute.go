@@ -82,7 +82,9 @@ func (t *Task) Execute(ctx context.Context) error {
 	logger.Info("Batch file outcomes", "total", summary.Total, "succeeded", summary.Succeeded,
 		"skipped", summary.Skipped, "failed", summary.Failed, "cancelled", summary.Cancelled, "interrupted", summary.Interrupted,
 		"pending", summary.Pending, "running", summary.Running)
-	if err != nil {
+	if errors.Is(ctx.Err(), context.Canceled) && errors.Is(err, context.Canceled) {
+		logger.Info("Batch file task cancelled")
+	} else if err != nil {
 		logger.Errorf("Error during batch file processing: %v", err)
 	} else if staged.Load() {
 		logger.Info("Batch files staged for ShardReel upload")
@@ -136,7 +138,10 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 			logger.Info("Starting file download in stream mode")
 			_, err := tdler.NewDownloader(elem.File).Stream(uploadCtx, wr)
 			if err != nil {
-				logger.Errorf("Failed to download file: %v", err)
+				cancelled := errors.Is(uploadCtx.Err(), context.Canceled) && (errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe))
+				if !cancelled {
+					logger.Errorf("Failed to download file: %v", err)
+				}
 				pw.CloseWithError(err)
 			}
 			return err
@@ -207,7 +212,8 @@ func (t *Task) processElement(ctx context.Context, elem TaskElement) error {
 		}
 		defer file.Close()
 		if err = elem.Storage.Save(vctx, file, elem.Path); err != nil {
-			if !errors.Is(err, storagetypes.ErrSaveQueued) && !errors.Is(err, storagetypes.ErrSaveSkipped) {
+			cancelled := errors.Is(vctx.Err(), context.Canceled) && errors.Is(err, context.Canceled)
+			if !cancelled && !errors.Is(err, storagetypes.ErrSaveQueued) && !errors.Is(err, storagetypes.ErrSaveSkipped) {
 				logger.Errorf("Failed to save file: %s, retrying...", err)
 			}
 			return err

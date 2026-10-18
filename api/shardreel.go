@@ -23,6 +23,10 @@ func UploadResponse(ctx context.Context, group database.ShardReelTask) (TaskInfo
 	if err := db.Where("task_id = ?", group.ID).Order("created_at, id").Find(&files).Error; err != nil {
 		return TaskInfoResponse{}, err
 	}
+	return uploadResponse(group, files), nil
+}
+
+func uploadResponse(group database.ShardReelTask, files []database.ShardReelFile) TaskInfoResponse {
 	summary := shardreel.Summary(group, files)
 	counts := summary.Counts()
 	stores := []string{}
@@ -48,7 +52,7 @@ func UploadResponse(ctx context.Context, group database.ShardReelTask) (TaskInfo
 			response.CanRetry = true
 		}
 	}
-	return response, nil
+	return response
 }
 
 func uploadTask(ctx context.Context, id string) (TaskInfoResponse, bool, error) {
@@ -69,6 +73,9 @@ func uploadTask(ctx context.Context, id string) (TaskInfoResponse, bool, error) 
 }
 
 func uploadResponses(ctx context.Context) ([]TaskInfoResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	db := database.ShardReelDB(ctx)
 	if db == nil || !db.Migrator().HasTable(&database.ShardReelTask{}) {
 		return nil, nil
@@ -78,12 +85,19 @@ func uploadResponses(ctx context.Context) ([]TaskInfoResponse, error) {
 		return nil, err
 	}
 	result := make([]TaskInfoResponse, 0, len(groups))
+	if len(groups) == 0 {
+		return result, nil
+	}
+	var files []database.ShardReelFile
+	if err := db.Order("created_at, id").Find(&files).Error; err != nil {
+		return nil, err
+	}
+	byTask := make(map[string][]database.ShardReelFile, len(groups))
+	for _, file := range files {
+		byTask[file.TaskID] = append(byTask[file.TaskID], file)
+	}
 	for _, group := range groups {
-		response, err := UploadResponse(ctx, group)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, response)
+		result = append(result, uploadResponse(group, byTask[group.ID]))
 	}
 	return result, nil
 }

@@ -1,15 +1,18 @@
 package batchtfile
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/gotd/td/telegram/downloader"
 	"github.com/gotd/td/tg"
 
@@ -56,17 +59,29 @@ func TestStreamTerminatesAndPreservesErrors(t *testing.T) {
 		{name: "target fails after first byte", want: targetErr},
 		{name: "target stops reading without error", want: io.ErrClosedPipe},
 		{name: "download failure", want: downloadErr},
+		{name: "internal download cancellation", want: context.Canceled},
+		{name: "download deadline", want: context.DeadlineExceeded},
 		{name: "cancel blocked writer", want: context.Canceled, cancel: true},
 		{name: "cancel blocked reader", want: context.Canceled, cancel: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
+			var logs bytes.Buffer
+			logger := log.New(&logs)
+			logger.SetFormatter(log.JSONFormatter)
+			ctx = log.WithContext(ctx, logger)
 			started := make(chan struct{}, 1)
 			readers := make(chan io.Reader, 1)
 			client := streamTestClient{getFile: func(ctx context.Context) (tg.UploadFileClass, error) {
 				if tc.name == "download failure" {
 					return nil, downloadErr
+				}
+				if tc.name == "internal download cancellation" {
+					return nil, context.Canceled
+				}
+				if tc.name == "download deadline" {
+					return nil, context.DeadlineExceeded
 				}
 				if tc.name == "cancel blocked reader" {
 					started <- struct{}{}
@@ -142,6 +157,13 @@ func TestStreamTerminatesAndPreservesErrors(t *testing.T) {
 			task.processingMu.RUnlock()
 			if remaining != 0 {
 				t.Fatal("stream task retained processing entries")
+			}
+			hasErrorLog := strings.Contains(logs.String(), `"level":"error"`)
+			if tc.cancel && (hasErrorLog || !strings.Contains(logs.String(), "Batch file task cancelled")) {
+				t.Fatalf("normal cancellation logged as failure: %s", logs.String())
+			}
+			if tc.want != nil && !tc.cancel && !hasErrorLog {
+				t.Fatalf("real failure was not logged: %s", logs.String())
 			}
 		})
 	}

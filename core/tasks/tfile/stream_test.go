@@ -1,15 +1,18 @@
 package tfile
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/gotd/td/telegram/downloader"
 	"github.com/gotd/td/tg"
 
@@ -62,6 +65,10 @@ func TestStreamTerminatesAndPreservesErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
+			var logs bytes.Buffer
+			logger := log.New(&logs)
+			logger.SetFormatter(log.JSONFormatter)
+			ctx = log.WithContext(ctx, logger)
 			started := make(chan struct{}, 1)
 			readers := make(chan io.Reader, 1)
 			client := streamTestClient{getFile: func(ctx context.Context) (tg.UploadFileClass, error) {
@@ -137,7 +144,9 @@ func TestStreamTerminatesAndPreservesErrors(t *testing.T) {
 			case <-time.After(3 * time.Second):
 				t.Fatal("stream task did not terminate")
 			}
-
+			if tc.cancel && strings.Contains(logs.String(), `"level":"error"`) {
+				t.Fatalf("normal stream cancellation logged as failure: %s", logs.String())
+			}
 		})
 	}
 }

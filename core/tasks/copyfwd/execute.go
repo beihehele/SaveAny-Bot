@@ -2,6 +2,7 @@ package copyfwd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -99,7 +100,9 @@ func (t *Task) executeWithClient(ctx context.Context, client func() *ext.Context
 		err := user.ForwardMessage(ctx, uctx, t.SourceID, t.TargetID, msgID, t.TargetTopicID)
 		t.finishResult(err, ctx.Err())
 		if err != nil {
-			logger.Errorf("Forward msg %d failed: %v", msgID, err)
+			if !errors.Is(ctx.Err(), context.Canceled) || !errors.Is(err, context.Canceled) {
+				logger.Errorf("Forward msg %d failed: %v", msgID, err)
+			}
 			failed++
 		} else {
 			copied++

@@ -3,8 +3,8 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const pages = ["overview", "tasks", "new", "storages", "files", "routes", "preferences", "diagnostics"];
-  const state = { authenticated: false, csrf: "", language: "zh-Hans", words: {}, storages: [], users: [], capabilities: [], metadata: false, page: "overview", sequence: 0, abort: null, loading: false, submitting: false, taskOffset: 0, fileOffset: 0 };
-  let searchTimer, toastTimer;
+  const state = { authenticated: false, csrf: "", language: "zh-Hans", words: {}, storages: [], users: [], capabilities: [], metadata: false, page: "overview", sequence: 0, abort: null, loading: false, submitting: false, taskOffset: 0, fileOffset: 0, hasActiveTasks: true };
+  let searchTimer, toastTimer, refreshTimer;
   const t = (key) => state.words[key] || key;
   const node = (tag, text, className) => {
     const element = document.createElement(tag);
@@ -39,6 +39,8 @@
     state.storages = [];
     state.users = [];
     state.capabilities = [];
+    state.hasActiveTasks = true;
+    clearTimeout(refreshTimer);
     state.sequence++;
     if (state.abort) state.abort.abort();
     $("console").hidden = true;
@@ -393,6 +395,7 @@
   }
   async function loadPage() {
     if (!state.authenticated) return;
+    clearTimeout(refreshTimer);
     const sequence = ++state.sequence;
     if (state.abort) state.abort.abort();
     state.abort = new AbortController();
@@ -420,15 +423,20 @@
       if (page === "overview") {
         const [overview, tasks] = await Promise.all([request("overview", { signal }), request("tasks?limit=5", { signal })]);
         if (sequence !== state.sequence) return;
+        state.hasActiveTasks = tasks.has_active_tasks;
         $("overview-metrics").replaceChildren();
         [["runningTasks", overview.running, "workerNote"], ["queuedTasks", overview.queued, "queueNote"], ["loadedStorages", overview.storages, "loadedNote"], ["consoleUptime", duration(overview.uptime_seconds), "uptimeNote"]].forEach(([label, value, subtitle]) => {
           const metric = node("article", null, "metric"); metric.append(node("span", t(label), "metric-label"), node("div", value, "metric-value"), node("span", t(subtitle), "metric-subtitle")); $("overview-metrics").append(metric);
         });
         definitions($("service-information"), [[t("version"), overview.version], [t("commit"), overview.commit], [t("buildTime"), overview.build_time], [t("platform"), overview.platform], [t("goVersion"), overview.go_version], [t("workers"), overview.workers]]);
+        $("outbox-panel").hidden = !overview.outboxes.length;
+        table($("outbox-summary"), ["storage", "outboxPending", "outboxFailed", "outboxUsage"], overview.outboxes.map((outbox) =>
+          [outbox.storage, outbox.pending_files, outbox.failed_files, `${bytes(outbox.reserved_bytes)} / ${bytes(outbox.max_pending_bytes)}`]));
         capabilityList(); tasksTable($("overview-tasks"), tasks.tasks);
       } else if (page === "tasks") {
         const data = await request(`tasks?${new URLSearchParams({ q: $("task-search").value, status: $("task-status").value, offset: String(state.taskOffset) })}`, { signal });
         if (sequence !== state.sequence) return;
+        state.hasActiveTasks = data.has_active_tasks;
         tasksTable($("task-table"), data.tasks);
         pagination($("task-pagination"), data.total, data.offset, (offset) => { state.taskOffset = offset; loadPage(); });
       } else if (page === "storages") { storageCards(); }
@@ -464,9 +472,15 @@
       if (sequence === state.sequence) $("last-refresh").textContent = `${t("lastRefreshed")} ${new Date().toLocaleTimeString(state.language)}`;
     } catch (error) {
       if (error.name !== "AbortError" && sequence === state.sequence && state.authenticated) {
+        state.hasActiveTasks = true;
         $("page-error").textContent = error.message; $("page-error").hidden = false;
       }
-    } finally { if (sequence === state.sequence) { state.loading = false; $("refresh").disabled = false; $(`page-${page}`).removeAttribute("aria-busy"); } }
+    } finally {
+      if (sequence === state.sequence) {
+        state.loading = false; $("refresh").disabled = false; $(`page-${page}`).removeAttribute("aria-busy");
+        if (["overview", "tasks"].includes(page)) refreshTimer = setTimeout(refreshTasks, state.hasActiveTasks ? 3000 : 15000);
+      }
+    }
   }
   function stopRouteButton(userID, route) {
     const trigger = button(t("stopRoute"), async () => {
@@ -565,10 +579,11 @@
   $("refresh").addEventListener("click", () => { state.metadata = false; loadPage(); });
   window.addEventListener("hashchange", loadPage);
   // Leave focused row controls and the detail dialog stable while they are in use.
-  setInterval(() => {
-    if (state.authenticated && !state.loading && !document.hidden && !$("task-dialog").open &&
-        !document.activeElement?.closest(".table-wrap") && ["overview", "tasks"].includes(state.page)) loadPage();
-  }, 3000);
+  function refreshTasks() {
+    if (!state.authenticated || !["overview", "tasks"].includes(state.page)) return;
+    if (!state.loading && !document.hidden && !$("task-dialog").open && !document.activeElement?.closest(".table-wrap")) loadPage();
+    else refreshTimer = setTimeout(refreshTasks, 3000);
+  }
   async function boot() {
     await loadLanguage(navigator.language.startsWith("zh") ? "zh-Hans" : "en");
     try {

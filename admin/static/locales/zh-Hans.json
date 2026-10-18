@@ -431,5 +431,10 @@
   "audit_save_directory": "保存目录配置",
   "audit_delete_directory": "删除目录配置",
   "audit_save_rule": "保存规则",
-  "audit_delete_rule": "删除规则"
+  "audit_delete_rule": "删除规则",
+  "outboxTitle": "ShardReel 暂存概况",
+  "outboxPending": "待完成文件",
+  "outboxFailed": "失败文件",
+  "outboxUsage": "暂存额度占用 / 上限",
+  "outboxNote": "额度占用包含下载预留和待上传、待清理的文件，不是目录实时大小。上传成功后自动清理；失败文件保留，可在任务列表中重试或丢弃。"
 }

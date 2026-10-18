@@ -263,7 +263,7 @@ blacklist=true
 	cookie, csrf := signIn(t, s)
 	injectedFactory := s.factory
 	s.factory = defaultFactory
-	queuedBefore, trackedBefore := core.GetLength(t.Context()), len(api.TaskSnapshots())
+	queuedBefore, trackedBefore := core.GetLength(t.Context()), len(api.TaskSnapshots(t.Context()))
 	invalidInput := `{"type":"tgfiles","storage":"console-local","params":{"message_links":["not-a-link","private-test-bot-token"]}}`
 	rejected := perform(s, "POST", "/admin/api/v1/tasks", invalidInput, cookie, csrf, "http://console.test")
 	var invalidResult api.ErrorResponse
@@ -273,7 +273,7 @@ blacklist=true
 	if rejected.Code != 400 || len(invalidResult.InputResults) != 2 || invalidResult.InputResults[1].Index != 2 || invalidResult.InputResults[1].Code != "invalid_link" || strings.Contains(rejected.Body.String(), "private-test-bot-token") {
 		t.Fatalf("all-failed selection lost safe indexed response: %d %s", rejected.Code, rejected.Body.String())
 	}
-	if core.GetLength(t.Context()) != queuedBefore || len(api.TaskSnapshots()) != trackedBefore {
+	if core.GetLength(t.Context()) != queuedBefore || len(api.TaskSnapshots(t.Context())) != trackedBefore {
 		t.Fatal("all-failed input admitted a task")
 	}
 	apiRejected := httptest.NewRecorder()
