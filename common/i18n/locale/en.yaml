@@ -273,6 +273,7 @@ bot:
       usage: "Usage: /task [running|queued|cancel <task_id>]"
       usage_cancel: "Usage: /task cancel <task_id>"
     watch:
+      error_same_chat: Source and target must be different chats, even when specifying a different topic
       error_filter_format_invalid: Invalid filter format, please use <type>:<expression>
       error_filter_type_unsupported: Unsupported filter type, please see the docs
       error_source_unreachable: "UserBot cannot access source chat {{.Source}}: {{.Error}}"

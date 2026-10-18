@@ -274,6 +274,7 @@ bot:
       usage: "用法: /task [running|queued|cancel <task_id>]"
       usage_cancel: "用法: /task cancel <task_id>"
     watch:
+      error_same_chat: 来源与目标不能是同一个聊天，即使指定不同话题也不支持
       error_filter_format_invalid: 过滤器格式错误, 请使用 <过滤器类型>:<表达式>
       error_filter_type_unsupported: 不支持的过滤器类型, 请参阅文档
       error_source_unreachable: "UserBot 无法访问源聊天 {{.Source}}: {{.Error}}"

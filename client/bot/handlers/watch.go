@@ -67,6 +67,10 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 			targetTopicID = pt.TopicID
 		}
 	}
+	if targetID != 0 && sourceID == targetID {
+		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorSameChat)), nil)
+		return dispatcher.EndGroups
+	}
 	if targetID == 0 && user.DefaultStorage == "" {
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorDefaultStorageNotSet)), nil)
 		return dispatcher.EndGroups

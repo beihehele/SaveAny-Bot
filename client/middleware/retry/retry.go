@@ -34,6 +34,10 @@ func (r retry) Handle(next tg.Invoker) telegram.InvokeFunc {
 				if tgerr.Is(err, r.errors...) {
 					log.FromContext(ctx).Debug("retry middleware", "retries", retries, "error", err)
 					retries++
+					if retries == r.max {
+						// Preserve the RPC error so outer recovery does not retry it again.
+						return fmt.Errorf("retry limit reached after %d attempts: %w", r.max, err)
+					}
 					continue
 				}
 				// retry middleware skip

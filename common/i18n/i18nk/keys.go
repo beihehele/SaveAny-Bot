@@ -212,6 +212,7 @@ const (
 	BotMsgTasksUsageCancel                                Key = "bot.msg.tasks.usage_cancel"
 	BotMsgWatchErrorFilterFormatInvalid                   Key = "bot.msg.watch.error_filter_format_invalid"
 	BotMsgWatchErrorFilterTypeUnsupported                 Key = "bot.msg.watch.error_filter_type_unsupported"
+	BotMsgWatchErrorSameChat                              Key = "bot.msg.watch.error_same_chat"
 	BotMsgWatchErrorSourceUnreachable                     Key = "bot.msg.watch.error_source_unreachable"
 	BotMsgWatchErrorTargetNotForum                        Key = "bot.msg.watch.error_target_not_forum"
 	BotMsgWatchErrorTargetUnreachable                     Key = "bot.msg.watch.error_target_unreachable"
