@@ -4,7 +4,6 @@
   const $ = (id) => document.getElementById(id);
   const pages = ["overview", "tasks", "new", "storages", "files", "routes", "preferences", "diagnostics"];
   const state = { authenticated: false, csrf: "", language: "zh-Hans", words: {}, storages: [], users: [], capabilities: [], metadata: false, page: "overview", sequence: 0, abort: null, loading: false, submitting: false, taskOffset: 0, fileOffset: 0 };
-  let languageSequence = 0;
   let searchTimer, toastTimer;
   const t = (key) => state.words[key] || key;
   const node = (tag, text, className) => {
@@ -68,22 +67,17 @@
     }
     return data;
   }
-  async function language(value) {
-    const sequence = ++languageSequence;
+  async function loadLanguage(value) {
     state.language = value === "en" ? "en" : "zh-Hans";
     const response = await fetch(`/admin/assets/locales/${state.language}.json`, { cache: "no-store" });
     if (!response.ok) throw new Error("Unable to load language resources");
     const words = await response.json();
-    if (sequence !== languageSequence) return;
     state.words = words;
     document.documentElement.lang = state.language;
     document.title = `SaveAny · ${t("consoleName")}`;
-    $("language").value = state.language;
     document.querySelectorAll("[data-i18n]").forEach((element) => { element.textContent = t(element.dataset.i18n); });
     document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => { element.placeholder = t(element.dataset.i18nPlaceholder); });
     document.querySelectorAll("[data-i18n-aria-label]").forEach((element) => { element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel)); });
-    try { localStorage.setItem("saveany.admin.language", state.language); } catch { /* Language persistence is optional. */ }
-    if (state.authenticated) await loadPage();
   }
   function definitions(target, values) {
     target.replaceChildren();
@@ -569,7 +563,6 @@
   $("close-input-dialog").addEventListener("click", () => $("input-dialog").close());
   $("close-dialog").addEventListener("click", () => $("task-dialog").close());
   $("refresh").addEventListener("click", () => { state.metadata = false; loadPage(); });
-  $("language").addEventListener("change", () => language($("language").value).catch((error) => toast(error.message)));
   window.addEventListener("hashchange", loadPage);
   // Leave focused row controls and the detail dialog stable while they are in use.
   setInterval(() => {
@@ -577,9 +570,7 @@
         !document.activeElement?.closest(".table-wrap") && ["overview", "tasks"].includes(state.page)) loadPage();
   }, 3000);
   async function boot() {
-    let preferred;
-    try { preferred = localStorage.getItem("saveany.admin.language"); } catch { /* Browser storage can be disabled. */ }
-    await language(preferred || (navigator.language.startsWith("zh") ? "zh-Hans" : "en"));
+    await loadLanguage(navigator.language.startsWith("zh") ? "zh-Hans" : "en");
     try {
       const session = await request("session"); state.csrf = session.csrf_token; state.authenticated = true;
       $("boot").hidden = true; $("login-view").hidden = true; $("console").hidden = false; await loadPage();

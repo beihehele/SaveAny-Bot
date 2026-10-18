@@ -1,5 +1,4 @@
 {
-  "language": "语言",
   "consoleName": "管理控制台",
   "workspace": "工作台",
   "administrator": "管理员",
@@ -18,7 +17,7 @@
   "preferences": "保存设置",
   "diagnostics": "系统诊断",
   "refresh": "刷新",
-  "logout": "退出登录",
+  "logout": "登出",
   "overviewDescription": "查看当前实例的运行情况，或开始一个新的保存任务。",
   "serviceInformation": "服务信息",
   "taskCapabilities": "任务能力",
