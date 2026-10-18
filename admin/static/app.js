@@ -140,11 +140,13 @@
     const values = [[t("taskID"), task.task_id], [t("title"), task.title], [t("status"), t(taskStatusKey(task))],
       [t("scope"), scopeLabel(task)], [t("taskType"), t(task.type || "unknownType")],
       [t("source"), t(`source_${task.source || "unknown"}`)], [t("storage"), task.storage], [t("path"), task.path], [t("createdAt"), date(task.created_at)]];
-    if (task.progress) values.push([t("progress"), `${Number(task.progress.percent || 0).toFixed(1)}%`],
-      [t("downloaded"), `${bytes(task.progress.downloaded_bytes)} / ${bytes(task.progress.total_bytes)}`],
-      [t("fileCount"), `${task.progress.downloaded_files || 0} / ${task.progress.total_files || 0}`]);
+    if (task.progress) {
+      values.push([t(task.downloading ? "downloadProgress" : "progress"), `${Number(task.progress.percent || 0).toFixed(1)}%`],
+        [t("downloaded"), `${bytes(task.progress.downloaded_bytes)} / ${bytes(task.progress.total_bytes)}`]);
+      if (task.progress.total_files) values.push([t("fileCount"), `${task.progress.downloaded_files || 0} / ${task.progress.total_files}`]);
+    }
     for (const line of inputLines(task)) values.push([t("inputResults"), line]);
-    if (task.result_summary) {
+    if (task.result_summary && !task.downloading) {
       const counts = task.result_summary;
       if (task.type === "copy") {
         values.push([t("resultUnit"), t("copyResultUnit")],
@@ -159,7 +161,10 @@
     }
     if (task.copy_outcome) values.push([t("result"), t(`copyOutcome_${task.copy_outcome}`)]);
     for (const file of task.upload_files || []) {
-      values.push([file.saved_path || file.path, `${t(`upload_${file.status}`)} · ${bytes(file.uploaded_bytes)} / ${bytes(file.size)}`]);
+      const detail = task.downloading && file.status === "preparing"
+        ? `${t("upload_preparing")} · ${bytes(file.size)}`
+        : `${t(`upload_${file.status}`)} · ${bytes(file.uploaded_bytes)} / ${bytes(file.size)}`;
+      values.push([file.saved_path || file.path, detail]);
       if (file.next_attempt_at && file.status === "retry_wait") values.push([t("nextRetry"), date(file.next_attempt_at)]);
       if (file.error) values.push([t("error"), file.error]);
       if (file.cleanup_error) values.push([t("cleanupPending"), file.cleanup_error]);
@@ -183,7 +188,7 @@
       const title = node("div");
       title.append(node("div", task.title || task.task_id, "cell-title"), node("div", `${task.task_id} · ${t(`source_${task.source || "unknown"}`)} · ${scopeLabel(task)}`, "cell-subtitle"));
       const progress = node("div", null, "progress");
-      if (task.result_summary) {
+      if (task.result_summary && !task.downloading) {
         const counts = task.result_summary;
         progress.append(node("span", `${t("resultSucceeded")}: ${counts.succeeded ?? "—"} / ${counts.total ?? "—"}`),
           node("span", `${t(task.type === "copy" ? "resultFailed" : "resultUnsaved")}: ${counts.failed ?? "—"}`, "cell-subtitle"));
@@ -195,8 +200,9 @@
         const percent = Math.min(100, Math.max(0, Number(task.progress.percent || 0)));
         const meter = node("progress"); meter.max = 100; meter.value = percent;
         meter.setAttribute("aria-label", `${t("progress")} ${percent.toFixed(1)}%`);
-        progress.append(node("span", `${percent.toFixed(1)}%`), meter, node("span", `${bytes(task.progress.downloaded_bytes)} · ${Number(task.progress.speed_mbps || 0).toFixed(1)} MB/s`, "cell-subtitle"));
-      } else { progress.textContent = "—"; }
+        const speed = task.progress.speed_mbps === undefined ? "" : ` · ${Number(task.progress.speed_mbps).toFixed(1)} MB/s`;
+        progress.append(node("span", `${task.downloading ? t("downloadProgress") + ": " : ""}${percent.toFixed(1)}%`), meter, node("span", `${bytes(task.progress.downloaded_bytes)}${speed}`, "cell-subtitle"));
+      } else { progress.textContent = task.downloading ? t("upload_preparing") : "—"; }
       const actions = node("div", null, "table-actions");
       actions.append(button(t("details"), () => taskDetails(task)));
       if (task.can_cancel) {
@@ -282,6 +288,7 @@
     return value;
   }
   function taskStatusKey(task) {
+    if (task.downloading && task.status === "running") return "upload_preparing";
     if (task.upload_files?.length) {
       if (task.status === "completed") {
         if (task.upload_files.every((f) => f.status === "skipped")) return "upload_skipped";

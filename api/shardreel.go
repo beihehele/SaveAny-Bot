@@ -37,9 +37,13 @@ func uploadResponse(group database.ShardReelTask, files []database.ShardReelFile
 	}
 	response := TaskInfoResponse{TaskID: group.ID, Type: tasktype.TaskTypeTgfiles, Status: TaskStatus(group.Status), Title: group.Title, Source: group.Source,
 		Storage: strings.Join(stores, ", "), Error: group.Error, CreatedAt: group.CreatedAt, UpdatedAt: group.UpdatedAt,
-		ResultSummary: &counts, UploadFiles: files}
+		ResultSummary: &counts, UploadFiles: files, Downloading: !group.DownloadDone && group.Status == "running" && !group.CancelRequested}
 	if current, ok := GetTask(group.ID); ok {
-		response.Report = convertTaskProgressToResponse(current).Report
+		live := convertTaskProgressToResponse(current)
+		response.Report = live.Report
+		if response.Downloading {
+			response.Progress = live.Progress
+		}
 	}
 	if len(files) == 1 {
 		response.Path = files[0].Path

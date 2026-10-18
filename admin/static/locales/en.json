@@ -357,6 +357,7 @@
   "taskSubmissionUnknown": "The task may already have been created. Check the task list before submitting again.",
   "setting_scan_timeout": "History scan page timeout",
   "upload_preparing": "Downloading",
+  "downloadProgress": "Download progress",
   "upload_queued": "Waiting to upload",
   "upload_uploading": "Uploading",
   "upload_processing": "Waiting for remote ingest",

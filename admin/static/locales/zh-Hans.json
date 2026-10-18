@@ -357,6 +357,7 @@
   "taskSubmissionUnknown": "尚未确认任务是否已创建。请先查看任务列表，避免重复提交。",
   "setting_scan_timeout": "历史扫描单页时限",
   "upload_preparing": "正在下载",
+  "downloadProgress": "下载进度",
   "upload_queued": "等待上传",
   "upload_uploading": "正在上传",
   "upload_processing": "等待网盘入库",

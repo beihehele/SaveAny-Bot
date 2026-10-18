@@ -50,7 +50,7 @@ func TestMessageRPCStopsAliasRetriesOnCancellationDeadlineAndFloodWait(t *testin
 	}
 	cache.Init()
 	for _, kind := range []string{"single", "range"} {
-		for _, cause := range []error{context.Canceled, context.DeadlineExceeded, tgerr.New(420, "FLOOD_WAIT_10")} {
+		for _, cause := range []error{context.Canceled, context.DeadlineExceeded, tgerr.New(420, "FLOOD_WAIT_10"), tgerr.New(400, "CHANNEL_PRIVATE"), tgerr.New(400, "CHANNEL_INVALID"), errors.New("connection lost")} {
 			calls := 0
 			peers := peerstore.NewPeerStorage(nil, true)
 			peers.AddPeer(111, 1, peerstore.TypeChannel, "source")

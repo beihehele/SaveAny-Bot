@@ -67,6 +67,8 @@ func (s *Server) taskRows(ctx context.Context) []taskRow {
 		row, exists := byID[record.ID]
 		if !exists {
 			row = taskRow{TaskInfoResponse: api.TaskInfoResponse{TaskID: record.ID, Type: tasktype.TaskType(record.Type), Title: s.redact(record.Title), Status: api.TaskStatus(record.Status), Error: s.redact(record.Error), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, ResultSummary: record.ResultSummary}, Scope: "history"}
+		}
+		if !exists || row.Downloading && row.Progress == nil {
 			if record.TotalBytes > 0 || record.TotalFiles > 0 {
 				progress := &api.TaskProgress{TotalBytes: record.TotalBytes, DownloadedBytes: record.DownloadedBytes, TotalFiles: record.TotalFiles, DownloadedFiles: record.DownloadedFiles}
 				if record.TotalBytes > 0 {
@@ -76,6 +78,7 @@ func (s *Server) taskRows(ctx context.Context) []taskRow {
 				}
 				row.Progress = progress
 			}
+			row.UpdatedAt = record.UpdatedAt
 		}
 		row.Source = record.Source
 		byID[record.ID] = row

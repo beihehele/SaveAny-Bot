@@ -148,7 +148,11 @@ func Summary(group database.ShardReelTask, files []database.ShardReelFile) taskr
 			previous.Elements = append(previous.Elements, taskresult.Element{ID: file.ElementID, Name: file.Path, State: taskresult.Pending})
 		}
 		for len(previous.Elements) < group.ExpectedFiles {
-			previous.Elements = append(previous.Elements, taskresult.Element{ID: fmt.Sprint("interrupted_", len(previous.Elements)), State: taskresult.Interrupted})
+			state := taskresult.Interrupted
+			if !group.DownloadDone && group.Status == "running" {
+				state = taskresult.Pending
+			}
+			previous.Elements = append(previous.Elements, taskresult.Element{ID: fmt.Sprint("missing_", len(previous.Elements)), State: state})
 		}
 	}
 	for index := range previous.Elements {

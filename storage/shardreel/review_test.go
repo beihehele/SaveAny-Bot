@@ -113,6 +113,26 @@ func TestDiscardIncludesMembersThatNeverReachedOutbox(t *testing.T) {
 	}
 }
 
+func TestSummaryWaitsForUnstartedDownloads(t *testing.T) {
+	group := database.ShardReelTask{Status: "running", ExpectedFiles: 4}
+	files := []database.ShardReelFile{{ElementID: "first", Status: "preparing"}, {ElementID: "second", Status: "preparing"}}
+	result := Summary(group, files)
+	if result.Total != 4 || result.Pending != 4 || result.Interrupted != 0 {
+		t.Fatalf("unstarted downloads reported as interrupted: %+v", result)
+	}
+	group.DownloadDone = true
+	result = Summary(group, files)
+	if result.Pending != 2 || result.Interrupted != 2 {
+		t.Fatalf("finished download lost missing members: %+v", result)
+	}
+	group.DownloadDone = false
+	group.CancelRequested = true
+	result = Summary(group, files)
+	if result.Cancelled != 2 || result.Pending != 2 || result.Interrupted != 0 {
+		t.Fatalf("cancellation lost unstarted members: %+v", result)
+	}
+}
+
 func TestDiscardReconcilesAndPrunesPreviouslyFailedTask(t *testing.T) {
 	s := fixture(t, "http://unused.invalid")
 	row := stage(t, s, []byte("discard"), "discard")

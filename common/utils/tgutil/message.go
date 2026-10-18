@@ -1,7 +1,6 @@
 package tgutil
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -11,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf16"
 
+	mtperrors "github.com/celestix/gotgproto/errors"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/duke-git/lancet/v2/mathutil"
 	"github.com/duke-git/lancet/v2/slice"
@@ -19,7 +19,6 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gotd/td/constant"
 	"github.com/gotd/td/tg"
-	"github.com/gotd/td/tgerr"
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/strutil"
@@ -283,8 +282,9 @@ func groupedMessages(ctx *ext.Context, chatID int64, msg *tg.Message, fetch func
 }
 
 func stopMessageLookup(ctx *ext.Context, err error) bool {
-	_, flood := tgerr.AsFloodWait(err)
-	return ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || flood
+	// Only a missing local peer warrants trying another Telegram ID form.
+	// RPC and message errors must not be replaced by a later peer-cache miss.
+	return ctx.Err() != nil || !errors.Is(err, mtperrors.ErrPeerNotFound)
 }
 
 func ExtractMessageEntityUrls(msg *tg.Message) []string {

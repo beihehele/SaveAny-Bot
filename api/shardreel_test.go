@@ -14,6 +14,7 @@ import (
 
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/database"
+	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 )
 
 func TestUploadResponsesBatchQueriesPreserveProjections(t *testing.T) {
@@ -118,5 +119,33 @@ func TestUploadMergeUsesDurableStateAndKeepsOrdinaryTasks(t *testing.T) {
 	if len(result) != 3 || result[0].Status != TaskStatusCancelled || result[0].Path != "/caption/file.bin" ||
 		result[1].TaskID != "ordinary" || result[1].Status != TaskStatusCompleted || result[2].TaskID != "new" {
 		t.Fatalf("incorrect merged observations: %+v", result)
+	}
+}
+
+func TestUploadResponseKeepsLiveDownloadProgressOnlyDuringDownload(t *testing.T) {
+	const id = "live-download-projection"
+	RegisterTask(id, "tgfiles", "outbox", "", "album", "")
+	t.Cleanup(func() { DeleteTask(id) })
+	live, ok := GetTask(id)
+	if !ok {
+		t.Fatal("missing observer")
+	}
+	live.Emit(taskevent.Event{TaskID: id, Phase: taskevent.PhaseStart})
+	live.Emit(taskevent.Event{TaskID: id, Phase: taskevent.PhaseProgress, TotalBytes: 1000, DownloadedBytes: 250})
+	group := database.ShardReelTask{ID: id, Status: "running", ExpectedFiles: 2}
+	files := []database.ShardReelFile{{ElementID: "one", Status: "preparing", Size: 1000}}
+	response := uploadResponse(group, files)
+	if !response.Downloading || response.Progress == nil || response.Progress.Percent != 25 || response.Progress.DownloadedBytes != 250 || response.ResultSummary.Interrupted != 0 {
+		t.Fatalf("lost active download: %+v", response)
+	}
+	group.DownloadDone = true
+	response = uploadResponse(group, files)
+	if response.Downloading || response.Progress != nil || response.ResultSummary.Interrupted != 1 {
+		t.Fatalf("stale download progress survived upload handoff: %+v", response)
+	}
+	group.DownloadDone = false
+	group.CancelRequested = true
+	if response = uploadResponse(group, files); response.Downloading || response.Progress != nil {
+		t.Fatalf("cancelled download still shown as active: %+v", response)
 	}
 }
