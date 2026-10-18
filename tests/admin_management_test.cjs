@@ -8,6 +8,44 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "../admin/static/management
 const filter = context.SaveAnyManagement.keywordFilter;
 const matchingChats = context.SaveAnyManagement.matchingChats;
 
+test("combined expressions keep operators while simple keywords remain literal", () => {
+  const expression = context.SaveAnyManagement.expressionFilter;
+  assert.equal(expression(" msgre:舞团&(king8|k8) "), "msgre:舞团&(king8|k8)");
+  assert.equal(expression("舞团 & (king8 | k8)"), "msgre:舞团 & (king8 | k8)");
+  assert.equal(filter("any", "舞团&(king8|k8)", ""), 'msgre:("舞团&(king8|k8)")');
+  assert.throws(() => expression("msgre: "), /invalid_filter/);
+  assert.throws(() => expression("中".repeat(86)), /filterTooLong/);
+});
+
+test("copy rendering distinguishes scanning, processing, no matches and partial results", () => {
+  class Element {
+    constructor() { this.children=[];this.dataset={};this.valueText=""; }
+    set textContent(value) { this.valueText=String(value);this.children=[]; }
+    get textContent() { return this.valueText+this.children.map(c=>c.textContent||"").join(" "); }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children=children;this.valueText=""; }
+    addEventListener() {} setAttribute() {} showModal() {}
+  }
+  const elements=new Map();
+  const get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
+  const app=vm.createContext({Node:Element,document:{getElementById:get,createElement:()=>new Element()}});
+  const source=fs.readFileSync(path.join(__dirname,"../admin/static/app.js"),"utf8");
+  vm.runInContext(source.slice(0,source.indexOf("  const preferences ="))+"globalThis.render=tasksTable;globalThis.words=state.words;})();",app);
+  Object.assign(app.words,JSON.parse(fs.readFileSync(path.join(__dirname,"../admin/static/locales/en.json"),"utf8")));
+  const row={task_id:"copy",type:"copy",status:"running",copy_progress:{stage:"scanning",requested:100,matched:2,processed:0},result_summary:{total:0,pending:0,running:0,succeeded:0,failed:0,cancelled:0,interrupted:0}};
+  const list=new Element();app.render(list,[row]);
+  assert.match(list.textContent,/Searching, matched \/ requested: 2 \/ 100/);
+  assert.doesNotMatch(list.textContent,/%|Succeeded: 0 \/ 0/);
+  row.copy_progress={stage:"forwarding",requested:100,matched:3,processed:2};
+  row.result_summary={total:3,pending:1,running:0,succeeded:1,failed:1,cancelled:0,interrupted:0};
+  app.render(list,[row]);assert.match(list.textContent,/processed: 2 \/ 3 \(66%\)/);assert.match(list.textContent,/Succeeded: 1 · Failed: 1/);
+  row.status="cancelled";row.result_summary.pending=0;row.result_summary.cancelled=1;
+  app.render(list,[row]);assert.match(list.textContent,/Unfinished: 1/);assert.doesNotMatch(list.textContent,/%/);
+  row.status="completed";row.copy_progress.matched=0;row.result_summary={total:0,pending:0,running:0,succeeded:0,failed:0,cancelled:0,interrupted:0};
+  app.render(list,[row]);assert.match(list.textContent,/No matching media found/);assert.match(list.textContent,/Requested up to: 100 · Matched: 0/);
+  row.status="failed";app.render(list,[row]);assert.doesNotMatch(list.textContent,/No matching media found/);
+});
+
 test("source dropdown searches literal names and canonical IDs", () => {
   const chats = [{id:-1000000000011,title:"旅行 A"},{id:-1000000000012,title:"Travel B"}];
   assert.equal(matchingChats(chats, "旅行").length, 1);

@@ -226,6 +226,7 @@ func (m ManagementService) CreateCopy(ctx, serviceCtx context.Context, req Route
 		return "", ErrManagementConflict
 	}
 	task := copyfwd.NewTask(id, req.UserChatID, route.ChatID, route.TargetID, route.TargetTopicID, route.Filter, req.Count, nil)
+	task.SourceName, task.TargetName, task.TopicName = route.SourceName, route.TargetName, route.TargetTopicName
 	if err := core.AddTask(taskhistory.WithSource(serviceCtx, "admin"), task); err != nil {
 		task.Discard()
 		return "", err

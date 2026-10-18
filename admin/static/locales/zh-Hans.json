@@ -440,5 +440,17 @@
   "task_not_found": "任务记录不存在，请刷新列表。",
   "task_not_finished": "任务仍在执行、清理或发送结果，请稍后再试。",
   "task_delete_failed": "记录未删除：上传取消或清理尚未完成。请稍后重试；若持续失败，请检查 ShardReel 连接及服务日志。",
-  "audit_delete_task": "删除任务记录"
+  "audit_delete_task": "删除任务记录",
+  "filterMode": "过滤方式",
+  "simpleKeywords": "简单关键词",
+  "combinedExpression": "组合表达式",
+  "expressionNote": "例如 舞团&(king8|k8)。& 表示同时满足，| 表示任一满足，! 表示排除，() 用于分组；不是正则。可省略 msgre: 前缀，最多 16 个关键词、256 个 UTF-8 字节。",
+  "invalid_filter": "筛选表达式无效，请检查括号、运算符及关键词；最多 16 个关键词、256 个 UTF-8 字节。",
+  "copyScanning": "检索中，已匹配 / 最多",
+  "copyForwarding": "复制中，已处理",
+  "copyNoMatches": "未找到符合条件的媒体",
+  "copyRequested": "请求最多",
+  "copyMatched": "实际匹配",
+  "copyUnfinished": "未完成",
+  "expressionPlaceholder": "msgre:舞团&(king8|k8)"
 }

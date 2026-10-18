@@ -137,10 +137,31 @@
     $("input-details").textContent = t("inputSelectionNote") + "\n\n" + lines.join("\n");
     if (!$("input-dialog").open) $("input-dialog").showModal();
   }
+  function copyProgressLines(task) {
+    const p = task.copy_progress, counts = task.result_summary;
+    if (!p) return [];
+    const terminal = ["completed", "failed", "cancelled"].includes(task.status);
+    const lines = [];
+    if (!terminal) {
+      if (p.stage === "scanning") lines.push(`${t("copyScanning")}: ${p.matched} / ${p.requested}`);
+      else lines.push(`${t("copyForwarding")}: ${p.processed} / ${p.matched} (${Math.floor(100 * p.processed / Math.max(1, p.matched))}%)`);
+    }
+    if (terminal) {
+      if (task.status === "completed" && p.matched === 0) lines.push(t("copyNoMatches"));
+      lines.push(`${t("copyRequested")}: ${p.requested} · ${t("copyMatched")}: ${p.matched}`);
+    }
+    if (counts && counts.total > 0 && (terminal || p.stage === "forwarding")) {
+      lines.push(`${t("resultSucceeded")}: ${counts.succeeded} · ${t("resultFailed")}: ${counts.failed}`);
+      if (terminal && counts.pending + counts.cancelled + counts.interrupted > 0) lines.push(`${t("copyUnfinished")}: ${counts.pending + counts.cancelled + counts.interrupted}`);
+    }
+    lines.push(t("copyCountUnit"));
+    return lines;
+  }
   function taskDetails(task) {
     const values = [[t("taskID"), task.task_id], [t("title"), task.title], [t("status"), t(taskStatusKey(task))],
       [t("scope"), scopeLabel(task)], [t("taskType"), t(task.type || "unknownType")],
       [t("source"), t(`source_${task.source || "unknown"}`)], [t("storage"), task.storage], [t("path"), task.path], [t("createdAt"), date(task.created_at)]];
+    if (task.copy_progress) values.push([t("progressResult"), copyProgressLines(task).join("\n")]);
     if (task.progress) {
       values.push([t(task.downloading ? "downloadProgress" : "progress"), `${Number(task.progress.percent || 0).toFixed(1)}%`],
         [t("downloaded"), `${bytes(task.progress.downloaded_bytes)} / ${bytes(task.progress.total_bytes)}`]);
@@ -205,7 +226,15 @@
       const title = node("div");
       title.append(node("div", task.title || task.task_id, "cell-title"), node("div", `${task.task_id} · ${t(`source_${task.source || "unknown"}`)} · ${scopeLabel(task)}`, "cell-subtitle"));
       const progress = node("div", null, "progress");
-      if (task.result_summary && !task.downloading) {
+      if (task.copy_progress) {
+        progress.className = "progress copy-progress";
+        copyProgressLines(task).forEach((line, index) => progress.append(node("span", line, index ? "cell-subtitle" : "")));
+        if (task.copy_progress.stage === "forwarding" && ["running", "cancelling"].includes(task.status)) {
+          const p = task.copy_progress, meter = node("progress");
+          meter.max = Math.max(1, p.matched); meter.value = p.processed;
+          meter.setAttribute("aria-label", t("copyForwarding")); progress.append(meter);
+        }
+      } else if (task.result_summary && !task.downloading) {
         const counts = task.result_summary;
         progress.append(node("span", `${t("resultSucceeded")}: ${counts.succeeded ?? "—"} / ${counts.total ?? "—"}`),
           node("span", `${t(task.type === "copy" ? "resultFailed" : "resultUnsaved")}: ${counts.failed ?? "—"}`, "cell-subtitle"));

@@ -37,6 +37,8 @@ func TestConsoleCopyCountsKeepCompletionAndPendingMeaning(t *testing.T) {
 			ctx, rollback, _ := taskhistory.Default.Track(t.Context(), tc.id, "copy", "synthetic copy")
 			defer rollback()
 			taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseStart})
+			progress := taskevent.CopyProgress{Stage: "forwarding", Requested: 100, Matched: tc.counts.Total, Processed: tc.counts.Succeeded + tc.counts.Failed}
+			taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseProgress, CopyProgress: &progress, ResultSummary: &tc.counts})
 			taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseDone, Outcome: tc.outcome, ResultSummary: &tc.counts})
 			response := perform(s, http.MethodGet, "/admin/api/v1/tasks?q="+tc.id, "", cookie, csrf, "")
 			var body struct {
@@ -46,6 +48,9 @@ func TestConsoleCopyCountsKeepCompletionAndPendingMeaning(t *testing.T) {
 				t.Fatalf("invalid history response: %d %s", response.Code, response.Body.String())
 			}
 			row := body.Tasks[0]
+			if row.CopyProgress == nil || *row.CopyProgress != progress {
+				t.Fatalf("copy progress missing from HTTP history: %+v", row)
+			}
 			if row.CopyOutcome != tc.copyOutcome {
 				t.Fatalf("copy result hidden/misclassified: %+v", row)
 			}

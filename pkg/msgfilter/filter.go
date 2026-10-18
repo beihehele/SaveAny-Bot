@@ -33,7 +33,7 @@ func ParseFilter(filter string) (Node, error) {
 	}
 	expr := strings.TrimSpace(filter[len(Prefix):])
 	if expr == "" {
-		return nil, errInvalidExpr
+		return nil, ErrInvalidExpression
 	}
 	return Parse(expr)
 }

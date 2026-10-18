@@ -68,3 +68,7 @@ Page loads, browser reloads and target changes read SQLite snapshots without Tel
 Each row shows only Details + Cancel or Details + Delete. Both execute immediately without a confirmation dialog. Queued, downloading, uploading and automatic-retry waits are active. Cancellation cleanup disables the action until execution ends. Cancellation does not undo saved files or sent messages.
 
 Deletion removes task history, file details and retained upload payloads only. Saved local/ShardReel files, Telegram messages and watch routes remain. For ShardReel it stops retries, confirms remote cancellation or completion, cleans staged files and acknowledges receipts before removing records. Incomplete cleanup retains the record with an error; try deleting again shortly. Executing tasks and pending result delivery block deletion. Deletion is irreversible. Success removes the row and falls back to a valid page if necessary.
+
+### Combined filters and copy progress
+
+Copy and watch support simple keywords or a combined expression such as `msgre:dance&(king8|k8)`. Existing text previews use the same parser; invalid expressions cannot create a task. Copy tasks show search matches, actual copying progress and success/failure results, with no search percentage. Titles contain source, full filter, target and optional `Topic:Name(id)`; omit the suffix without a topic. Cancellation and history-deletion boundaries are unchanged.

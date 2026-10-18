@@ -68,7 +68,8 @@ func handleCopyCmd(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 
-	if _, err := resolveWatchChatTitle(uctx, sourceID); err != nil {
+	sourceName, err := resolveWatchChatTitle(uctx, sourceID)
+	if err != nil {
 		logger.Errorf("UserBot cannot access source chat %d: %s", sourceID, err)
 		ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorSourceUnreachable, map[string]any{
 			"Source": sourceID,
@@ -86,8 +87,10 @@ func handleCopyCmd(ctx *ext.Context, update *ext.Update) error {
 		})), nil)
 		return dispatcher.EndGroups
 	}
+	topicName := ""
 	if targetTopicID > 0 {
-		if _, err := resolveForumTopicByID(uctx, targetID, targetTopicID); err != nil {
+		topicName, err = resolveForumTopicByID(uctx, targetID, targetTopicID)
+		if err != nil {
 			switch {
 			case errors.Is(err, errNotForumGroup):
 				ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorTargetNotForum, map[string]any{"Target": targetName})), nil)
@@ -112,7 +115,7 @@ func handleCopyCmd(ctx *ext.Context, update *ext.Update) error {
 		case errors.Is(err, errWatchFilterTypeUnsupported):
 			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorFilterTypeUnsupported)), nil)
 		default:
-			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorInvalidRegex, map[string]any{"Error": err.Error()})), nil)
+			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorFilterExpressionInvalid)), nil)
 		}
 		return dispatcher.EndGroups
 	}
@@ -124,11 +127,9 @@ func handleCopyCmd(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 
-	msg, err := ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgProgressCopyScanning, map[string]any{
-		"Matched": 0,
-		"Count":   parsed.Count,
-		"At":      0,
-	})), &ext.ReplyOpts{
+	task := copyfwd.NewTask(taskID, userChatID, sourceID, targetID, targetTopicID, filter, parsed.Count, nil)
+	task.SourceName, task.TargetName, task.TopicName = sourceName, targetName, topicName
+	msg, err := ctx.Reply(update, ext.ReplyTextString(task.Title()+"\n\n"+i18n.T(i18nk.BotMsgTasksStatusQueued)), &ext.ReplyOpts{
 		Markup: &tg.ReplyInlineMarkup{
 			Rows: []tg.KeyboardButtonRow{
 				{
@@ -145,17 +146,7 @@ func handleCopyCmd(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 
-	progress := copyfwd.NewProgressTracker(msg.ID, userChatID, taskID)
-	task := copyfwd.NewTask(
-		taskID,
-		userChatID,
-		sourceID,
-		targetID,
-		targetTopicID,
-		filter,
-		parsed.Count,
-		progress,
-	)
+	task.Progress = copyfwd.NewProgressTracker(msg.ID, userChatID, taskID, task.Title(), parsed.Count)
 	injectCtx := tgutil.ExtWithContext(ctx.Context, ctx)
 	if err := core.AddTask(injectCtx, task); err != nil {
 		copyfwd.End(userChatID, taskID)

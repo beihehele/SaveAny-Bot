@@ -16,6 +16,13 @@
     return parts.length ? "msgre:" + parts.join("&") : "";
   }
 
+  function expressionFilter(value) {
+    const expression = value.trim().replace(/^msgre:/, "").trim();
+    if (!expression) throw new Error("invalid_filter");
+    if (new TextEncoder().encode(expression).length > 256) throw new Error("filterTooLong");
+    return "msgre:" + expression;
+  }
+
   function matchingChats(chats, search) {
     const query = search.trim().toLocaleLowerCase();
     return [...chats].filter((chat) => `${chat.title} ${chat.id}`.toLocaleLowerCase().includes(query))
@@ -32,8 +39,10 @@
     const option = (label, value) => { const o = node("option", label); o.value = value; return o; };
     const radio = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || "";
     const destination = (p) => p === "watch" && radio("watch-destination") === "local" ? "0" : $(`${p}-target`).value;
-    const filter = (p) => keywordFilter(radio(`${p}-filter-mode`), $(`${p}-keywords`).value, $(`${p}-exclude`).value);
+    const expressionMode = (p) => radio(`${p}-filter-format`) === "expression";
+    const filter = (p) => expressionMode(p) ? expressionFilter($(`${p}-expression`).value) : keywordFilter(radio(`${p}-filter-mode`), $(`${p}-keywords`).value, $(`${p}-exclude`).value);
     function filterSummary(p) {
+      if (expressionMode(p)) return $(`${p}-expression`).value.trim() || t("combinedExpression");
       const include = keywordLines($(`${p}-keywords`).value), exclude = keywordLines($(`${p}-exclude`).value);
       return [include.length ? `${t(radio(`${p}-filter-mode`) === "all" ? "keywordAll" : "keywordAny")}: ${include.join("、")}` : "",
         exclude.length ? `${t("excludedKeywords")}: ${exclude.join("、")}` : ""].filter(Boolean).join(" · ") || t("noFiltering");
@@ -44,6 +53,8 @@
       if (message) $(`${p}-filter-details`).open = true;
     }
     function updateFilter(p) {
+      $(`${p}-simple-filter`).hidden = expressionMode(p);
+      $(`${p}-expression-fields`).hidden = !expressionMode(p);
       $(`${p}-filter-summary`).textContent = filterSummary(p);
       try { filter(p); showFilterError(p, ""); }
       catch (error) { showFilterError(p, t(error.message)); }
@@ -230,7 +241,7 @@
       for (const name of ["source-refresh", "target-refresh"]) $(`${p}-${name}`).addEventListener("click", () => loadChats(p, true));
       $(`${p}-target`).addEventListener("change", () => loadTopics(p));
       $(`${p}-topics-refresh`).addEventListener("click", () => loadTopics(p, true));
-      for (const name of ["filter-mode", "keywords", "exclude"]) $(`${p}-${name}`).addEventListener("input", () => {
+      for (const name of ["filter-mode", "filter-format", "expression", "keywords", "exclude"]) $(`${p}-${name}`).addEventListener("input", () => {
         updateFilter(p); $(`${p}-filter-result`).textContent = "";
       });
       $(`${p}-sample`).addEventListener("input", () => { $(`${p}-filter-result`).textContent = ""; });
@@ -238,9 +249,10 @@
         const trigger = $(`${p}-filter-test`), f = forms[p]; if (trigger.disabled || f.busy) return;
         f.previewLoading = true; controls(p);
         const user = f.user, generation = f.generation, value = $(`${p}-sample`).value;
-        const mode = radio(`${p}-filter-mode`), included = $(`${p}-keywords`).value, excluded = $(`${p}-exclude`).value;
+        const snapshot = () => JSON.stringify([radio(`${p}-filter-format`), radio(`${p}-filter-mode`), $(`${p}-expression`).value, $(`${p}-keywords`).value, $(`${p}-exclude`).value]);
+        const before = snapshot();
         const current = () => authenticated() && user === f.user && generation === f.generation && value === $(`${p}-sample`).value &&
-          mode === radio(`${p}-filter-mode`) && included === $(`${p}-keywords`).value && excluded === $(`${p}-exclude`).value;
+          before === snapshot();
         try {
           const expression = filter(p);
           const data = await request("preview", { method: "POST", body: JSON.stringify({ user_chat_id: Number(user), filter: expression, text: value, template: "{{.origname}}", original_name: "sample" }) });
@@ -255,7 +267,7 @@
         if (!target || source === target) { toast(t("chooseDifferentTarget")); return; }
         let expression; try { expression = filter(p); } catch (error) {
           showFilterError(p, t(error.message));
-          const field = $(`${p}-keywords`).value.trim() ? "keywords" : "exclude";
+          const field = expressionMode(p) ? "expression" : $(`${p}-keywords`).value.trim() ? "keywords" : "exclude";
           $(`${p}-${field}`).focus(); return;
         }
         const owner = users.find((u) => String(u.chat_id) === f.user);
@@ -315,5 +327,5 @@
       }
     };
   }
-  globalThis.SaveAnyManagement = { init, keywordFilter, matchingChats };
+  globalThis.SaveAnyManagement = { init, keywordFilter, expressionFilter, matchingChats };
 })();

@@ -15,6 +15,7 @@ import (
 	"github.com/krau/SaveAny-Bot/common/i18n"
 	"github.com/krau/SaveAny-Bot/common/i18n/i18nk"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 func progressContextClient(t *testing.T, invoke telegram.InvokeFunc) *ext.Context {
@@ -87,7 +88,7 @@ func TestCopyTerminalProgressKeepsOneBoundedBudgetAfterCancellation(t *testing.T
 	caller, cancel := context.WithCancel(context.WithValue(t.Context(), taskContextKey{}, "copy-task"))
 	caller = tgutil.ExtWithContext(caller, client)
 	cancel()
-	(&Progress{MessageID: 7, ChatID: 42, TaskID: "copy-task"}).OnDone(caller, 0, 0, context.Canceled)
+	(&Progress{MessageID: 7, ChatID: 42, TaskID: "copy-task"}).OnDone(caller, taskresult.Counts{}, context.Canceled)
 	if calls != 2 || client.Err() != nil || caller.Err() != context.Canceled {
 		t.Fatalf("unexpected fallback or context mutation: calls=%d shared=%v caller=%v", calls, client.Err(), caller.Err())
 	}

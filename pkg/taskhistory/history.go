@@ -40,6 +40,7 @@ type Record struct {
 	TotalBytes, DownloadedBytes            int64
 	TotalFiles, DownloadedFiles            int
 	ResultSummary                          *taskresult.Counts
+	CopyProgress                           *taskevent.CopyProgress
 }
 
 type entry struct {
@@ -142,6 +143,14 @@ func (e *entry) Emit(event taskevent.Event) {
 		r.Status = "running"
 	case taskevent.PhaseProgress:
 		r.Status = "running"
+		if event.CopyProgress != nil {
+			progress := *event.CopyProgress
+			r.CopyProgress = &progress
+		}
+		if event.ResultSummary != nil && event.ResultSummary.Valid() {
+			counts := *event.ResultSummary
+			r.ResultSummary = &counts
+		}
 		if event.TotalBytes > 0 {
 			r.TotalBytes = event.TotalBytes
 		}
@@ -213,6 +222,10 @@ func (s *Store) Snapshots() []Record {
 		if r.ResultSummary != nil {
 			counts := *r.ResultSummary
 			r.ResultSummary = &counts
+		}
+		if r.CopyProgress != nil {
+			progress := *r.CopyProgress
+			r.CopyProgress = &progress
 		}
 		out = append(out, r)
 	}

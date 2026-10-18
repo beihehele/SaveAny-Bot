@@ -93,14 +93,8 @@ func andSearchSeed(n *And) string {
 			}
 		}
 	}
-	for _, ch := range n.Children {
-		if _, ok := ch.(*Not); ok {
-			continue
-		}
-		for _, s := range branchSearchSeed(ch) {
-			return s
-		}
-	}
+	// No single positive term is required by every branch. Searching only one
+	// alternative of (a|b)&(c|d), for example, would miss b&c. Scan history instead.
 	return ""
 }
 

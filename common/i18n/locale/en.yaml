@@ -107,6 +107,10 @@ bot:
       prompt_select_filename_strategy: "Please select filename strategy, current strategy: {{.Strategy}}"
       prompt_select_option: Please select an option to configure
     copy:
+      all_media: All media
+      no_matches: No matching media found
+      selection: "Requested up to {{.Requested}} items; matched {{.Matched}} (messages or whole albums)"
+      counts: "Succeeded {{.OK}}, failed {{.Fail}}, unfinished {{.Pending}}"
       error_already_running: A copy task is already running; cancel it or wait until it finishes
       error_count_too_large: count is too large; maximum is {{.Max}}
       error_target_forbidden: copy does not support local save; please specify a target chat
@@ -175,7 +179,7 @@ bot:
       batch_start_prefix: "Starting batch download task\nTotal size: "
       copy_canceled: Copy task canceled
       copy_done: "Done: ok {{.OK}}, fail {{.Fail}}"
-      copy_forwarding: Sending {{.Done}}/{{.Total}}
+      copy_forwarding: "Copying: processed {{.Done}}/{{.Total}} ({{.Percent}}%), succeeded {{.OK}}, failed {{.Fail}}"
       copy_scanning: "Scanning {{.Matched}}/{{.Count}} (msg#{{.At}})"
       current_progress_prefix: "\nCurrent progress: "
       download_done_prefix: "Download completed\nFilename: "
@@ -274,6 +278,7 @@ bot:
       usage_cancel: "Usage: /task cancel <task_id>"
     watch:
       error_same_chat: Source and target must be different chats, even when specifying a different topic
+      error_filter_expression_invalid: "Invalid keyword expression: check parentheses and operators; up to 16 terms and 256 UTF-8 bytes."
       error_filter_format_invalid: Invalid filter format, please use <type>:<expression>
       error_filter_type_unsupported: Unsupported filter type, please see the docs
       error_source_unreachable: "UserBot cannot access source chat {{.Source}}: {{.Error}}"

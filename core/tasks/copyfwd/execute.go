@@ -9,6 +9,7 @@ import (
 	"github.com/celestix/gotgproto/ext"
 	"github.com/charmbracelet/log"
 	"github.com/krau/SaveAny-Bot/client/user"
+	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 )
 
 // Pace forwards to reduce FLOOD_WAIT (each item is forward + caption edit).
@@ -27,14 +28,10 @@ func (t *Task) executeWithClient(ctx context.Context, client func() *ext.Context
 	logger := log.FromContext(ctx).WithPrefix(fmt.Sprintf("copyfwd[%s]", t.ID))
 	logger.Info("Starting copy-forward task")
 
-	var (
-		execErr error
-		copied  int
-		failed  int
-	)
+	var execErr error
 	defer func() {
 		if t.Progress != nil {
-			t.Progress.OnDone(ctx, copied, failed, execErr)
+			t.Progress.OnDone(ctx, t.ResultSummary().Counts(), execErr)
 		}
 	}()
 
@@ -44,18 +41,20 @@ func (t *Task) executeWithClient(ctx context.Context, client func() *ext.Context
 		return execErr
 	}
 
-	var onProgress scanProgressFn
-	if t.Progress != nil {
-		onProgress = func(matched, atMsgID int) {
+	onProgress := func(matched, atMsgID int) {
+		t.emitProgress(ctx, "scanning", matched, 0)
+		if t.Progress != nil {
 			t.Progress.OnScan(ctx, matched, t.Count, atMsgID)
 		}
 	}
+	onProgress(0, 0)
 	ids, err := collectMatchedIDs(ctx, uctx, t.SourceID, t.Filter, t.Count, onProgress)
 	if err != nil {
 		execErr = fmt.Errorf("collect messages: %w", err)
 		return execErr
 	}
 	t.resetResults(len(ids))
+	t.emitProgress(ctx, "scanning", len(ids), 0)
 	if t.Progress != nil {
 		at := 0
 		if len(ids) > 0 {
@@ -76,8 +75,9 @@ func (t *Task) executeWithClient(ctx context.Context, client func() *ext.Context
 		return nil
 	}
 	// Switch UI off "scanning" before the first forward (may block on FLOOD_WAIT / album fetch).
+	t.emitProgress(ctx, "forwarding", total, 0)
 	if t.Progress != nil {
-		t.Progress.OnForward(ctx, 0, total)
+		t.Progress.OnForward(ctx, 0, total, t.ResultSummary().Counts())
 	}
 	logger.Infof("Forwarding %d message(s) to %d", total, t.TargetID)
 
@@ -103,15 +103,13 @@ func (t *Task) executeWithClient(ctx context.Context, client func() *ext.Context
 			if !errors.Is(ctx.Err(), context.Canceled) || !errors.Is(err, context.Canceled) {
 				logger.Errorf("Forward msg %d failed: %v", msgID, err)
 			}
-			failed++
-		} else {
-			copied++
 		}
 		if elapsed := time.Since(started); elapsed > 5*time.Second {
 			logger.Warnf("Forward msg %d took %s (rate limit or slow RPC)", msgID, elapsed.Round(time.Millisecond))
 		}
+		t.emitProgress(ctx, "forwarding", total, i+1)
 		if t.Progress != nil {
-			t.Progress.OnForward(ctx, i+1, total)
+			t.Progress.OnForward(ctx, i+1, total, t.ResultSummary().Counts())
 		}
 		// There may be no next iteration to observe cancellation during the last
 		// RPC or feedback callback. Keep confirmed counts, but preserve its cause.
@@ -121,6 +119,13 @@ func (t *Task) executeWithClient(ctx context.Context, client func() *ext.Context
 		}
 	}
 
-	logger.Infof("Copy-forward done: ok=%d fail=%d", copied, failed)
+	counts := t.ResultSummary().Counts()
+	logger.Infof("Copy-forward done: ok=%d fail=%d", counts.Succeeded, counts.Failed)
 	return nil
+}
+
+func (t *Task) emitProgress(ctx context.Context, stage string, matched, processed int) {
+	counts := t.ResultSummary().Counts()
+	taskevent.Emit(ctx, taskevent.Event{TaskID: t.ID, Phase: taskevent.PhaseProgress, ResultSummary: &counts,
+		CopyProgress: &taskevent.CopyProgress{Stage: stage, Requested: t.Count, Matched: matched, Processed: processed}})
 }

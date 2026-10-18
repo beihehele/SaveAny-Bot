@@ -98,12 +98,12 @@ func collectFromHistory(ctx context.Context, uctx *ext.Context, sourceID int64, 
 			if !acceptHit(m, &matched, groupRep) {
 				continue
 			}
-			if onProgress != nil {
-				onProgress(len(matched), m.GetID())
-			}
 			if len(matched) >= count {
 				break
 			}
+		}
+		if onProgress != nil {
+			onProgress(len(matched), page.NextOffsetID)
 		}
 		if page.RawCount < user.SearchPageSize() {
 			break

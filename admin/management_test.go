@@ -264,6 +264,14 @@ func TestManagementHTTPPermissionsLifecycleAndPreview(t *testing.T) {
 	post("POST", "routes", `{"user_chat_id":42,"source":"source","target":"0"}`, 200)
 	before := rpcCalls
 	response = post("POST", "preview", `{"user_chat_id":42,"filter":"msgre:caption","text":"caption <script>","template":"{{.msgid}}_{{.origname}}","original_name":"sample.mp4"}`, 200)
+	badFilter := post("POST", "preview", `{"user_chat_id":42,"filter":"msgre:舞团&(king8|)","text":"舞团 k8","template":"{{.origname}}","original_name":"sample"}`, 400)
+	if !strings.Contains(badFilter.Body.String(), `"invalid_filter"`) {
+		t.Fatal("invalid expression did not get a clear filter error")
+	}
+	combined := post("POST", "preview", `{"user_chat_id":42,"filter":"msgre:舞团&(king8|k8)","text":"舞团 K8","template":"{{.origname}}","original_name":"sample"}`, 200)
+	if !strings.Contains(combined.Body.String(), `"matches":true`) {
+		t.Fatal("combined preview disagrees with parser")
+	}
 	var preview struct {
 		Matches  bool   `json:"matches"`
 		Filename string `json:"filename"`

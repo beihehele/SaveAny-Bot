@@ -130,7 +130,7 @@ func handleWatchCmd(ctx *ext.Context, update *ext.Update) error {
 		case errors.Is(err, errWatchFilterTypeUnsupported):
 			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorFilterTypeUnsupported)), nil)
 		default:
-			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgCommonErrorInvalidRegex, map[string]any{"Error": err.Error()})), nil)
+			ctx.Reply(update, ext.ReplyTextString(i18n.T(i18nk.BotMsgWatchErrorFilterExpressionInvalid)), nil)
 		}
 		return dispatcher.EndGroups
 	}

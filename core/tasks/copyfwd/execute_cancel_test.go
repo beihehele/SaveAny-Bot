@@ -36,14 +36,14 @@ func (p *executionCancelProgress) OnScanDone(context.Context, int, int, int) {
 		p.cancel()
 	}
 }
-func (p *executionCancelProgress) OnForward(_ context.Context, done, total int) {
+func (p *executionCancelProgress) OnForward(_ context.Context, done, total int, _ taskresult.Counts) {
 	if p.mode == "last_feedback" && done == total && done > 0 {
 		p.cancel()
 	}
 }
-func (p *executionCancelProgress) OnDone(_ context.Context, copied, failed int, err error) {
+func (p *executionCancelProgress) OnDone(_ context.Context, counts taskresult.Counts, err error) {
 	p.done++
-	p.copied, p.failed, p.err = copied, failed, err
+	p.copied, p.failed, p.err = counts.Succeeded, counts.Failed+counts.Cancelled+counts.Interrupted, err
 }
 
 func TestCopyCancellationAtLastBoundary(t *testing.T) {

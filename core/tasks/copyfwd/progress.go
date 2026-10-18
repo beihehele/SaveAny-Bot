@@ -19,37 +19,44 @@ const progressMinInterval = 2 * time.Second
 type ProgressTracker interface {
 	OnScan(ctx context.Context, matched, count, atMsgID int)
 	OnScanDone(ctx context.Context, matched, count, atMsgID int)
-	OnForward(ctx context.Context, done, total int)
-	OnDone(ctx context.Context, forwarded, failed int, err error)
+	OnForward(ctx context.Context, done, total int, counts taskresult.Counts)
+	OnDone(ctx context.Context, counts taskresult.Counts, err error)
 }
 
 type Progress struct {
 	MessageID       int
 	ChatID          int64
 	TaskID          string
+	Title           string
+	Requested       int
+	matched         int
 	lastEdit        atomic.Int64 // unix nano of last edit
 	forwardAnnounce atomic.Bool  // one-shot first forward update
 }
 
-func NewProgressTracker(messageID int, chatID int64, taskID string) ProgressTracker {
+func NewProgressTracker(messageID int, chatID int64, taskID, title string, requested int) ProgressTracker {
 	return &Progress{
 		MessageID: messageID,
 		ChatID:    chatID,
 		TaskID:    taskID,
+		Title:     title,
+		Requested: requested,
 	}
 }
 
 func (p *Progress) OnScan(ctx context.Context, matched, count, atMsgID int) {
+	p.matched = matched
 	text := i18n.T(i18nk.BotMsgProgressCopyScanning, map[string]any{
 		"Matched": matched,
 		"Count":   count,
 		"At":      atMsgID,
 	})
-	// Always show when scan target reached so the last matched count is visible.
-	p.edit(ctx, text, true, matched >= count && count > 0)
+	// The final scan update and phase switch are forced separately.
+	p.edit(ctx, text, true, false)
 }
 
 func (p *Progress) OnScanDone(ctx context.Context, matched, count, atMsgID int) {
+	p.matched = matched
 	text := i18n.T(i18nk.BotMsgProgressCopyScanning, map[string]any{
 		"Matched": matched,
 		"Count":   count,
@@ -58,17 +65,18 @@ func (p *Progress) OnScanDone(ctx context.Context, matched, count, atMsgID int) 
 	p.edit(ctx, text, true, true)
 }
 
-func (p *Progress) OnForward(ctx context.Context, done, total int) {
+func (p *Progress) OnForward(ctx context.Context, done, total int, counts taskresult.Counts) {
 	text := i18n.T(i18nk.BotMsgProgressCopyForwarding, map[string]any{
 		"Done":  done,
 		"Total": total,
+		"OK":    counts.Succeeded, "Fail": counts.Failed, "Percent": done * 100 / max(1, total),
 	})
 	// Force phase switch (done=0), first real progress, and the final batch.
 	force := done == 0 || done == total || !p.forwardAnnounce.Swap(true)
 	p.edit(ctx, text, true, force)
 }
 
-func (p *Progress) OnDone(ctx context.Context, forwarded, failed int, err error) {
+func (p *Progress) OnDone(ctx context.Context, counts taskresult.Counts, err error) {
 	var text string
 	switch {
 	case taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled:
@@ -78,9 +86,18 @@ func (p *Progress) OnDone(ctx context.Context, forwarded, failed int, err error)
 		log.FromContext(ctx).Errorf("Copy task %s failed: %v", p.TaskID, err)
 	default:
 		text = i18n.T(i18nk.BotMsgProgressCopyDone, map[string]any{
-			"OK":   forwarded,
-			"Fail": failed,
+			"OK":   counts.Succeeded,
+			"Fail": counts.Failed,
 		})
+	}
+	if err == nil && p.matched == 0 {
+		text = i18n.T(i18nk.BotMsgCopyNoMatches)
+	}
+	if p.Requested > 0 {
+		text += "\n" + i18n.T(i18nk.BotMsgCopySelection, map[string]any{"Requested": p.Requested, "Matched": p.matched})
+		if err != nil {
+			text += "\n" + i18n.T(i18nk.BotMsgCopyCounts, map[string]any{"OK": counts.Succeeded, "Fail": counts.Failed, "Pending": counts.Pending + counts.Cancelled + counts.Interrupted})
+		}
 	}
 	p.edit(ctx, text, false, true)
 }
@@ -99,6 +116,9 @@ func (p *Progress) edit(ctx context.Context, text string, withCancel bool, force
 
 	req := &tg.MessagesEditMessageRequest{
 		ID: p.MessageID,
+	}
+	if p.Title != "" {
+		text = p.Title + "\n\n" + text
 	}
 	req.SetMessage(text)
 	if withCancel && p.TaskID != "" {

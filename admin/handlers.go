@@ -24,6 +24,7 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/inputresult"
 	"github.com/krau/SaveAny-Bot/pkg/queue"
 	"github.com/krau/SaveAny-Bot/pkg/rule"
+	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 	"github.com/krau/SaveAny-Bot/pkg/taskhistory"
 	"github.com/krau/SaveAny-Bot/storage"
 	"github.com/krau/SaveAny-Bot/storage/shardreel"
@@ -31,11 +32,12 @@ import (
 
 type taskRow struct {
 	api.TaskInfoResponse
-	Scope       string `json:"scope"`
-	Executing   bool   `json:"executing"`
-	CanCancel   bool   `json:"can_cancel"`
-	CanDelete   bool   `json:"can_delete"`
-	CopyOutcome string `json:"copy_outcome,omitempty"`
+	Scope        string                  `json:"scope"`
+	Executing    bool                    `json:"executing"`
+	CanCancel    bool                    `json:"can_cancel"`
+	CanDelete    bool                    `json:"can_delete"`
+	CopyOutcome  string                  `json:"copy_outcome,omitempty"`
+	CopyProgress *taskevent.CopyProgress `json:"copy_progress,omitempty"`
 }
 
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +84,7 @@ func (s *Server) taskRows(ctx context.Context) []taskRow {
 			row.UpdatedAt = record.UpdatedAt
 		}
 		row.Source = record.Source
+		row.CopyProgress = record.CopyProgress
 		byID[record.ID] = row
 	}
 	add := func(info queue.TaskInfo, running bool) {

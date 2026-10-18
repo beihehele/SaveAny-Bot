@@ -49,6 +49,16 @@ type Event struct {
 	// Nonterminal events leave Outcome unset; terminal events require a decision.
 	Outcome       taskresult.Outcome
 	ResultSummary *taskresult.Counts
+	CopyProgress  *CopyProgress
+}
+
+// CopyProgress counts logical items (one message or one whole album).
+// Scanning has no known total history size and therefore no percentage.
+type CopyProgress struct {
+	Stage     string `json:"stage"`
+	Requested int    `json:"requested"`
+	Matched   int    `json:"matched"`
+	Processed int    `json:"processed"`
 }
 
 // Sink receives task events. Implementations must be safe for concurrent use.
@@ -95,6 +105,10 @@ func Emit(ctx context.Context, e Event) {
 		if e.ResultSummary != nil {
 			counts := *e.ResultSummary
 			event.ResultSummary = &counts
+		}
+		if e.CopyProgress != nil {
+			progress := *e.CopyProgress
+			event.CopyProgress = &progress
 		}
 		s.Emit(event)
 	}

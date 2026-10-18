@@ -8,20 +8,21 @@ import (
 )
 
 const (
-	maxExprLen  = 256
+	maxExprLen   = 256
 	maxTermCount = 16
 )
 
-var errInvalidExpr = fmt.Errorf("invalid msgre expression")
+// ErrInvalidExpression reports an invalid or over-budget boolean filter.
+var ErrInvalidExpression = fmt.Errorf("invalid msgre expression")
 
 // Parse parses a boolean keyword expression (without the msgre: prefix).
 func Parse(expr string) (Node, error) {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
-		return nil, errInvalidExpr
+		return nil, ErrInvalidExpression
 	}
 	if len(expr) > maxExprLen {
-		return nil, errInvalidExpr
+		return nil, ErrInvalidExpression
 	}
 	p := &parser{input: expr}
 	node, err := p.parseExpr()
@@ -29,10 +30,10 @@ func Parse(expr string) (Node, error) {
 		return nil, err
 	}
 	if p.pos < len(p.input) {
-		return nil, errInvalidExpr
+		return nil, ErrInvalidExpression
 	}
 	if countTerms(node) > maxTermCount {
-		return nil, errInvalidExpr
+		return nil, ErrInvalidExpression
 	}
 	return node, nil
 }
@@ -104,7 +105,7 @@ func (p *parser) parsePrimary() (Node, error) {
 		}
 		p.skipSpace()
 		if !p.match(')') {
-			return nil, errInvalidExpr
+			return nil, ErrInvalidExpression
 		}
 		return node, nil
 	}
@@ -114,7 +115,7 @@ func (p *parser) parsePrimary() (Node, error) {
 func (p *parser) parseTerm() (*Term, error) {
 	p.skipSpace()
 	if p.pos >= len(p.input) {
-		return nil, errInvalidExpr
+		return nil, ErrInvalidExpression
 	}
 	if p.input[p.pos] == '"' {
 		return p.parseQuotedTerm()
@@ -128,18 +129,18 @@ func (p *parser) parseTerm() (*Term, error) {
 		p.pos += width
 	}
 	if start == p.pos {
-		return nil, errInvalidExpr
+		return nil, ErrInvalidExpression
 	}
 	val := strings.TrimSpace(p.input[start:p.pos])
 	if val == "" {
-		return nil, errInvalidExpr
+		return nil, ErrInvalidExpression
 	}
 	return &Term{Value: val}, nil
 }
 
 func (p *parser) parseQuotedTerm() (*Term, error) {
 	if p.input[p.pos] != '"' {
-		return nil, errInvalidExpr
+		return nil, ErrInvalidExpression
 	}
 	p.pos++
 	start := p.pos
@@ -148,14 +149,14 @@ func (p *parser) parseQuotedTerm() (*Term, error) {
 			val := p.input[start:p.pos]
 			p.pos++
 			if val == "" {
-				return nil, errInvalidExpr
+				return nil, ErrInvalidExpression
 			}
 			return &Term{Value: val}, nil
 		}
 		_, width := utf8.DecodeRuneInString(p.input[p.pos:])
 		p.pos += width
 	}
-	return nil, errInvalidExpr
+	return nil, ErrInvalidExpression
 }
 
 func (p *parser) skipSpace() {

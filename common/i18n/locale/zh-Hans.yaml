@@ -107,6 +107,10 @@ bot:
       prompt_select_filename_strategy: "请选择文件名策略, 当前策略: {{.Strategy}}"
       prompt_select_option: 请选择要配置的选项
     copy:
+      all_media: 全部媒体
+      no_matches: 未找到符合条件的媒体
+      selection: "请求最多 {{.Requested}} 项，实际匹配 {{.Matched}} 项（消息或完整媒体组）"
+      counts: "成功 {{.OK}}，失败 {{.Fail}}，未完成 {{.Pending}}"
       error_already_running: 已有进行中的 copy 任务，请先取消或等待完成
       error_count_too_large: count 过大，最大允许 {{.Max}}
       error_target_forbidden: copy 不支持本地保存，请指定目标聊天
@@ -175,8 +179,8 @@ bot:
       batch_start_prefix: "开始执行批量下载任务\n总大小: "
       copy_canceled: 已取消 copy 任务
       copy_done: 完成：成功 {{.OK}}，失败 {{.Fail}}
-      copy_forwarding: 发送中 {{.Done}}/{{.Total}}
-      copy_scanning: "扫描中 {{.Matched}}/{{.Count}}（msg#{{.At}}）"
+      copy_forwarding: "复制中：已处理 {{.Done}}/{{.Total}}（{{.Percent}}%），成功 {{.OK}}，失败 {{.Fail}}"
+      copy_scanning: "检索中：已匹配 {{.Matched}} / 最多 {{.Count}} 项（msg#{{.At}}）"
       current_progress_prefix: "\n当前进度: "
       download_done_prefix: "下载完成\n文件名: "
       download_failed_prefix: "下载失败\n文件名: "
@@ -275,6 +279,7 @@ bot:
       usage_cancel: "用法: /task cancel <task_id>"
     watch:
       error_same_chat: 来源与目标不能是同一个聊天，即使指定不同话题也不支持
+      error_filter_expression_invalid: "筛选表达式无效，请检查括号和 & | ! 运算符；最多 16 个关键词、256 个 UTF-8 字节。"
       error_filter_format_invalid: 过滤器格式错误, 请使用 <过滤器类型>:<表达式>
       error_filter_type_unsupported: 不支持的过滤器类型, 请参阅文档
       error_source_unreachable: "UserBot 无法访问源聊天 {{.Source}}: {{.Error}}"

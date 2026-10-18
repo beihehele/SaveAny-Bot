@@ -12,6 +12,32 @@ import (
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
+func TestCopyProgressSnapshotsAreDetachedAndDeletedEventsStayDeleted(t *testing.T) {
+	s := NewStore(10, time.Hour)
+	ctx, _, _ := s.Track(t.Context(), "copy", "copy", "identity")
+	progress := taskevent.CopyProgress{Stage: "forwarding", Requested: 20, Matched: 3, Processed: 1}
+	counts := taskresult.Counts{Total: 3, Succeeded: 1, Pending: 2}
+	taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseProgress, CopyProgress: &progress, ResultSummary: &counts})
+	progress.Processed = 999
+	counts.Succeeded = 999
+	r := s.Snapshots()[0]
+	if r.CopyProgress.Processed != 1 || r.ResultSummary.Succeeded != 1 {
+		t.Fatal("producer mutated observation")
+	}
+	r.CopyProgress.Processed = 999
+	r.ResultSummary.Succeeded = 999
+	r = s.Snapshots()[0]
+	if r.CopyProgress.Processed != 1 || r.ResultSummary.Succeeded != 1 {
+		t.Fatal("reader mutated observation")
+	}
+	taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeCancelled})
+	s.Delete("copy")
+	taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseProgress, CopyProgress: &progress})
+	if len(s.Snapshots()) != 0 {
+		t.Fatal("late copy progress recreated deleted task")
+	}
+}
+
 func TestHistoryRetentionIsolationAndDuplicateRollback(t *testing.T) {
 	s := NewStore(2, time.Hour)
 	now := time.Now()

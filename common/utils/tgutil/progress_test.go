@@ -16,6 +16,7 @@ import (
 	"github.com/krau/SaveAny-Bot/core/tasks/batchtfile"
 	"github.com/krau/SaveAny-Bot/core/tasks/copyfwd"
 	"github.com/krau/SaveAny-Bot/core/tasks/tfile"
+	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
 type progressValueKey struct{}
@@ -69,7 +70,7 @@ func TestRetainedTaskProgressUsesBoundedTaskContext(t *testing.T) {
 				}
 				single := tfile.NewProgressTrack(7, 42)
 				batch := batchtfile.NewProgressTracker(7, 42)
-				copy := copyfwd.NewProgressTracker(7, 42, "test-progress")
+				copy := copyfwd.NewProgressTracker(7, 42, "test-progress", "", 0)
 				switch stage {
 				case "single start":
 					single.OnStart(caller, progressFileInfo{})
@@ -86,7 +87,7 @@ func TestRetainedTaskProgressUsesBoundedTaskContext(t *testing.T) {
 				case "copy scan":
 					copy.OnScan(caller, 1, 1, 123)
 				case "copy done":
-					copy.OnDone(caller, 0, 0, context.Canceled)
+					copy.OnDone(caller, taskresult.Counts{}, context.Canceled)
 				}
 				if calls != 1 || shared.Err() != nil || !terminal && caller.Err() != nil {
 					t.Fatalf("progress calls=%d shared=%v caller=%v", calls, shared.Err(), caller.Err())

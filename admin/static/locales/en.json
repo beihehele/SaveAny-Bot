@@ -440,5 +440,17 @@
   "task_not_found": "Task record not found. Refresh the list.",
   "task_not_finished": "The task is executing, cleaning up or delivering its result. Try again shortly.",
   "task_delete_failed": "Record retained: upload cancellation or cleanup is incomplete. Try again shortly; if it persists, check the ShardReel connection and service logs.",
-  "audit_delete_task": "Delete task record"
+  "audit_delete_task": "Delete task record",
+  "filterMode": "Filter mode",
+  "simpleKeywords": "Simple keywords",
+  "combinedExpression": "Combined expression",
+  "expressionNote": "Example: dance&(king8|k8). Use & for AND, | for OR, ! for NOT and () for grouping; not a regular expression. The msgre: prefix is optional; up to 16 terms and 256 UTF-8 bytes.",
+  "invalid_filter": "Invalid filter: check parentheses, operators and keywords; up to 16 terms and 256 UTF-8 bytes.",
+  "copyScanning": "Searching, matched / requested",
+  "copyForwarding": "Copying, processed",
+  "copyNoMatches": "No matching media found",
+  "copyRequested": "Requested up to",
+  "copyMatched": "Matched",
+  "copyUnfinished": "Unfinished",
+  "expressionPlaceholder": "msgre:dance&(king8|k8)"
 }
