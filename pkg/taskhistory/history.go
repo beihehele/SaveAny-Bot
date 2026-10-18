@@ -65,6 +65,15 @@ func NewStore(limit int, retention time.Duration) *Store {
 // Default is the instance-wide observation store.
 var Default = NewStore(TerminalLimit, Retention)
 
+// Delete removes a finished observation. Late events cannot recreate it.
+func (s *Store) Delete(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.records[id]; e != nil && terminal(e.record.Status) {
+		delete(s.records, id)
+	}
+}
+
 // CompleteUpload updates an existing observation after durable remote completion.
 func (s *Store) CompleteUpload(id string, status, message string, counts taskresult.Counts) {
 	s.mu.Lock()

@@ -5,6 +5,7 @@
   const pages = ["overview", "tasks", "new", "storages", "files", "routes", "preferences", "diagnostics"];
   const state = { authenticated: false, csrf: "", language: "zh-Hans", words: {}, storages: [], users: [], capabilities: [], metadata: false, page: "overview", sequence: 0, abort: null, loading: false, submitting: false, taskOffset: 0, fileOffset: 0, hasActiveTasks: true };
   let searchTimer, toastTimer, refreshTimer;
+  const taskActions = new Map();
   const t = (key) => state.words[key] || key;
   const node = (tag, text, className) => {
     const element = document.createElement(tag);
@@ -170,18 +171,34 @@
       if (file.cleanup_error) values.push([t("cleanupPending"), file.cleanup_error]);
     }
     definitions($("task-details"), values);
+    $("task-dialog").dataset.taskId = task.task_id;
     $("task-detail-error").textContent = task.error || "";
     $("task-detail-error").hidden = !task.error;
     if (!$("task-dialog").open) $("task-dialog").showModal();
   }
-  async function cancelTask(task, trigger) {
-    if (!window.confirm(t(task.upload_files?.length && task.status === "failed" ? "confirmDiscardUpload" : "confirmCancel"))) return;
+  async function taskAction(task, trigger) {
+    if (taskActions.has(task.task_id)) return;
+    const deleting = task.can_delete;
+    taskActions.set(task.task_id, deleting ? "deletingTask" : "cancelling");
     trigger.disabled = true;
+    trigger.textContent = t(taskActions.get(task.task_id));
     try {
-      const result = await request(`tasks/${encodeURIComponent(task.task_id)}/cancel`, { method: "POST" });
-      toast(t(result.status));
+      const result = await request(`tasks/${encodeURIComponent(task.task_id)}${deleting ? "" : "/cancel"}`, { method: deleting ? "DELETE" : "POST" });
+      toast(t(deleting ? "deletedTask" : result.status));
+      if (deleting) document.querySelectorAll("[data-task-action]").forEach((action) => {
+        if (action.dataset.taskAction === task.task_id) action.closest("tr")?.remove();
+      });
+      if (deleting && $("task-dialog").dataset.taskId === task.task_id) $("task-dialog").close();
+    } catch (error) { toast(error.message); }
+    finally {
       await loadPage();
-    } catch (error) { toast(error.message); } finally { trigger.disabled = false; }
+      taskActions.delete(task.task_id);
+      document.querySelectorAll("[data-task-action]").forEach((action) => {
+        if (action.dataset.taskAction !== task.task_id) return;
+        action.disabled = action.dataset.available !== "true";
+        action.textContent = t(action.dataset.label);
+      });
+    }
   }
   function tasksTable(target, tasks) {
     table(target, ["task", "status", "progressResult", "storage", "createdAt", "actions"], tasks.map((task) => {
@@ -205,18 +222,13 @@
       } else { progress.textContent = task.downloading ? t("upload_preparing") : "—"; }
       const actions = node("div", null, "table-actions");
       actions.append(button(t("details"), () => taskDetails(task)));
-      if (task.can_cancel) {
-        const cancel = button(t(task.upload_files?.length && task.status === "failed" ? "discardUpload" : "cancel"), () => cancelTask(task, cancel), "danger-button small-button");
-        actions.append(cancel);
-      }
-      if (task.can_retry) {
-        const retry = button(t("retryUpload"), async () => {
-          retry.disabled = true;
-          try { await request(`tasks/${encodeURIComponent(task.task_id)}/retry`, { method: "POST" }); toast(t("queued")); await loadPage(); }
-          catch (error) { toast(error.message); } finally { retry.disabled = false; }
-        });
-        actions.append(retry);
-      }
+      const label = task.can_delete ? "deleteTask" : task.status === "cancelling" ? "cancelling" : "cancel";
+      const action = button(t(taskActions.get(task.task_id) || label), () => taskAction(task, action), "danger-button small-button");
+      action.dataset.taskAction = task.task_id;
+      action.dataset.label = label;
+      action.dataset.available = String(task.can_delete || task.can_cancel);
+      action.disabled = taskActions.has(task.task_id) || (!task.can_delete && !task.can_cancel);
+      actions.append(action);
       return [title, taskStatus(task), progress, task.storage || "—", date(task.created_at), actions];
     }));
   }
@@ -444,6 +456,7 @@
         const data = await request(`tasks?${new URLSearchParams({ q: $("task-search").value, status: $("task-status").value, offset: String(state.taskOffset) })}`, { signal });
         if (sequence !== state.sequence) return;
         state.hasActiveTasks = data.has_active_tasks;
+        state.taskOffset = data.offset;
         tasksTable($("task-table"), data.tasks);
         pagination($("task-pagination"), data.total, data.offset, (offset) => { state.taskOffset = offset; loadPage(); });
       } else if (page === "storages") { storageCards(); }

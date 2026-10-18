@@ -84,6 +84,7 @@ func NewServer(ctx context.Context, cfg config.AdminConfig) (*Server, error) {
 	s.route(mux, "POST /admin/api/v1/tasks", s.createTask)
 	s.route(mux, "POST /admin/api/v1/tasks/{id}/cancel", s.cancelTask)
 	s.route(mux, "POST /admin/api/v1/tasks/{id}/retry", s.retryUpload)
+	s.route(mux, "DELETE /admin/api/v1/tasks/{id}", s.deleteTask)
 	s.route(mux, "GET /admin/api/v1/storages", s.handlers.ListStoragesHandler)
 	s.route(mux, "POST /admin/api/v1/storages/{name}/check", s.checkStorage)
 	s.route(mux, "GET /admin/api/v1/task-types", s.handlers.GetTaskTypesHandler)

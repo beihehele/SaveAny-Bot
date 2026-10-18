@@ -34,6 +34,7 @@ type taskRow struct {
 	Scope       string `json:"scope"`
 	Executing   bool   `json:"executing"`
 	CanCancel   bool   `json:"can_cancel"`
+	CanDelete   bool   `json:"can_delete"`
 	CopyOutcome string `json:"copy_outcome,omitempty"`
 }
 
@@ -113,12 +114,13 @@ func (s *Server) taskRows(ctx context.Context) []taskRow {
 	for id, row := range byID {
 		if len(row.UploadFiles) > 0 {
 			row.Scope = "upload"
-			row.CanCancel = row.Status != api.TaskStatusCompleted && row.Status != api.TaskStatusCancelled
+			row.CanCancel = !terminalTask(row.Status) && row.Status != "cancelling"
 			byID[id] = row
 		}
 	}
 	rows := make([]taskRow, 0, len(byID))
 	for _, row := range byID {
+		row.CanDelete = terminalTask(row.Status) && !row.Executing
 		if row.Type == tasktype.TaskTypeCopy && row.Status == api.TaskStatusCompleted && row.ResultSummary != nil {
 			c := row.ResultSummary
 			switch {
@@ -141,6 +143,10 @@ func (s *Server) taskRows(ctx context.Context) []taskRow {
 		return rows[i].TaskID > rows[j].TaskID
 	})
 	return rows
+}
+
+func terminalTask(status api.TaskStatus) bool {
+	return status == api.TaskStatusCompleted || status == api.TaskStatusFailed || status == api.TaskStatusCancelled
 }
 
 func page(r *http.Request, total int) (int, int, error) {

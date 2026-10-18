@@ -67,6 +67,27 @@ func TestHistoryUsesExplicitWorkerOutcome(t *testing.T) {
 	}
 }
 
+func TestDeleteProtectsActiveHistoryAndIgnoresLateEvents(t *testing.T) {
+	s := NewStore(10, time.Hour)
+	ctx, _, _ := s.Track(t.Context(), "delete", "copy", "copy")
+	s.Delete("delete")
+	if len(s.Snapshots()) != 1 {
+		t.Fatal("queued history deleted")
+	}
+	taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseStart})
+	s.Delete("delete")
+	if len(s.Snapshots()) != 1 {
+		t.Fatal("running history deleted")
+	}
+	taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeCancelled})
+	s.Delete("delete")
+	taskevent.Emit(ctx, taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeSuccess})
+	s.CompleteUpload("delete", "completed", "", taskresult.Counts{Total: 1, Succeeded: 1})
+	if len(s.Snapshots()) != 0 {
+		t.Fatal("late event recreated deleted history")
+	}
+}
+
 func TestQueuedCancellationAndRunningDecision(t *testing.T) {
 	for _, running := range []bool{false, true} {
 		t.Run(fmt.Sprint(running), func(t *testing.T) {

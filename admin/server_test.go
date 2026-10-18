@@ -447,8 +447,12 @@ blacklist=true
 			held = row
 		}
 	}
-	if !held.Executing || held.CanCancel || held.Status != "cancelling" {
+	if !held.Executing || held.CanCancel || held.CanDelete || held.Status != "cancelling" {
 		t.Fatalf("invalid held cancellation state: %+v", held)
+	}
+	response = perform(s, "DELETE", "/admin/api/v1/tasks/"+task.TaskID(), "", cookie, csrf, "http://console.test")
+	if response.Code != http.StatusConflict {
+		t.Fatal("executing cancellation cleanup was deletable", response.Code, response.Body.String())
 	}
 	close(task.release)
 	deadline := time.Now().Add(5 * time.Second)

@@ -110,7 +110,17 @@ func Retry(ctx context.Context, id string) error {
 	if db == nil {
 		return errors.New("database is not ready")
 	}
-	return db.Transaction(func(tx *gorm.DB) error {
+	return retryTask(ctx, db, id)
+}
+
+func retryTask(ctx context.Context, db *gorm.DB, id string) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Acquire the write lock before reading, so deletion cannot discard a
+		// payload after this transaction has decided it can be retried.
+		if err := tx.Model(&database.ShardReelTask{}).Where("id = ?", id).
+			UpdateColumn("result_version", gorm.Expr("result_version")).Error; err != nil {
+			return err
+		}
 		var group database.ShardReelTask
 		if err := tx.First(&group, "id = ?", id).Error; err != nil {
 			return err
