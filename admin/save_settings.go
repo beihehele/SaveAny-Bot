@@ -52,6 +52,12 @@ func saveDirectoryPath(chatID int64, name, raw string, isRule bool) (string, err
 	if !chosen && (storageConfig == nil || !config.C().HasStorage(chatID, name)) {
 		return "", errSaveStorage
 	}
+	if !chosen && storageConfig.GetType() == storenum.Telegram {
+		if isRule && raw == "" {
+			return "", nil
+		}
+		return "", errSavePath
+	}
 	if isRule && raw == rule.RuleDirPathNewForAlbum {
 		return raw, nil
 	}

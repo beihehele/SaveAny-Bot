@@ -34,6 +34,13 @@ type albumRuleStorage struct {
 	checked []string
 }
 
+type albumRuleCollection struct{ *albumRuleStorage }
+
+func (*albumRuleCollection) CannotDetectExistence() string { return "messages have no paths" }
+func (*albumRuleCollection) SaveMessages(context.Context, []tfile.TGFileMessage) ([]string, error) {
+	return nil, fmt.Errorf("collection must not execute during preparation")
+}
+
 func (s *albumRuleStorage) Exists(_ context.Context, path string) (bool, error) {
 	s.checked = append(s.checked, path)
 	return false, nil
@@ -55,7 +62,7 @@ func TestAlbumDirectoryRuleKeepsSingleRemainingMember(t *testing.T) {
 		return
 	}
 	configFile := filepath.Join(root, "config.toml")
-	text := fmt.Sprintf("[db]\npath=%q\n[[users]]\nid=42\n", filepath.ToSlash(filepath.Join(root, "database.db")))
+	text := fmt.Sprintf("[db]\npath=%q\n[[storages]]\nname='album-rule-local'\ntype='local'\nenable=true\nbase_path=%q\n[[users]]\nid=42\nstorages=['album-rule-local']\n", filepath.ToSlash(filepath.Join(root, "database.db")), filepath.ToSlash(filepath.Join(root, "downloads")))
 	if err := os.WriteFile(configFile, []byte(text), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -156,5 +163,23 @@ func TestAlbumDirectoryRuleKeepsSingleRemainingMember(t *testing.T) {
 	}
 	if len(core.GetQueuedTasks(t.Context())) != 5 || len(stor.checked) != 1 || stor.checked[0] != "/1/1.bin" {
 		t.Fatalf("album directory rule dropped an ordinary selected file: %v", stor.checked)
+	}
+	// The first member's local directory rule must not turn a TG sibling into
+	// a local-file conflict. Execution will reject the mixed collection group.
+	if err := database.CreateRule(t.Context(), &database.Rule{UserID: u.ID, Type: rule.FileNameRegex.String(), Data: `^1\.bin$`, StorageName: "album-rule-local", DirPath: rule.RuleDirPathNewForAlbum}); err != nil {
+		t.Fatal(err)
+	}
+	conflictDir := filepath.Join(root, "downloads", "Shared_Album")
+	if err := os.MkdirAll(conflictDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(conflictDir, "2.bin"), []byte("existing local file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := CreateAndAddBatchTGFileTaskWithEdit(ctx, 42, &albumRuleCollection{stor}, "/", album, 99, tcbdata.ConflictStrategyAsk); err != nil && !errors.Is(err, dispatcher.EndGroups) {
+		t.Fatal(err)
+	}
+	if len(core.GetQueuedTasks(t.Context())) != 6 {
+		t.Fatal("folder handling overwrote TG member storage and prompted a false local conflict")
 	}
 }

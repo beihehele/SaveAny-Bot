@@ -4,7 +4,7 @@ title: "Storage Configuration"
 
 # Storage backends
 
-`local` and `shardreel` are supported. Keep local roots and optionally add a ShardReel endpoint.
+`local`, `shardreel` and `telegram` are supported. Their configured names appear in Bot and web storage selectors.
 
 ```toml
 [[storages]]
@@ -46,3 +46,31 @@ Remote ingest is retried automatically only when `can_retry=true`. Accepted retr
 Restart recovery covers complete staged files; interrupted Telegram downloads must be submitted again. Cancelling a task that never contacted the remote requires no connection; started transfers require confirmed remote cancellation or completion before cleanup. Cancelling an unstarted upload in ShardReel also retains a cancellation receipt, so the Bot will not recreate it. Originals remain byte-identical; media optimization uses ShardReel playback caches. Clean terminal history is retained for seven days, at most 1000 tasks. Pending, failed and unclean tasks are retained. Back up the database and outbox together with the service stopped. Keep the storage name, endpoint, outbox path and ShardReel `SR_STORAGE_ROOT` stable while files are pending.
 
 `/watch <source> 0` follows default storage and enabled rules. `/copy` remains Telegram-to-Telegram forwarding.
+
+## TG collection
+
+```toml
+# Requires telegram.userbot.enable and a logged-in Userbot
+[[storages]]
+name = "TG收藏"
+type = "telegram"
+enable = true
+chat_id = -1001234567890
+topic_id = 0
+```
+
+Use a writable channel/supergroup and optionally an existing forum topic. This does not change the default storage. Link saves, Bot attachments and default-storage watches (`/watch … 0`) can use it; `/copy` and direct-target watches retain their existing behavior.
+
+Channel/group media reuse DropAuthor copying and best-effort `[转]` source links. Only an explicit forwarding restriction triggers download/upload fallback; network and access errors do not. Bot-private attachments use their original downloader and Userbot upload because their message IDs belong to the Bot dialog. Original forwarded channel links are retained when available; new attachments have no invented source URL. Protected downloads can still fail.
+
+Albums require complete input (no `?single`), retain member order, captions, entities and document attributes, and are published only after all uploads are prepared. Channel/group albums are checked against a fresh bounded source query before sending; incomplete or changed selections fail without adding members that might bypass rules. This query cannot guarantee discovery of members outside its range. Bot-private attachments use only received members. Rules must route all members to one storage. Directories, file conflict policies and browsing do not apply. Fallback uses the existing `temp.base_path` (`/app/cache` in Docker); each cache is removed after upload. Task details expose delivery stages and collection links. Cancellation stops subsequent work without recalling confirmed posts; record deletion leaves posts intact. Check the target before resubmitting after ambiguous network errors. Like ordinary saves, these tasks do not resume across restart.
+
+Collection targets cannot be watch sources. Remove any conflicting route before enabling the storage; startup validation identifies existing conflicts.
+
+### /collect shortcut
+
+- `/collect https://t.me/channel/123`: use the sole available collection storage, including its topic.
+- `/collect https://t.me/channel/123 -1001234567890`: override the target for this task, without a topic.
+- `/collect https://t.me/channel/123 -1001234567890 2`: target Topic 2; topic 0 means no topic.
+
+Use a numeric chat ID and a separate topic argument. One URL selects the complete message/album without storage/directory prompts. This command bypasses directory/naming/storage rules and does not modify defaults, configuration or watches. A configured and authorized collection storage is still required; multiple available collection configurations are rejected rather than guessing a default.

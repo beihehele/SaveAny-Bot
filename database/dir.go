@@ -2,11 +2,18 @@ package database
 
 import (
 	"context"
+	"fmt"
 
 	"gorm.io/gorm"
+
+	"github.com/krau/SaveAny-Bot/config"
+	storenum "github.com/krau/SaveAny-Bot/pkg/enums/storage"
 )
 
 func CreateDirForUser(ctx context.Context, userID uint, storageName, path string) error {
+	if cfg := config.C().GetStorageByName(storageName); cfg != nil && cfg.GetType() == storenum.Telegram {
+		return fmt.Errorf("TG collection does not use directories")
+	}
 	dir := Dir{
 		UserID:      userID,
 		StorageName: storageName,
@@ -55,6 +62,9 @@ func GetDirsByUserChatIDAndStorageName(ctx context.Context, chatID int64, storag
 // UpdateDirForUser updates a shortcut without moving saved files. Switching its
 // storage clears a default selection that would no longer belong to that storage.
 func UpdateDirForUser(ctx context.Context, userID, id uint, storageName, path string) error {
+	if cfg := config.C().GetStorageByName(storageName); cfg != nil && cfg.GetType() == storenum.Telegram {
+		return fmt.Errorf("TG collection does not use directories")
+	}
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&Dir{}).Where("id = ? AND user_id = ?", id, userID).
 			Updates(map[string]any{"storage_name": storageName, "path": path})

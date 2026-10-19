@@ -2,7 +2,7 @@
 
 # <img src="docs/static/logo.png" width="45" align="center"> Save Any Bot
 
-> **保存 Telegram 文件到本地或 ShardReel，管理聊天监听和历史消息复制**
+> **保存 Telegram 文件到本地、ShardReel 或 TG收藏，管理聊天监听和历史消息复制**
 
 [![Release Date](https://img.shields.io/github/release-date/beihehele/SaveAny-Bot?label=release)](https://github.com/beihehele/SaveAny-Bot/releases)
 [![tag](https://img.shields.io/github/v/tag/beihehele/SaveAny-Bot.svg)](https://github.com/beihehele/SaveAny-Bot/releases)
@@ -17,7 +17,7 @@
 
 ## 功能
 
-- 保存 Telegram 文档、图片、视频和媒体组到本地目录或 ShardReel。
+- 保存 Telegram 文档、图片、视频和媒体组到本地目录、ShardReel 或 TG收藏。
 - 监听聊天、复制历史消息，保留过滤、媒体组边界和 Topic。
 - 使用目录规则、命名模板及文件冲突策略整理本地保存。
 - 通过 Telegram 或可选网页后台查询和取消任务。
@@ -105,3 +105,5 @@ go vet ./...
 - [![通知群组](https://img.shields.io/badge/ProjectSaveAny-Group-blue)](https://t.me/ProjectSaveAny)
 - [![讨论区](https://img.shields.io/badge/Github-Discussion-white)](https://github.com/beihehele/SaveAny-Bot/discussions)
 - [![个人频道](https://img.shields.io/badge/Krau-PersonalChannel-cyan)](https://t.me/acherkrau)
+
+TG收藏 的配置与使用限制见[存储端配置](docs/content/zh/deployment/configuration/storages.md#tg收藏)。

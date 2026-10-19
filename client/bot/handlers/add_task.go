@@ -47,7 +47,8 @@ func handleAddCallback(ctx *ext.Context, update *ext.Update) error {
 		return fmt.Errorf("failed to get user directories: %w", err)
 	}
 
-	if !data.SettedDir && len(dirs) != 0 {
+	_, messageStorage := selectedStorage.(storage.MessageStorage)
+	if !messageStorage && !data.SettedDir && len(dirs) != 0 {
 		// ask for directory selection
 		markup, err := msgelem.BuildSetDirMarkupForAdd(dirs, dataid)
 		if err != nil {

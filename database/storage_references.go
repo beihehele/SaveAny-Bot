@@ -45,6 +45,11 @@ func validateStorageReferences(ctx context.Context, users []User, names map[stri
 				check(r.StorageName, fmt.Sprintf("user %d rule %d", user.ChatID, r.ID))
 			}
 		}
+		for _, route := range user.WatchChats {
+			if config.C().IsCollectionTarget(route.ChatID) {
+				issues = append(issues, fmt.Errorf("watch route %d uses a TG collection target as source; remove the route before enabling that storage", route.ID))
+			}
+		}
 	}
 	if len(issues) != 0 {
 		return fmt.Errorf("stored settings need migration; preserve the database and correct the named storage references: %w", errors.Join(issues...))

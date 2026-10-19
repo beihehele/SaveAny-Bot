@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/duke-git/lancet/v2/slice"
-	"github.com/krau/SaveAny-Bot/config/storage"
+	storconfig "github.com/krau/SaveAny-Bot/config/storage"
 	"github.com/spf13/viper"
 	"golang.org/x/net/proxy"
 )
@@ -27,12 +27,12 @@ type Config struct {
 	API   apiConfig   `toml:"api" mapstructure:"api" json:"api"`
 	Admin AdminConfig `toml:"admin" mapstructure:"admin" json:"-"`
 
-	Cache    cacheConfig             `toml:"cache" mapstructure:"cache" json:"cache"`
-	Users    []userConfig            `toml:"users" mapstructure:"users" json:"users"`
-	Temp     tempConfig              `toml:"temp" mapstructure:"temp"`
-	DB       dbConfig                `toml:"db" mapstructure:"db"`
-	Telegram telegramConfig          `toml:"telegram" mapstructure:"telegram"`
-	Storages []storage.StorageConfig `toml:"-" mapstructure:"-" json:"storages"`
+	Cache    cacheConfig                `toml:"cache" mapstructure:"cache" json:"cache"`
+	Users    []userConfig               `toml:"users" mapstructure:"users" json:"users"`
+	Temp     tempConfig                 `toml:"temp" mapstructure:"temp"`
+	DB       dbConfig                   `toml:"db" mapstructure:"db"`
+	Telegram telegramConfig             `toml:"telegram" mapstructure:"telegram"`
+	Storages []storconfig.StorageConfig `toml:"-" mapstructure:"-" json:"storages"`
 
 	Hook hookConfig `toml:"hook" mapstructure:"hook" json:"hook"`
 }
@@ -50,7 +50,17 @@ func C() Config {
 	return *cfg
 }
 
-func (c Config) GetStorageByName(name string) storage.StorageConfig {
+// IsCollectionTarget prevents a configured collection endpoint becoming a watch source.
+func (c Config) IsCollectionTarget(chatID int64) bool {
+	for _, storage := range c.Storages {
+		if target, ok := storage.(*storconfig.TelegramStorageConfig); ok && target.ChatID == chatID {
+			return true
+		}
+	}
+	return false
+}
+
+func (c Config) GetStorageByName(name string) storconfig.StorageConfig {
 	for _, storage := range c.Storages {
 		if storage.GetName() == name {
 			return storage
@@ -168,7 +178,7 @@ func Init(ctx context.Context, configFile ...string) error {
 		return fmt.Errorf("telegram.scan_timeout must be a positive duration")
 	}
 
-	storagesConfig, err := storage.LoadStorageConfigs(input.StorageDefinitions)
+	storagesConfig, err := storconfig.LoadStorageConfigs(input.StorageDefinitions)
 	if err != nil {
 		return fmt.Errorf("error loading storage configs: %w", err)
 	}
@@ -176,6 +186,9 @@ func Init(ctx context.Context, configFile ...string) error {
 
 	storageNames := make(map[string]struct{})
 	for _, storage := range next.Storages {
+		if _, ok := storage.(*storconfig.TelegramStorageConfig); ok && !next.Telegram.Userbot.Enable {
+			return fmt.Errorf("telegram storage requires telegram.userbot.enable=true")
+		}
 		if _, ok := storageNames[storage.GetName()]; ok {
 			return fmt.Errorf("duplicate storage name: %s", storage.GetName())
 		}

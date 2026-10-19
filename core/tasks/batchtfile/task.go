@@ -36,11 +36,33 @@ type Task struct {
 	processing   map[string]TaskElementInfo
 	processingMu sync.RWMutex
 	results      taskresult.Tracker
+	links        []string // guarded by processingMu
+}
+
+func (t *Task) ResultLinks() []string {
+	t.processingMu.RLock()
+	defer t.processingMu.RUnlock()
+	return append([]string(nil), t.links...)
 }
 
 // Title implements core.Exectable.
 func (t *Task) Title() string {
-	return fmt.Sprintf("[%s](%d files/%.2fMB)", t.Type(), len(t.elems), float64(t.totalSize)/(1024*1024))
+	title := fmt.Sprintf("[%s](%d files/%.2fMB)", t.Type(), len(t.elems), float64(t.totalSize)/(1024*1024))
+	destination := ""
+	for _, elem := range t.elems {
+		target, ok := elem.Storage.(interface{ Destination() string })
+		if !ok {
+			return title
+		}
+		if destination != "" && destination != target.Destination() {
+			return title
+		}
+		destination = target.Destination()
+	}
+	if destination != "" {
+		return title + " → " + destination
+	}
+	return title
 }
 
 func (t *Task) Type() tasktype.TaskType {

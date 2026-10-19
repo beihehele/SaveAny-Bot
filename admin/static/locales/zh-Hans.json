@@ -452,5 +452,15 @@
   "copyRequested": "请求最多",
   "copyMatched": "实际匹配",
   "copyUnfinished": "未完成",
-  "expressionPlaceholder": "msgre:舞团&(king8|k8)"
+  "expressionPlaceholder": "msgre:舞团&(king8|k8)",
+  "tgCollection": "TG收藏",
+  "openCollection": "打开收藏消息",
+  "collectionTarget": "收藏目标",
+  "collectionNote": "可转发时直接复制；明确禁转时下载后上传。目录和同名冲突设置不适用。",
+  "collection_copying": "正在复制",
+  "collection_downloading": "正在下载缓存",
+  "collection_uploading": "正在上传",
+  "collection_sending": "正在发送",
+  "collection_sent": "已收藏",
+  "notApplicable": "不适用"
 }

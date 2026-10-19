@@ -8,8 +8,10 @@ import (
 	storcfg "github.com/krau/SaveAny-Bot/config/storage"
 	storenum "github.com/krau/SaveAny-Bot/pkg/enums/storage"
 	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
+	"github.com/krau/SaveAny-Bot/pkg/tfile"
 	"github.com/krau/SaveAny-Bot/storage/local"
 	"github.com/krau/SaveAny-Bot/storage/shardreel"
+	"github.com/krau/SaveAny-Bot/storage/telegram"
 )
 
 type Storage interface {
@@ -19,6 +21,13 @@ type Storage interface {
 	Name() string
 	Save(ctx context.Context, reader io.Reader, storagePath string) error
 	Exists(ctx context.Context, storagePath string) (bool, error)
+}
+
+// MessageStorage saves original messages together, before byte-stream download.
+// One call contains either a single message or the members of one album.
+type MessageStorage interface {
+	Storage
+	SaveMessages(context.Context, []tfile.TGFileMessage) ([]string, error)
 }
 
 type StorageCannotStream interface {
@@ -67,6 +76,7 @@ type StorageConstructor func() Storage
 var storageConstructors = map[storenum.StorageType]StorageConstructor{
 	storenum.Local:     func() Storage { return new(local.Local) },
 	storenum.Shardreel: func() Storage { return new(shardreel.Store) },
+	storenum.Telegram:  func() Storage { return new(telegram.Store) },
 }
 
 // NewStorage creates a new storage instance based on the provided config and initializes it

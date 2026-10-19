@@ -105,6 +105,20 @@ func TestTaskRecordDeletionHTTP(t *testing.T) {
 	if content, err := os.ReadFile(saved); err != nil || string(content) != "keep saved file" {
 		t.Fatalf("history deletion changed saved file: %q %v", content, err)
 	}
+	// Collection receipts belong to the record; deleting them never needs a
+	// Telegram client or removes the actual collected messages.
+	collectionCtx, _, _ := taskhistory.Default.Track(t.Context(), "collection-record", "tgfiles", "TG收藏")
+	observer := api.RegisterTask("collection-record", "tgfiles", "TG收藏", "", "TG收藏", "")
+	collectionCtx = taskevent.WithSink(collectionCtx, observer)
+	taskevent.Emit(collectionCtx, taskevent.Event{Phase: taskevent.PhaseProgress, DeliveryProgress: &taskevent.DeliveryProgress{Stage: "sent"}, ResultLinks: []string{"https://t.me/c/222/501"}})
+	taskevent.Emit(collectionCtx, taskevent.Event{Phase: taskevent.PhaseDone, Outcome: taskresult.OutcomeSuccess})
+	if response := perform(s, "DELETE", "/admin/api/v1/tasks/collection-record", "", cookie, csrf, "http://console.test"); response.Code != 200 {
+		t.Fatal("collection record deletion failed", response.Body.String())
+	}
+	taskevent.Emit(collectionCtx, taskevent.Event{Phase: taskevent.PhaseProgress, ResultLinks: []string{"https://t.me/c/222/501"}})
+	if response := perform(s, "GET", "/admin/api/v1/tasks?q=collection-record", "", cookie, csrf, ""); response.Code != 200 || !containsEmptyTasks(response.Body.Bytes()) {
+		t.Fatal("late receipt recreated collection record", response.Body.String())
+	}
 	for _, status := range []string{"queued", "running"} {
 		id := "active-" + status
 		ctx, rollback, _ := taskhistory.Default.Track(t.Context(), id, "copy", "active")

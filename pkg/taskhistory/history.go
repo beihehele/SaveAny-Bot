@@ -41,6 +41,8 @@ type Record struct {
 	TotalFiles, DownloadedFiles            int
 	ResultSummary                          *taskresult.Counts
 	CopyProgress                           *taskevent.CopyProgress
+	DeliveryProgress                       *taskevent.DeliveryProgress
+	ResultLinks                            []string
 }
 
 type entry struct {
@@ -178,6 +180,12 @@ func (e *entry) Emit(event taskevent.Event) {
 			r.ResultSummary = &counts
 		}
 	}
+	if event.DeliveryProgress != nil {
+		p := *event.DeliveryProgress
+		r.DeliveryProgress = &p
+	}
+	r.ResultLinks = append(r.ResultLinks, event.ResultLinks...)
+
 	r.UpdatedAt = s.now()
 	if terminal(r.Status) {
 		s.pruneLocked()
@@ -227,6 +235,12 @@ func (s *Store) Snapshots() []Record {
 			progress := *r.CopyProgress
 			r.CopyProgress = &progress
 		}
+		if r.DeliveryProgress != nil {
+			p := *r.DeliveryProgress
+			r.DeliveryProgress = &p
+		}
+		r.ResultLinks = append([]string(nil), r.ResultLinks...)
+
 		out = append(out, r)
 	}
 	return out

@@ -10,6 +10,16 @@ import (
 var storageFactories = map[storenum.StorageType]func(raw map[string]any) (StorageConfig, error){
 	storenum.Local:     decodeLocalConfig,
 	storenum.Shardreel: decodeShardReelConfig,
+	storenum.Telegram:  decodeTelegramConfig,
+}
+
+func decodeTelegramConfig(raw map[string]any) (StorageConfig, error) {
+	result := new(TelegramStorageConfig)
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{Result: result, ErrorUnused: true, WeaklyTypedInput: true})
+	if err != nil {
+		return nil, err
+	}
+	return result, decoder.Decode(raw)
 }
 
 func decodeShardReelConfig(raw map[string]any) (StorageConfig, error) {

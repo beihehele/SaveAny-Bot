@@ -1,8 +1,16 @@
 package database
 
-import "context"
+import (
+	"context"
+	"fmt"
+
+	"github.com/krau/SaveAny-Bot/config"
+)
 
 func (user *User) WatchChat(ctx context.Context, chat WatchChat) error {
+	if config.C().IsCollectionTarget(chat.ChatID) {
+		return fmt.Errorf("TG collection target cannot be a watch source")
+	}
 	chat.UserID = user.ID
 	// A command may hold a snapshot predating /unwatch. Saving that whole slice
 	// would recreate deleted routes; only persist the newly requested route.

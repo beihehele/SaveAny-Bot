@@ -25,18 +25,24 @@ const attributionLabel = "[转]"
 // then prepends a clickable [转] link on the caption/text message pointing to sourceLinkMsgID.
 // rpcCtx is used for Telegram RPCs so callers (e.g. /copy) can cancel FLOOD_WAIT sleeps.
 func ForwardMessagesDropAuthor(rpcCtx context.Context, ectx *ext.Context, fromChatID, toChatID int64, messageIDs []int, topMsgID, sourceLinkMsgID int) error {
+	_, err := CopyMessages(rpcCtx, ectx, fromChatID, toChatID, messageIDs, topMsgID, sourceLinkMsgID)
+	return err
+}
+
+// CopyMessages is the shared DropAuthor implementation and returns confirmed target messages.
+func CopyMessages(rpcCtx context.Context, ectx *ext.Context, fromChatID, toChatID int64, messageIDs []int, topMsgID, sourceLinkMsgID int) ([]*tg.Message, error) {
 	if ectx == nil {
-		return fmt.Errorf("user context is nil")
+		return nil, fmt.Errorf("user context is nil")
 	}
 	if rpcCtx == nil {
 		rpcCtx = ectx
 	}
 	if err := rpcCtx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 	ectx = tgutil.ClientWithContext(rpcCtx, ectx)
 	if len(messageIDs) == 0 {
-		return fmt.Errorf("empty message ids")
+		return nil, fmt.Errorf("empty message ids")
 	}
 	ids := append([]int(nil), messageIDs...)
 	sort.Ints(ids)
@@ -46,11 +52,11 @@ func ForwardMessagesDropAuthor(rpcCtx context.Context, ectx *ext.Context, fromCh
 
 	fromPeer, err := resolveInputPeer(ectx, fromChatID)
 	if err != nil {
-		return fmt.Errorf("cannot resolve source peer %d: %w", fromChatID, err)
+		return nil, fmt.Errorf("cannot resolve source peer %d: %w", fromChatID, err)
 	}
 	toPeer, err := resolveInputPeer(ectx, toChatID)
 	if err != nil {
-		return fmt.Errorf("cannot resolve target peer %d: %w", toChatID, err)
+		return nil, fmt.Errorf("cannot resolve target peer %d: %w", toChatID, err)
 	}
 
 	randomIDs := make([]int64, len(ids))
@@ -71,19 +77,19 @@ func ForwardMessagesDropAuthor(rpcCtx context.Context, ectx *ext.Context, fromCh
 
 	updates, err := ectx.Raw.MessagesForwardMessages(rpcCtx, req)
 	if err != nil {
-		return fmt.Errorf("forward messages: %w", err)
+		return nil, fmt.Errorf("forward messages: %w", err)
 	}
 
 	link, err := tgutil.BuildMessageLink(ectx, fromChatID, sourceLinkMsgID)
 	if err != nil {
 		log.FromContext(rpcCtx).Warnf("build source link for attribution: %v", err)
-		return nil
+		return MessagesFromUpdates(updates), nil
 	}
-	if err := appendAttributionToForwarded(rpcCtx, ectx, toPeer, updates, link); err != nil {
+	if err := AppendAttribution(rpcCtx, ectx, toPeer, updates, link); err != nil {
 		// Content already copied independently; attribution is best-effort.
 		log.FromContext(rpcCtx).Warnf("prepend [转] after forward: %v", err)
 	}
-	return nil
+	return MessagesFromUpdates(updates), nil
 }
 
 // ForwardMessage copies one message (or its whole album) with DropAuthor and [转] link.
@@ -135,8 +141,12 @@ func ForwardMessage(rpcCtx context.Context, ectx *ext.Context, fromChatID, toCha
 	return ForwardMessagesDropAuthor(rpcCtx, ectx, fromChatID, toChatID, ids, topMsgID, linkID)
 }
 
-func appendAttributionToForwarded(rpcCtx context.Context, ectx *ext.Context, toPeer tg.InputPeerClass, updates tg.UpdatesClass, link string) error {
-	msgs := messagesFromUpdates(updates)
+// AppendAttribution edits an already confirmed send; failures must never trigger resending.
+func AppendAttribution(rpcCtx context.Context, ectx *ext.Context, toPeer tg.InputPeerClass, updates tg.UpdatesClass, link string) error {
+	if _, short := updates.(*tg.UpdateShortSentMessage); short {
+		return fmt.Errorf("no message body in short receipt")
+	}
+	msgs := MessagesFromUpdates(updates)
 	if len(msgs) == 0 {
 		return fmt.Errorf("no messages in forward updates")
 	}
@@ -176,7 +186,8 @@ func pickAttributionMessage(msgs []*tg.Message) *tg.Message {
 	return nil
 }
 
-func messagesFromUpdates(u tg.UpdatesClass) []*tg.Message {
+// MessagesFromUpdates extracts newly created messages from a send receipt.
+func MessagesFromUpdates(u tg.UpdatesClass) []*tg.Message {
 	var out []*tg.Message
 	add := func(mc tg.MessageClass) {
 		if m, ok := mc.(*tg.Message); ok && m != nil {
@@ -203,7 +214,7 @@ func messagesFromUpdates(u tg.UpdatesClass) []*tg.Message {
 			}
 		}
 	case *tg.UpdateShortSentMessage:
-		// No full message body; skip attribution edit.
+		out = append(out, &tg.Message{ID: v.ID})
 	case *tg.UpdateShort:
 		switch x := v.Update.(type) {
 		case *tg.UpdateNewMessage:

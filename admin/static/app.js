@@ -85,7 +85,8 @@
   function definitions(target, values) {
     target.replaceChildren();
     for (const [label, value] of values) {
-      target.append(node("dt", label), node("dd", typeof value === "boolean" ? t(value ? "yes" : "no") : (value ?? "—")));
+      const dd=node("dd"); dd.append(value instanceof Node ? value : node("span",typeof value === "boolean" ? t(value ? "yes" : "no") : (value ?? "—")));
+      target.append(node("dt",label),dd);
     }
   }
   function badge(status) { return node("span", t(status), `badge ${status}`); }
@@ -161,6 +162,15 @@
     const values = [[t("taskID"), task.task_id], [t("title"), task.title], [t("status"), t(taskStatusKey(task))],
       [t("scope"), scopeLabel(task)], [t("taskType"), t(task.type || "unknownType")],
       [t("source"), t(`source_${task.source || "unknown"}`)], [t("storage"), task.storage], [t("path"), task.path], [t("createdAt"), date(task.created_at)]];
+    if (task.delivery_progress) {
+      values.push([t("tgCollection"),["queued","running","cancelling"].includes(task.status) ? t(`collection_${task.delivery_progress.stage}`) : t(task.status)]);
+      if (task.delivery_progress.total_bytes && ["running","cancelling"].includes(task.status)) values.push([t("progress"),`${bytes(task.delivery_progress.bytes)} / ${bytes(task.delivery_progress.total_bytes)}`]);
+    }
+    for (const link of task.result_links || []) {
+      if (!/^https:\/\/t\.me\//.test(link)) continue;
+      const anchor=node("a",t("openCollection")); anchor.href=link;anchor.target="_blank";anchor.rel="noopener noreferrer";
+      values.push([t("tgCollection"),anchor]);
+    }
     if (task.copy_progress) values.push([t("progressResult"), copyProgressLines(task).join("\n")]);
     if (task.progress) {
       values.push([t(task.downloading ? "downloadProgress" : "progress"), `${Number(task.progress.percent || 0).toFixed(1)}%`],
@@ -226,7 +236,12 @@
       const title = node("div");
       title.append(node("div", task.title || task.task_id, "cell-title"), node("div", `${task.task_id} · ${t(`source_${task.source || "unknown"}`)} · ${scopeLabel(task)}`, "cell-subtitle"));
       const progress = node("div", null, "progress");
-      if (task.copy_progress) {
+      if (task.delivery_progress) {
+        const active=["queued","running","cancelling"].includes(task.status), p=task.delivery_progress;
+        progress.append(node("span",active ? t(`collection_${p.stage}`) : t(task.status)));
+        if(active && p.total_bytes>0){const meter=node("progress");meter.max=p.total_bytes;meter.value=Math.min(p.total_bytes,p.bytes||0);meter.setAttribute("aria-label",t(`collection_${p.stage}`));progress.append(meter,node("span",`${bytes(p.bytes)} / ${bytes(p.total_bytes)}`,"cell-subtitle"));}
+        if (task.result_summary) progress.append(node("span",`${t("resultSucceeded")}: ${task.result_summary.succeeded} / ${task.result_summary.total}`,"cell-subtitle"));
+      } else if (task.copy_progress) {
         progress.className = "progress copy-progress";
         copyProgressLines(task).forEach((line, index) => progress.append(node("span", line, index ? "cell-subtitle" : "")));
         if (task.copy_progress.stage === "forwarding" && ["running", "cancelling"].includes(task.status)) {
@@ -283,7 +298,14 @@
     $("task-type").value = valid ? selected : (state.capabilities.find((capability) => capability.available)?.type || "");
     typeFields();
   }
+  function storagePathField() {
+    const collection=state.storages.find((store)=>store.name===$("target-storage").value)?.type==="telegram";
+    $("target-path").hidden=collection;$("target-path").disabled=collection;
+    document.querySelector('label[for="target-path"]').hidden=collection;
+  }
+  $("target-storage").addEventListener("change",storagePathField);
   function typeFields() {
+    storagePathField();
     const type = $("task-type").value;
     $("task-urls").required = true;
     $("urls-label").textContent = t("messageLinks");
@@ -306,6 +328,10 @@
       card.append(node("h2", storage.name), node("span", storage.type, "badge"));
       const values = node("dl", null, "definition-list");
       definitions(values, [[t("readable"), storage.readable], [t("listable"), storage.listable], [t("stream"), storage.stream], [t("detectExistence"), storage.detect_existence]]);
+      if (storage.type === "telegram") {
+        definitions(values,[[t("collectionTarget"),`${storage.chat_id}${storage.topic_id ? ` Topic:${storage.topic_id}` : ""}`]]);
+        card.append(node("p",t("collectionNote"),"small muted"));
+      }
       card.append(values);
       if (storage.listable) card.append(button(t("browseFiles"), () => {
         $("file-storage").value = storage.name; $("file-path").value = "/"; state.fileOffset = 0; location.hash = "files";
@@ -375,6 +401,8 @@
     const storage = add("default_storage", "defaultStorage", user.default_storage, storages);
     const dir = add("default_dir", "defaultDirectory", user.default_dir || 0, []);
     function directoryChoices() {
+      const collection=state.storages.find((store)=>store.name===storage.value)?.type==="telegram";
+      dir.disabled=collection;dir.hidden=collection;form.querySelector(`label[for="${dir.id}"]`).hidden=collection;
       dir.replaceChildren();
       [[0, t("storageRoot")], ...user.directories.filter((item) => item.storage === storage.value).map((item) => [item.id, item.path])].forEach(([value, label]) => {
         const option = node("option", label); option.value = String(value); dir.append(option);
@@ -405,7 +433,9 @@
       const panel = node("article", null, "panel"); panel.append(node("h2", `${t("telegramUser")} ${user.chat_id}`));
       const values = node("dl", null, "definition-list");
       const defaultDir = user.directories.find((directory) => directory.id === user.default_dir);
-      definitions(values, [[t("defaultStorage"), user.default_storage || t("unset")], [t("defaultDirectory"), defaultDir?.path || t("storageRoot")],
+      const collection=state.storages.find((store)=>store.name===user.default_storage)?.type==="telegram";
+      if(collection) panel.append(node("p",t("collectionNote"),"note"));
+      definitions(values, [[t("defaultStorage"), user.default_storage || t("unset")], [t("defaultDirectory"), collection ? t("notApplicable") : defaultDir?.path || t("storageRoot")],
         [t("silent"), user.silent], [t("applyRules"), user.apply_rule], [t("filenameStrategy"), user.filename_strategy || t("unset")],
         [t("filenameTemplate"), user.filename_template || t("unset")], [t("conflictStrategy"), user.conflict_strategy || t("unset")]]);
       panel.append(values, preferenceEditor(user));
@@ -587,7 +617,7 @@
   $("task-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (state.submitting) return;
-    const type = $("task-type").value, storage = $("target-storage").value, targetPath = $("target-path").value;
+    const type = $("task-type").value, storage = $("target-storage").value, targetPath = $("target-path").disabled ? "" : $("target-path").value;
     const urls = $("task-urls").value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     if (!urls.length) { toast(t("enterUrls")); return; }
     const payload = { type, storage, path: targetPath, params: { message_links: urls } };

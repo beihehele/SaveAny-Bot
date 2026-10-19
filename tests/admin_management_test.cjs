@@ -44,6 +44,10 @@ test("copy rendering distinguishes scanning, processing, no matches and partial 
   row.status="completed";row.copy_progress.matched=0;row.result_summary={total:0,pending:0,running:0,succeeded:0,failed:0,cancelled:0,interrupted:0};
   app.render(list,[row]);assert.match(list.textContent,/No matching media found/);assert.match(list.textContent,/Requested up to: 100 · Matched: 0/);
   row.status="failed";app.render(list,[row]);assert.doesNotMatch(list.textContent,/No matching media found/);
+  const collection={task_id:"collection",type:"tgfiles",status:"running",delivery_progress:{stage:"uploading",bytes:4,total_bytes:8},result_summary:{total:2,succeeded:0,failed:0}};
+  app.render(list,[collection]);assert.match(list.textContent,/Uploading/);assert.match(list.textContent,/4 B \/ 8 B/);
+  collection.status="cancelled";app.render(list,[collection]);assert.doesNotMatch(list.textContent,/Uploading/);assert.match(list.textContent,/Cancelled/);
+
 });
 
 test("source dropdown searches literal names and canonical IDs", () => {

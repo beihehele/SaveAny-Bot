@@ -47,9 +47,18 @@ type Event struct {
 	Err             error
 	// Outcome is the worker's terminal decision, captured before terminal hooks.
 	// Nonterminal events leave Outcome unset; terminal events require a decision.
-	Outcome       taskresult.Outcome
-	ResultSummary *taskresult.Counts
-	CopyProgress  *CopyProgress
+	Outcome          taskresult.Outcome
+	ResultSummary    *taskresult.Counts
+	CopyProgress     *CopyProgress
+	DeliveryProgress *DeliveryProgress
+	ResultLinks      []string
+}
+
+// DeliveryProgress describes the current TG collection stage, independently of download progress.
+type DeliveryProgress struct {
+	Stage      string `json:"stage"`
+	Bytes      int64  `json:"bytes,omitempty"`
+	TotalBytes int64  `json:"total_bytes,omitempty"`
 }
 
 // CopyProgress counts logical items (one message or one whole album).
@@ -110,6 +119,11 @@ func Emit(ctx context.Context, e Event) {
 			progress := *e.CopyProgress
 			event.CopyProgress = &progress
 		}
+		if e.DeliveryProgress != nil {
+			progress := *e.DeliveryProgress
+			event.DeliveryProgress = &progress
+		}
+		event.ResultLinks = append([]string(nil), e.ResultLinks...)
 		s.Emit(event)
 	}
 }

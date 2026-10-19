@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/krau/SaveAny-Bot/config"
+	storcfg "github.com/krau/SaveAny-Bot/config/storage"
 	"github.com/krau/SaveAny-Bot/core/taskcontrol"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/inputresult"
@@ -195,7 +197,12 @@ func (h *Handlers) ListStoragesHandler(w http.ResponseWriter, r *http.Request) {
 		_, readable := stor.(storage.StorageReadable)
 		_, listable := stor.(storage.StorageListable)
 		_, cannotStream := stor.(storage.StorageCannotStream)
-		storages = append(storages, StorageInfo{
+		var chatID int64
+		var topicID int
+		if cfg, ok := config.C().GetStorageByName(name).(*storcfg.TelegramStorageConfig); ok {
+			chatID, topicID = cfg.ChatID, cfg.TopicID
+		}
+		storages = append(storages, StorageInfo{ChatID: chatID, TopicID: topicID,
 			Name:            name,
 			Type:            string(stor.Type()),
 			Readable:        readable,
@@ -253,7 +260,7 @@ func convertTaskProgressToResponse(task *TaskProgressInfo) TaskInfoResponse {
 	s := task.responseSnapshot()
 	status, total, downloaded, totalFiles, downloadedFiles, startedAt, errMsg, updatedAt := s.status, s.total, s.downloaded, s.totalFiles, s.downloadedFiles, s.startedAt, s.err, s.updatedAt
 
-	resp := TaskInfoResponse{
+	resp := TaskInfoResponse{DeliveryProgress: s.deliveryProgress, ResultLinks: s.resultLinks,
 		TaskID:        task.TaskID,
 		Type:          tasktype.TaskType(task.Type),
 		Status:        status,

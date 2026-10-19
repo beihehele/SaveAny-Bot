@@ -12,9 +12,12 @@ import (
 	"github.com/krau/SaveAny-Bot/common/tdler"
 	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
 	"github.com/krau/SaveAny-Bot/common/utils/retryutil"
+	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/ctxkey"
 	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
+	"github.com/krau/SaveAny-Bot/pkg/tfile"
+	"github.com/krau/SaveAny-Bot/storage"
 )
 
 func (t *Task) Execute(ctx context.Context) (err error) {
@@ -29,6 +32,9 @@ func (t *Task) Execute(ctx context.Context) (err error) {
 		meta.ChatID, meta.MessageID = progress.UploadDestination()
 	}
 	ctx = storagetypes.WithSaveRequest(ctx, meta)
+	if _, ok := t.Storage.(storage.MessageStorage); ok {
+		ctx = tgutil.WithDeliveryFeedback(ctx, t.ID, t.Progress)
+	}
 	if t.Progress != nil {
 		t.Progress.OnStart(ctx, t)
 	}
@@ -40,6 +46,17 @@ func (t *Task) Execute(ctx context.Context) (err error) {
 			t.Progress.OnDone(ctx, t, err)
 		}
 	}()
+	if store, ok := t.Storage.(storage.MessageStorage); ok {
+		file, ok := t.File.(tfile.TGFileMessage)
+		if !ok {
+			return fmt.Errorf("collection requires original messages")
+		}
+		links, saveErr := store.SaveMessages(ctx, []tfile.TGFileMessage{file})
+		t.resultMu.Lock()
+		t.links = links
+		t.resultMu.Unlock()
+		return saveErr
+	}
 
 	if capacity, ok := t.Storage.(interface {
 		Reserve(context.Context, int64, string) error

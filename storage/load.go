@@ -147,6 +147,9 @@ func LoadStorages(ctx context.Context) {
 	logger.Infof("successfully loaded %d storages", len(loaded))
 	if config.C().Stream {
 		for name, s := range loaded {
+			if _, messages := s.(MessageStorage); messages {
+				continue
+			}
 			if cs, ok := s.(StorageCannotStream); ok {
 				logger.Warnf("stream=true but storage %q cannot stream: %s (will fall back to temp file)", name, cs.CannotStream())
 			}

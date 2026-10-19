@@ -452,5 +452,15 @@
   "copyRequested": "Requested up to",
   "copyMatched": "Matched",
   "copyUnfinished": "Unfinished",
-  "expressionPlaceholder": "msgre:dance&(king8|k8)"
+  "expressionPlaceholder": "msgre:dance&(king8|k8)",
+  "tgCollection": "TG collection",
+  "openCollection": "Open collected message",
+  "collectionTarget": "Collection target",
+  "collectionNote": "Copies directly when allowed; downloads and uploads only when forwarding is restricted. Directory and filename conflicts do not apply.",
+  "collection_copying": "Copying",
+  "collection_downloading": "Downloading to cache",
+  "collection_uploading": "Uploading",
+  "collection_sending": "Sending",
+  "collection_sent": "Collected",
+  "notApplicable": "Not applicable"
 }

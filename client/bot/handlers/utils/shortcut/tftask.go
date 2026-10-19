@@ -210,6 +210,11 @@ func CreateAndAddBatchTGFileTaskWithEdit(ctx *ext.Context, userID int64, stor st
 				return dispatcher.EndGroups
 			}
 		}
+		if _, messages := fileStor.(storage.MessageStorage); messages {
+			// Message storage has no directories. Keep its selected storage per
+			// member so folder handling cannot overwrite mixed album rules.
+			matchedDirPath = ""
+		}
 		if matchedDirPath.NeedNewForAlbum() && albumDirs[file.Message()] == "" {
 			matchedDirPath = ruleutil.MatchedDirPath(path.Join(dirPath, strings.TrimSuffix(path.Base(file.Name()), path.Ext(file.Name()))))
 		}

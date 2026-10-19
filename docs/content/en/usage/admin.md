@@ -72,3 +72,5 @@ Deletion removes task history, file details and retained upload payloads only. S
 ### Combined filters and copy progress
 
 Copy and watch support simple keywords or a combined expression such as `msgre:dance&(king8|k8)`. Existing text previews use the same parser; invalid expressions cannot create a task. Copy tasks show search matches, actual copying progress and success/failure results, with no search percentage. Titles contain source, full filter, target and optional `Topic:Name(id)`; omit the suffix without a topic. Cancellation and history-deletion boundaries are unchanged.
+
+TG collection is available alongside local and ShardReel storage. It has no directory or file browsing; task details show delivery stages and links to collected messages. See [storage configuration](../../deployment/configuration/storages/#tg-collection).

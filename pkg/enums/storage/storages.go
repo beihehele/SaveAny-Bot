@@ -6,5 +6,6 @@ package storage
 /* ENUM(
 local
 shardreel
+telegram
 ) */
 type StorageType string

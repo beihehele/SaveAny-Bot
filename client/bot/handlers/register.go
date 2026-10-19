@@ -35,6 +35,7 @@ var CommandHandlers = []DescCommandHandler{
 	{"help", i18nk.BotMsgCmdHelp, handleHelpCmd},
 	{"watch", i18nk.BotMsgCmdWatch, handleWatchCmd},
 	{"copy", i18nk.BotMsgCmdCopy, handleCopyCmd},
+	{"collect", i18nk.BotMsgCmdCollect, handleCollectCmd},
 	{"unwatch", i18nk.BotMsgCmdUnwatch, handleUnwatchCmd},
 	{"lswatch", i18nk.BotMsgCmdLswatch, handleLswatchCmd},
 	{"lschannel", i18nk.BotMsgCmdLschannel, handleLschannelCmd},

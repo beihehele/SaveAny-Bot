@@ -17,6 +17,7 @@ import (
 	"github.com/krau/SaveAny-Bot/client/bot/handlers/utils/ruleutil"
 	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/core"
+	"github.com/krau/SaveAny-Bot/core/tasks/batchtfile"
 	coretfile "github.com/krau/SaveAny-Bot/core/tasks/tfile"
 	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/enums/fnamest"
@@ -283,6 +284,22 @@ func processWatchLocalAlbumTasks(ctx *ext.Context, user *database.User, stor sto
 
 func submitWatchAlbum(ctx *ext.Context, userID int64, source *tg.Message, tasks []core.Executable, prepareFailed int, enqueue watchAlbumEnqueue) int {
 	logger := log.FromContext(ctx)
+	if prepareFailed > 0 {
+		for _, task := range tasks {
+			if file, ok := task.(*coretfile.Task); ok {
+				if _, ok := file.Storage.(storage.MessageStorage); ok {
+					logger.Warn("Skip incomplete TG collection album", "prepare_failed", prepareFailed)
+					return 0
+				}
+			}
+		}
+	}
+	var err error
+	tasks, err = groupWatchCollection(tasks)
+	if err != nil {
+		logger.Error("Prepare TG collection album", "error", err)
+		return 0
+	}
 	var groupedID int64
 	var peer tg.PeerClass
 	if source != nil {
@@ -306,6 +323,35 @@ func submitWatchAlbum(ctx *ext.Context, userID int64, source *tg.Message, tasks 
 	logger.Info("Watch album tasks admitted", "user_id", userID, "grouped_id", groupedID, "source_peer", peer,
 		"admitted_tasks", len(tasks), "prepare_failed", prepareFailed)
 	return len(tasks)
+}
+
+// groupWatchCollection retains ordinary file scheduling; TG collection needs
+// one batch so the existing per-file rules cannot split an album into sends.
+func groupWatchCollection(tasks []core.Executable) ([]core.Executable, error) {
+	hasCollection := false
+	for _, task := range tasks {
+		if file, ok := task.(*coretfile.Task); ok {
+			if _, ok := file.Storage.(storage.MessageStorage); ok {
+				hasCollection = true
+			}
+		}
+	}
+	if !hasCollection {
+		return tasks, nil
+	}
+	elements := make([]batchtfile.TaskElement, 0, len(tasks))
+	for _, task := range tasks {
+		file, ok := task.(*coretfile.Task)
+		if !ok {
+			return nil, fmt.Errorf("unexpected collection album task %T", task)
+		}
+		elem, err := batchtfile.NewTaskElement(file.Storage, file.Path, file.File)
+		if err != nil {
+			return nil, err
+		}
+		elements = append(elements, *elem)
+	}
+	return []core.Executable{batchtfile.NewBatchTGFileTask(xid.New().String(), elements, nil)}, nil
 }
 
 func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.Storage, dirPath string, files []tfile.TGFileMessage, enqueue watchAlbumEnqueue) {
@@ -384,6 +430,17 @@ func processWatchMediaGroup(ctx *ext.Context, user *database.User, stor storage.
 	for groupID, afiles := range albumFiles {
 		albumDir := albumDirs[afiles[0].file.Message()]
 		albumStor := afiles[0].storage
+		collection, mixed := false, false
+		for _, af := range afiles {
+			if _, ok := af.storage.(storage.MessageStorage); ok {
+				collection = true
+			}
+			mixed = mixed || af.storage.Name() != albumStor.Name()
+		}
+		if collection && mixed {
+			logger.Warn("Skip TG collection album with mixed rule storages", "grouped_id", groupID)
+			continue
+		}
 
 		logger.Infof("Creating album folder for group %d: %s with %d files", groupID, albumDir, len(afiles))
 

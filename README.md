@@ -4,7 +4,7 @@
 
 **English** | [简体中文](./README_zh.md)
 
-> **Save Telegram files locally or to ShardReel, and manage chat watches and history copies.**
+> **Save Telegram files locally, to ShardReel or to a Telegram collection, and manage chat watches and history copies.**
 
 [![Release Date](https://img.shields.io/github/release-date/beihehele/SaveAny-Bot?label=release)](https://github.com/beihehele/SaveAny-Bot/releases)
 [![tag](https://img.shields.io/github/v/tag/beihehele/SaveAny-Bot.svg)](https://github.com/beihehele/SaveAny-Bot/releases)
@@ -19,7 +19,7 @@
 
 ## Features
 
-- Save Telegram documents, photos, videos and albums to local directories or a ShardReel endpoint.
+- Save Telegram documents, photos, videos and albums to local directories, ShardReel or a configured Telegram collection.
 - Watch chats and copy history, retaining filters, album boundaries and topics.
 - Organize local saves with directory rules and filename templates.
 - Inspect and cancel tasks through Telegram or the optional admin console.
@@ -106,3 +106,5 @@ If this project is helpful to you, consider sponsoring me via:
 - [![Group](https://img.shields.io/badge/ProjectSaveAny-Group-blue)](https://t.me/ProjectSaveAny)
 - [![Discussion](https://img.shields.io/badge/Github-Discussion-white)](https://github.com/beihehele/SaveAny-Bot/discussions)
 - [![PersonalChannel](https://img.shields.io/badge/Krau-PersonalChannel-cyan)](https://t.me/acherkrau)
+
+TG collection configuration and behavior: [storage configuration](docs/content/en/deployment/configuration/storages.md#tg-collection).

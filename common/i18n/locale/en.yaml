@@ -6,6 +6,7 @@ bot:
       info_cancelling_task: Cancelling task...
       usage: "Usage: /cancel <task_id>"
     cmd:
+      collect: Collect a message or album to Telegram (UserBot)
       cancel: Cancel task
       config: Modify configuration
       copy: Copy history messages to a target chat (UserBot)
@@ -106,6 +107,10 @@ bot:
       prompt_select_conflict_strategy: "Please select duplicate file strategy, current strategy: {{.Strategy}}"
       prompt_select_filename_strategy: "Please select filename strategy, current strategy: {{.Strategy}}"
       prompt_select_option: Please select an option to configure
+    collect:
+      help_text: "Usage: /collect <message URL> [target chat ID] [Topic ID]\nOmit target to use the sole available TG collection storage, including its topic. An explicit target without a topic uses no topic; topic 0 also means no topic. Collects one complete message/album, bypassing directory/naming rules; ?single is not supported for albums."
+      error_storage_required: "Configure and authorize one TG collection storage, and enable/login the Userbot first."
+      error_storage_ambiguous: "Multiple TG collection storages are available. Keep one available collection configuration for this user to use /collect."
     copy:
       all_media: All media
       no_matches: No matching media found
@@ -114,7 +119,7 @@ bot:
       error_already_running: A copy task is already running; cancel it or wait until it finishes
       error_count_too_large: count is too large; maximum is {{.Max}}
       error_target_forbidden: copy does not support local save; please specify a target chat
-    copy_help_text: "Use /copy to copy historical messages to a target chat via UserBot DropAuthor with a clickable [转] link at the start (source deletion does not affect the copy; no local storage). Requires UserBot. Use target:topicId for a forum topic. target=0 is not supported.\n\nSyntax:\n/copy <source_id> <target_id[:topicId]> [filter] [count]\n\nParameters:\n- <source_id>: Source chat ID or username\n- <target_id[:topicId]>: Target chat ID (required, cannot be 0); :topicId is forum topic ID (from /lstopic)\n- [filter]: Optional msgre:<boolean expression> (& | ! () keywords, case-insensitive)\n- [count]: Optional hit count, default 500, max 5000\n\nExamples:\n/copy -1002229835658 -1003333444555\n/copy -1002229835658 -1003333444555:12345 msgre:plana|planb\n/copy -1002229835658 -1003333444555 msgre:plana&(planb|planc) 100\n/copy -1002229835658 -1003333444555 50\n"
+    copy_help_text: "Use /copy to copy historical messages to a target chat via UserBot DropAuthor with a clickable [转] link at the start (source deletion does not affect the copy; no local storage). Requires UserBot. Use target:topicId for a forum topic. target=0 is not supported.\n\nSyntax:\n/copy <source_id> <target_id[:topicId]> [filter] [count]\n\nParameters:\n- <source_id>: Source chat ID or username\n- <target_id[:topicId]>: Target chat ID (required, cannot be 0); :topicId is forum topic ID (from /lstopic)\n- [filter]: Optional msgre:<boolean expression> (& | ! () keywords, case-insensitive)\n- [count]: Optional hit count, default 500, max 5000\n\nExamples:\n/collect - Collect a message or album (UserBot)\n/copy -1002229835658 -1003333444555\n/collect - Collect a message or album (UserBot)\n/copy -1002229835658 -1003333444555:12345 msgre:plana|planb\n/collect - Collect a message or album (UserBot)\n/copy -1002229835658 -1003333444555 msgre:plana&(planb|planc) 100\n/collect - Collect a message or album (UserBot)\n/copy -1002229835658 -1003333444555 50\n"
     dir:
       button_default: Default
       error_create_dir_failed: Failed to create directory
@@ -145,7 +150,7 @@ bot:
       help_usage: "Usage: /dir <op> <args...>"
       info_create_dir_success: Directory created successfully
       info_delete_dir_success: Directory deleted successfully
-    help_text_fmt: "Save Any Bot - Save Telegram files to local storage or ShardReel\nVersion: %s , Commit: %s\n\nCommands:\n/start - Start using the bot\n/help - Show help\n/silent - Toggle silent mode\n/storage - Set default storage\n/save [custom filename] - Save file\n/dir - Manage storage directories\n/rule - Manage rules\n/config - Modify configuration\n/fnametmpl - Set custom filename template\n/task - Manage task queue\n/cancel - Cancel a task\n/watch - Watch chats and auto save (UserBot)\n/copy - Copy history messages to a target chat (UserBot)\n/unwatch - Stop watching chats (UserBot)\n/lswatch - List watched chats (UserBot)\n/lschannel - List channels (UserBot)\n/lsgroup - List groups (UserBot)\n/lstopic - List forum topics (UserBot)\n/syncpeers - Sync peer chats (UserBot)\n\nUsage guide: https://sabot.unv.app/usage\n"
+    help_text_fmt: "Save Any Bot - Save Telegram files to local storage, ShardReel or TG collection\nVersion: %s , Commit: %s\n\nCommands:\n/start - Start using the bot\n/help - Show help\n/silent - Toggle silent mode\n/storage - Set default storage\n/save [custom filename] - Save file\n/dir - Manage storage directories\n/rule - Manage rules\n/config - Modify configuration\n/fnametmpl - Set custom filename template\n/task - Manage task queue\n/cancel - Cancel a task\n/watch - Watch chats and auto save (UserBot)\n/collect - Collect a message or album (UserBot)\n/copy - Copy history messages to a target chat (UserBot)\n/unwatch - Stop watching chats (UserBot)\n/lswatch - List watched chats (UserBot)\n/lschannel - List channels (UserBot)\n/lsgroup - List groups (UserBot)\n/lstopic - List forum topics (UserBot)\n/syncpeers - Sync peer chats (UserBot)\n\nUsage guide: https://sabot.unv.app/usage\n"
     lschannel:
       error_list_failed: "Failed to list channels: {{.Error}}"
       info_list_empty: No channels to list
@@ -168,6 +173,13 @@ bot:
       info_group_found_files_select_storage: Total {{.Count}} files, please select storage
       info_saving_files: Saving files...
     progress:
+      collection_stage: "TG collection: {{.Stage}}"
+      collection_copying: "Copying"
+      collection_downloading: "Downloading to cache"
+      collection_uploading: "Uploading"
+      collection_sending: "Sending"
+      collection_sent: "Collected"
+      collection_open: "Open collected message"
       shardreel_queued: Files downloaded and queued for ShardReel. View upload status or cancel in the admin console.
       shardreel_completed: saved
       shardreel_failed: failed

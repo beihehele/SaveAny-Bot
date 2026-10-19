@@ -44,12 +44,13 @@
       };
       dialog.showModal(); fields.querySelector("input,select")?.focus();
     }
-    const storageChoices = () => storages().map((store) => [store.name, store.name]);
+    const storageChoices = (directories = false) => storages().filter((store)=>!directories || store.type!=="telegram").map((store) => [store.name, store.name]);
 
     function editDirectory(panel, user, entry) {
       if (!ready(panel)) return;
       open(entry ? "editDirectory" : "addDirectory");
-      const storage = field("storage", "storage", entry?.storage || user.default_storage || storages()[0]?.name || "", storageChoices()).input;
+      const choices=storageChoices(true), preferred=entry?.storage || user.default_storage;
+      const storage = field("storage", "storage", choices.some(([name])=>name===preferred) ? preferred : choices[0]?.[0] || "", choices).input;
       const path = field("path", "directoryPath", entry?.path || "").input;
       storage.required = path.required = true; path.placeholder = t("directoryPathExample");
       fields.append(node("p", t("directoryEditNote"), "small muted"));
@@ -77,7 +78,10 @@
       const storage = field("storage", "ruleDestination", entry?.storage || "CHOSEN", [["CHOSEN", t("ruleChosenStorage")], ...storageChoices()]).input;
       const path = field("path", "directoryPath", entry?.path || "").input;
       path.placeholder = t("rulePathExample");
-      fields.append(node("p", t("rulePathNote"), "small muted"), node("p", t("ruleEnableNote"), "note"));
+      const pathNote=node("p",t("rulePathNote"),"small muted");
+      function rulePathField(){const collection=storages().find((store)=>store.name===storage.value)?.type==="telegram";path.parentElement.hidden=collection;pathNote.hidden=collection;if(collection) path.value="";}
+      storage.addEventListener("change",rulePathField);rulePathField();
+      fields.append(pathNote, node("p", t("ruleEnableNote"), "note"));
       editing(user, "rules", entry, () => {
         const values = { type: type.value, storage: storage.value, path: path.value.trim() };
         const expression = type.value === "IS-ALBUM" ? album.input.value : data.input.value;
@@ -104,7 +108,8 @@
     }
     function render(panel, user, presets) {
       const dirs = node("section", null, "settings-section"), dirHeading = node("div", null, "panel-heading");
-      dirHeading.append(node("h2", t("directories")), button(t("addDirectory"), () => editDirectory(panel, user)));
+      const addDir=button(t("addDirectory"),()=>editDirectory(panel,user));addDir.disabled=!storageChoices(true).length;
+      dirHeading.append(node("h2", t("directories")),addDir);
       dirs.append(dirHeading, node("p", t("directoryListNote"), "small muted"));
       const dirTable = node("div");
       table(dirTable, ["storage", "path", "actions"], user.directories.map((entry) => [entry.storage,

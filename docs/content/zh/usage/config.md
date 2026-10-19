@@ -34,7 +34,7 @@ SaveAny-Bot 支持在 Telegram 中通过 `/config` 和 `/fnametmpl` 命令自定
 | `始终跳过` | 对重名文件不做处理 |
 
 {{< hint info >}}
-local 和 ShardReel 均能检测已有文件；上述重名策略用于 Telegram 文件保存，不控制 `/watch` 或 `/copy` 的消息转发。媒体组在所选基础目录内按有效 caption 名归目录，文件名仍按上述策略生成；有效目录名相同的媒体组复用同一文件夹。
+local 和 ShardReel 均能检测已有文件；上述命名、目录和重名设置用于本地/ShardReel 文件保存，不适用于 TG收藏；不控制 `/watch` 或 `/copy` 的消息转发。媒体组在所选基础目录内按有效 caption 名归目录，文件名仍按上述策略生成；有效目录名相同的媒体组复用同一文件夹。
 {{< /hint >}}
 
 ## `/fnametmpl` — 自定义文件名模板

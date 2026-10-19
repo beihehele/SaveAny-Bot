@@ -13,7 +13,7 @@ Endpoints: `POST /api/v1/tasks`, `GET /api/v1/tasks`, `GET /api/v1/tasks/{id}`, 
 {"type":"tgfiles","storage":"archive","path":"albums","params":{"message_links":["https://t.me/c/123456789/123"]}}
 ```
 
-Select a configured local or ShardReel storage. `path` is the base destination: ordinary files go directly under it, while albums use a cleaned, truncated caption subdirectory. Equal caption names share a directory; see [storage configuration](../../deployment/configuration/storages/#shardreel). Bot/Userbot must have source access. Album links expand to the whole group unless `?single` is present. The API does not create watch/copy routes.
+Select a configured local, ShardReel or TG collection storage. TG collection ignores `path`, requires whole albums and does not support `?single`; the following directory behavior applies to local/ShardReel. `path` is the base destination: ordinary files go directly under it, while albums use a cleaned, truncated caption subdirectory. Equal caption names share a directory; see [storage configuration](../../deployment/configuration/storages/#shardreel). Bot/Userbot must have source access. Album links expand to the whole group unless `?single` is present. The API does not create watch/copy routes.
 
 Overlapping links within one submission are deduplicated by chat and message ID; identical message IDs in different chats stay independent. `?single` does not expand an album, while another link without it can still select that whole album. Deduplication does not affect later independent saves. Source queries honor HTTP request cancellation, discard partial selections on cancellation and preserve shared Bot/Userbot clients.
 

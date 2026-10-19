@@ -8,6 +8,7 @@ import (
 	"github.com/krau/SaveAny-Bot/database"
 	"github.com/krau/SaveAny-Bot/pkg/enums/tasktype"
 	"github.com/krau/SaveAny-Bot/pkg/inputresult"
+	"github.com/krau/SaveAny-Bot/pkg/taskevent"
 	"github.com/krau/SaveAny-Bot/pkg/taskresult"
 )
 
@@ -52,6 +53,8 @@ type TaskProgress struct {
 
 // TaskInfoResponse 任务信息响应
 type TaskInfoResponse struct {
+	DeliveryProgress *taskevent.DeliveryProgress `json:"delivery_progress,omitempty"`
+	ResultLinks      []string                    `json:"result_links,omitempty"`
 	inputresult.Report
 	TaskID        string                   `json:"task_id"`
 	Type          tasktype.TaskType        `json:"type"`
@@ -83,6 +86,8 @@ type StoragesResponse struct {
 
 // StorageInfo 存储信息
 type StorageInfo struct {
+	ChatID          int64  `json:"chat_id,omitempty"`
+	TopicID         int    `json:"topic_id,omitempty"`
 	Name            string `json:"name"`
 	Type            string `json:"type"`
 	Readable        bool   `json:"readable"`

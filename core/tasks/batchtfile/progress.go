@@ -192,6 +192,15 @@ func batchCompletionMessage(ctx context.Context, info TaskInfo, err error, confl
 		}
 	}
 
+	if links, ok := info.(interface{ ResultLinks() []string }); ok && stylingErr == nil {
+		for _, link := range links.ResultLinks() {
+			stylingErr = styling.Perform(&entityBuilder, styling.Plain("\n"), styling.TextURL(i18n.T(i18nk.BotMsgProgressCollectionOpen), link))
+			if stylingErr != nil {
+				break
+			}
+		}
+	}
+
 	if stylingErr != nil {
 		return "", nil, stylingErr
 	}

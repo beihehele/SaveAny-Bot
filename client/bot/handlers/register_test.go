@@ -10,7 +10,7 @@ import (
 
 func TestTelegramOnlyCommandsAndHelp(t *testing.T) {
 	expected := map[string]bool{}
-	for _, name := range []string{"start", "silent", "storage", "dir", "rule", "save", "task", "cancel", "config", "fnametmpl", "help", "watch", "copy", "unwatch", "lswatch", "lschannel", "lsgroup", "lstopic", "syncpeers"} {
+	for _, name := range []string{"start", "silent", "storage", "dir", "rule", "save", "task", "cancel", "config", "fnametmpl", "help", "watch", "copy", "collect", "unwatch", "lswatch", "lschannel", "lsgroup", "lstopic", "syncpeers"} {
 		expected[name] = true
 	}
 	if len(CommandHandlers) != len(expected) {

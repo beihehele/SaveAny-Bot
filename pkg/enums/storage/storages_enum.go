@@ -14,6 +14,7 @@ const (
 	// Local is a StorageType of type local.
 	Local     StorageType = "local"
 	Shardreel StorageType = "shardreel"
+	Telegram  StorageType = "telegram"
 )
 
 var ErrInvalidStorageType = fmt.Errorf("not a valid StorageType, try [%s]", strings.Join(_StorageTypeNames, ", "))
@@ -21,6 +22,7 @@ var ErrInvalidStorageType = fmt.Errorf("not a valid StorageType, try [%s]", stri
 var _StorageTypeNames = []string{
 	string(Local),
 	string(Shardreel),
+	string(Telegram),
 }
 
 // StorageTypeNames returns a list of possible string values of StorageType.
@@ -35,6 +37,7 @@ func StorageTypeValues() []StorageType {
 	return []StorageType{
 		Local,
 		Shardreel,
+		Telegram,
 	}
 }
 
@@ -53,6 +56,7 @@ func (x StorageType) IsValid() bool {
 var _StorageTypeValue = map[string]StorageType{
 	"local":     Local,
 	"shardreel": Shardreel,
+	"telegram":  Telegram,
 }
 
 // ParseStorageType attempts to convert a string to a StorageType.

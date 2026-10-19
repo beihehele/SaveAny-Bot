@@ -15,10 +15,12 @@ import (
 	"github.com/krau/SaveAny-Bot/common/utils/fsutil"
 	"github.com/krau/SaveAny-Bot/common/utils/ioutil"
 	"github.com/krau/SaveAny-Bot/common/utils/retryutil"
+	"github.com/krau/SaveAny-Bot/common/utils/tgutil"
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/pkg/enums/ctxkey"
 	"github.com/krau/SaveAny-Bot/pkg/storagetypes"
 	"github.com/krau/SaveAny-Bot/pkg/taskevent"
+	"github.com/krau/SaveAny-Bot/storage"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -34,38 +36,65 @@ func (t *Task) Execute(ctx context.Context) error {
 		meta.ChatID, meta.MessageID = progress.UploadDestination()
 	}
 	ctx = storagetypes.WithSaveRequest(ctx, meta)
+	for _, elem := range t.elems {
+		if _, ok := elem.Storage.(storage.MessageStorage); ok {
+			ctx = tgutil.WithDeliveryFeedback(ctx, t.ID, t.Progress)
+			break
+		}
+	}
 	logger.Info("Starting batch file task")
 	t.results.Reset(t.resultElements())
 	if t.Progress != nil {
 		t.Progress.OnStart(ctx, t)
 	}
+	units, err := t.workGroups()
+	if err != nil {
+		if t.Progress != nil {
+			t.Progress.OnDone(ctx, t, err)
+		}
+		return err
+	}
 	workers := config.C().Workers
 	eg, gctx := errgroup.WithContext(ctx)
 	eg.SetLimit(workers)
 	var staged atomic.Bool
-	for index, elem := range t.elems {
+	for _, indices := range units {
 		eg.Go(func() (err error) {
-			t.results.Start(index)
+			for _, index := range indices {
+				t.results.Start(index)
+			}
 			var resultErr error
 			defer func() {
 				if resultErr == nil {
 					resultErr = err
 				}
-				t.results.Finish(index, resultErr, ctx.Err())
+				for _, index := range indices {
+					t.results.Finish(index, resultErr, ctx.Err())
+				}
+				if _, ok := t.elems[indices[0]].Storage.(storage.MessageStorage); ok {
+					t.emitFileCounts(ctx)
+				}
 			}()
 			t.processingMu.Lock()
-			if t.processing[elem.ID] != nil {
-				t.processingMu.Unlock()
-				return fmt.Errorf("element with ID %s is already being processed", elem.ID)
+			for _, index := range indices {
+				if t.processing[t.elems[index].ID] != nil {
+					t.processingMu.Unlock()
+					return fmt.Errorf("element with ID %s is already being processed", t.elems[index].ID)
+				}
 			}
-			t.processing[elem.ID] = &elem
+			for _, index := range indices {
+				elem := t.elems[index]
+				t.processing[elem.ID] = &elem
+			}
 			t.processingMu.Unlock()
 			defer func() {
 				t.processingMu.Lock()
-				delete(t.processing, elem.ID)
-				t.processingMu.Unlock()
+				defer t.processingMu.Unlock()
+				for _, index := range indices {
+					delete(t.processing, t.elems[index].ID)
+				}
 			}()
-			err = t.processElement(gctx, elem)
+			err = t.processGroup(gctx, indices)
 			if errors.Is(err, storagetypes.ErrSaveQueued) {
 				staged.Store(true)
 			}
@@ -77,7 +106,7 @@ func (t *Task) Execute(ctx context.Context) error {
 			return err
 		})
 	}
-	err := eg.Wait()
+	err = eg.Wait()
 	summary := t.ResultSummary()
 	logger.Info("Batch file outcomes", "total", summary.Total, "succeeded", summary.Succeeded,
 		"skipped", summary.Skipped, "failed", summary.Failed, "cancelled", summary.Cancelled, "interrupted", summary.Interrupted,

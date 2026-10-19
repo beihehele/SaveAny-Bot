@@ -3,6 +3,7 @@ package tfile
 import (
 	"fmt"
 	"path/filepath"
+	"sync"
 
 	"github.com/krau/SaveAny-Bot/config"
 	"github.com/krau/SaveAny-Bot/core"
@@ -22,10 +23,21 @@ type Task struct {
 	Progress ProgressTracker
 	stream   bool // true if the file should be downloaded in stream mode
 	cacheDir string
+	resultMu sync.Mutex
+	links    []string
+}
+
+func (t *Task) ResultLinks() []string {
+	t.resultMu.Lock()
+	defer t.resultMu.Unlock()
+	return append([]string(nil), t.links...)
 }
 
 // Title implements core.Exectable.
 func (t *Task) Title() string {
+	if target, ok := t.Storage.(interface{ Destination() string }); ok {
+		return fmt.Sprintf("[%s](%s → %s)", t.Type(), t.File.Name(), target.Destination())
+	}
 	return fmt.Sprintf("[%s](%s->%s:%s)", t.Type(), t.File.Name(), t.Storage.Name(), t.Path)
 }
 

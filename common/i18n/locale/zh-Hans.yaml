@@ -6,6 +6,7 @@ bot:
       info_cancelling_task: 正在取消任务...
       usage: "用法: /cancel <task_id>"
     cmd:
+      collect: 收藏指定消息或媒体组到 Telegram (UserBot)
       cancel: 取消任务
       config: 修改配置
       copy: 复制历史消息到目标聊天(UserBot)
@@ -106,6 +107,10 @@ bot:
       prompt_select_conflict_strategy: "请选择重名文件保存策略, 当前策略: {{.Strategy}}"
       prompt_select_filename_strategy: "请选择文件名策略, 当前策略: {{.Strategy}}"
       prompt_select_option: 请选择要配置的选项
+    collect:
+      help_text: "用法: /collect <消息链接> [目标聊天ID] [TopicID]\n不填目标时使用唯一可用的 TG收藏 存储配置（包含 Topic）；指定目标但省略 Topic 时不指定 Topic。TopicID=0 也表示不指定。一次收藏一个链接对应的完整媒体组，不使用目录/命名规则，不支持 ?single 拆组。"
+      error_storage_required: "请先配置并授权一个 TG收藏 存储，且启用并登录 Userbot。"
+      error_storage_ambiguous: "存在多个可用 TG收藏 存储；/collect 需要唯一的默认收藏配置，请只为当前用户保留一个。"
     copy:
       all_media: 全部媒体
       no_matches: 未找到符合条件的媒体
@@ -145,7 +150,7 @@ bot:
       help_usage: "使用方法: /dir <操作> <参数...>"
       info_create_dir_success: 文件夹添加成功
       info_delete_dir_success: 文件夹删除成功
-    help_text_fmt: "Save Any Bot - 保存 Telegram 文件到本地或 ShardReel\n版本: %s , 提交: %s\n\n命令:\n/start - 开始使用\n/help - 显示帮助\n/silent - 开关静默模式\n/storage - 设置默认存储位置\n/save [自定义文件名] - 保存文件\n/dir - 管理存储目录\n/rule - 管理规则\n/config - 修改配置\n/fnametmpl - 设置文件自定义命名模板\n/task - 管理任务队列\n/cancel - 取消任务\n/watch - 监听聊天并自动保存 (UserBot)\n/copy - 复制历史消息到目标聊天 (UserBot)\n/unwatch - 取消监听聊天 (UserBot)\n/lswatch - 列出正在监听的聊天 (UserBot)\n/lschannel - 列出频道 (UserBot)\n/lsgroup - 列出群组 (UserBot)\n/lstopic - 列出论坛群话题 (UserBot)\n/syncpeers - 同步对话列表 (UserBot)\n\n使用帮助: https://sabot.unv.app/usage\n"
+    help_text_fmt: "Save Any Bot - 保存 Telegram 文件到本地、ShardReel 或 TG收藏\n版本: %s , 提交: %s\n\n命令:\n/start - 开始使用\n/help - 显示帮助\n/silent - 开关静默模式\n/storage - 设置默认存储位置\n/save [自定义文件名] - 保存文件\n/dir - 管理存储目录\n/rule - 管理规则\n/config - 修改配置\n/fnametmpl - 设置文件自定义命名模板\n/task - 管理任务队列\n/cancel - 取消任务\n/watch - 监听聊天并自动保存 (UserBot)\n/collect - 收藏指定消息或媒体组 (UserBot)\n/copy - 复制历史消息到目标聊天 (UserBot)\n/unwatch - 取消监听聊天 (UserBot)\n/lswatch - 列出正在监听的聊天 (UserBot)\n/lschannel - 列出频道 (UserBot)\n/lsgroup - 列出群组 (UserBot)\n/lstopic - 列出论坛群话题 (UserBot)\n/syncpeers - 同步对话列表 (UserBot)\n\n使用帮助: https://sabot.unv.app/usage\n"
     lschannel:
       error_list_failed: "列出频道失败: {{.Error}}"
       info_list_empty: 当前没有可列出的频道
@@ -168,6 +173,13 @@ bot:
       info_group_found_files_select_storage: 共 {{.Count}} 个文件, 请选择存储位置
       info_saving_files: 正在保存文件...
     progress:
+      collection_stage: "TG收藏：{{.Stage}}"
+      collection_copying: "正在复制"
+      collection_downloading: "正在下载缓存"
+      collection_uploading: "正在上传"
+      collection_sending: "正在发送"
+      collection_sent: "已收藏"
+      collection_open: "打开收藏消息"
       shardreel_queued: 文件已下载，等待保存到 ShardReel。可在后台查看上传状态或取消任务。
       shardreel_completed: 保存完成
       shardreel_failed: 保存失败

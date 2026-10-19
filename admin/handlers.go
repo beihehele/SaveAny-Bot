@@ -83,6 +83,8 @@ func (s *Server) taskRows(ctx context.Context) []taskRow {
 			}
 			row.UpdatedAt = record.UpdatedAt
 		}
+		row.DeliveryProgress = record.DeliveryProgress
+		row.ResultLinks = record.ResultLinks
 		row.Source = record.Source
 		row.CopyProgress = record.CopyProgress
 		byID[record.ID] = row

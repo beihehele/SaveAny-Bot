@@ -17,8 +17,10 @@ import (
 // guarded by mu. It implements taskevent.Sink so the task layer can update it
 // without knowing about the API.
 type TaskProgressInfo struct {
-	mu    sync.Mutex
-	store *progressStore
+	DeliveryProgress *taskevent.DeliveryProgress
+	ResultLinks      []string
+	mu               sync.Mutex
+	store            *progressStore
 	inputresult.Report
 	TaskID          string
 	Type            string
@@ -227,6 +229,8 @@ func (t *TaskProgressInfo) snapshot() (status TaskStatus, total, downloaded int6
 }
 
 type taskProgressSnapshot struct {
+	deliveryProgress            *taskevent.DeliveryProgress
+	resultLinks                 []string
 	report                      inputresult.Report
 	status                      TaskStatus
 	total, downloaded           int64
@@ -239,7 +243,12 @@ type taskProgressSnapshot struct {
 func (t *TaskProgressInfo) responseSnapshot() taskProgressSnapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return taskProgressSnapshot{status: t.Status, total: t.TotalBytes, downloaded: t.DownloadedBytes,
+	var delivery *taskevent.DeliveryProgress
+	if t.DeliveryProgress != nil {
+		p := *t.DeliveryProgress
+		delivery = &p
+	}
+	return taskProgressSnapshot{deliveryProgress: delivery, resultLinks: append([]string(nil), t.ResultLinks...), status: t.Status, total: t.TotalBytes, downloaded: t.DownloadedBytes,
 		totalFiles: t.TotalFiles, downloadedFiles: t.DownloadedFiles, startedAt: t.StartedAt, err: t.Error,
 		updatedAt: t.UpdatedAt, resultSummary: cloneResultSummary(t.ResultSummary), report: t.Report.Clone()}
 }
@@ -298,6 +307,12 @@ func (t *TaskProgressInfo) Emit(e taskevent.Event) {
 			t.Status = TaskStatusCompleted
 		}
 	}
+	if e.DeliveryProgress != nil {
+		p := *e.DeliveryProgress
+		t.DeliveryProgress = &p
+	}
+	t.ResultLinks = append(t.ResultLinks, e.ResultLinks...)
+
 	t.UpdatedAt = time.Now()
 	payload := t.notificationLocked()
 	ctx := t.webhookContext

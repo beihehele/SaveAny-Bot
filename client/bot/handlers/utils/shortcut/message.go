@@ -57,8 +57,13 @@ type EditMessageFunc func(text string, markup tg.ReplyMarkupClass)
 
 // 获取链接中的文件并回复等待消息
 func GetFilesFromUpdateLinkMessageWithReplyEdit(ctx *ext.Context, update *ext.Update) (replied *types.Message, files []tfile.TGFileMessage, editReplied EditMessageFunc, err error) {
-	logger := log.FromContext(ctx)
 	msgLinks := re.TgMessageLinkRegexp.FindAllString(tgutil.ExtractMessageEntityUrlsText(update.EffectiveMessage.Message), -1)
+	return GetFilesFromLinksWithReplyEdit(ctx, update, msgLinks)
+}
+
+// GetFilesFromLinksWithReplyEdit resolves explicit links through the same album/dedup workflow.
+func GetFilesFromLinksWithReplyEdit(ctx *ext.Context, update *ext.Update, msgLinks []string) (replied *types.Message, files []tfile.TGFileMessage, editReplied EditMessageFunc, err error) {
+	logger := log.FromContext(ctx)
 	if len(msgLinks) == 0 {
 		logger.Warn("no matched message links but called handleMessageLink")
 		return nil, nil, nil, dispatcher.EndGroups

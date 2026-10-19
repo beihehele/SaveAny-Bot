@@ -84,6 +84,15 @@ base_path = "./downloads"
 # spool_path = "./data/shardreel"
 # max_pending_bytes = 21474836480
 
+# 可选：TG收藏，需启用并登录 Userbot；固定收藏目标，不改变默认存储。
+# 目标应为频道或超级群；topic_id=0 表示不指定 Topic。
+# [[storages]]
+# name = "TG收藏"
+# type = "telegram"
+# enable = true
+# chat_id = -1001234567890
+# topic_id = 0
+
 [[users]]
 id = 114514
 storages = []

@@ -9,7 +9,7 @@ weight: 20
 
 | 方法和路径 | 用途 |
 |---|---|
-| `POST /api/v1/tasks` | 从 Telegram 消息链接创建 local 或 ShardReel 保存任务 |
+| `POST /api/v1/tasks` | 从 Telegram 消息链接创建本地、ShardReel 或 TG收藏 保存任务 |
 | `GET /api/v1/tasks` | 查看 API 任务及持久化 ShardReel 上传任务 |
 | `GET /api/v1/tasks/{id}` | 查询详情 |
 | `DELETE /api/v1/tasks/{id}` | 取消任务 |
@@ -21,7 +21,7 @@ weight: 20
 {"type":"tgfiles","storage":"本机1","path":"albums","params":{"message_links":["https://t.me/c/123456789/123"]}}
 ```
 
-`path` 是基础目标目录。普通文件直接保存在其下，媒体组按清理、截断后的 caption 建立子目录，同名 caption 共用目录；详见[存储端配置](../../deployment/configuration/storages/#shardreel)。Bot/Userbot 必须能访问源消息；媒体组链接默认提取整组，`?single` 只保存指定成员。接口不创建监听或复制路由。
+TG收藏 忽略 `path`，只支持完整媒体组，不支持 `?single` 拆组；以下目录规则适用于本地和 ShardReel。`path` 是基础目标目录。普通文件直接保存在其下，媒体组按清理、截断后的 caption 建立子目录，同名 caption 共用目录；详见[存储端配置](../../deployment/configuration/storages/#shardreel)。Bot/Userbot 必须能访问源消息；媒体组链接默认提取整组，`?single` 只保存指定成员。接口不创建监听或复制路由。
 
 同一次提交中，重叠链接按聊天和消息 ID 去重，每条媒体消息只保存一次；不同聊天中的相同消息 ID 不会合并。`?single` 不展开媒体组，但同一次提交中另一个不带该参数的链接仍可选择整组。去重仅限本次请求，不影响之后的独立保存任务。链接查询阶段响应 HTTP 请求取消；取消后不会把已提取的部分文件入队，也不会取消共享 Bot/Userbot 客户端。
 
