@@ -75,8 +75,9 @@ func (s *Store) Save(context.Context, io.Reader, string) error {
 	return fmt.Errorf("telegram storage requires original messages")
 }
 
-// SaveMessages never retries a send with fresh IDs, and only falls back after
-// Telegram explicitly rejects forwarding. Cache/attribution errors cannot resend.
+// SaveMessages never retries a send with fresh IDs. Copy requests only fall back
+// after explicit forwarding restrictions; unverified Bot attachments use upload.
+// Cache/attribution errors cannot resend.
 func (s *Store) SaveMessages(ctx context.Context, files []tfile.TGFileMessage) ([]string, error) {
 	return s.saveMessages(ctx, userclient.GetCtx(), files)
 }
@@ -106,11 +107,31 @@ func (s *Store) saveMessages(ctx context.Context, client *ext.Context, files []t
 	}
 
 	var messages []*tg.Message
-	// Bot-private IDs belong to the Bot's dialog, not the Userbot's. Use
-	// their original downloader rather than forwarding unrelated Userbot IDs.
+	// Recover forwarded channel originals when they match the received content.
+	// Keep the Bot files for upload fallback; their IDs are never sent as Userbot IDs.
 	_, private := files[0].Message().PeerID.(*tg.PeerUser)
-	if !private {
-		if files[0].Message().GroupedID != 0 {
+	canCopy := !private
+	if private {
+		originals, origin, lookupErr := forwardedOrigin(client, files)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if lookupErr != nil {
+			log.FromContext(ctx).Debug("Collection origin unavailable; using received attachments", "error", lookupErr)
+		}
+		if len(originals) > 0 && origin != s.cfg.ChatID {
+			canCopy, source = true, origin
+			linkID = originals[0].ID
+			for i, message := range originals {
+				ids[i] = message.ID
+				if strings.TrimSpace(message.Message) != "" {
+					linkID = message.ID
+				}
+			}
+		}
+	}
+	if canCopy {
+		if !private && files[0].Message().GroupedID != 0 {
 			// Watch updates and link parsing can yield only part of an album.
 			// Compare the selection with a fresh source read before publishing;
 			// never expand it here, which would bypass per-file storage rules.
@@ -133,7 +154,7 @@ func (s *Store) saveMessages(ctx context.Context, client *ext.Context, files []t
 			return nil, err
 		}
 	}
-	if private || err != nil {
+	if !canCopy || err != nil {
 		messages, err = s.uploadMessages(ctx, client, files, source, linkID)
 		if err != nil {
 			return nil, err
@@ -287,10 +308,12 @@ func (s *Store) uploadFile(ctx context.Context, client *ext.Context, peer tg.Inp
 		return nil, err
 	}
 	delivery(ctx, "uploading", 0, stat.Size(), nil)
-	uploaded, err := uploader.NewUploader(client.Raw).WithThreads(config.C().Threads).WithProgress(uploadProgress{}).
+	progress := &uploadProgress{}
+	uploaded, err := uploader.NewUploader(client.Raw).WithPartSize(uploader.MaximumPartSize).
+		WithThreads(config.C().Threads).WithProgress(progress).
 		Upload(ctx, uploader.NewUpload(file.Name(), cache, stat.Size()))
 	if err != nil {
-		return nil, fmt.Errorf("upload: %w", err)
+		return nil, fmt.Errorf("upload (%d/%d bytes confirmed): %w", progress.uploaded.Load(), stat.Size(), err)
 	}
 	media, err := uploadedMedia(file.Message(), uploaded)
 	if err != nil {
@@ -324,10 +347,16 @@ func (s *Store) uploadFile(ctx context.Context, client *ext.Context, peer tg.Inp
 	return nil, fmt.Errorf("Telegram returned unsupported uploaded media %T", prepared)
 }
 
-type uploadProgress struct{}
+type uploadProgress struct{ uploaded atomic.Int64 }
 
-func (uploadProgress) Chunk(ctx context.Context, state uploader.ProgressState) error {
-	delivery(ctx, "uploading", state.Uploaded, state.Total, nil)
+func (p *uploadProgress) Chunk(ctx context.Context, state uploader.ProgressState) error {
+	// Parallel RPCs can invoke callbacks out of confirmation order.
+	for previous := p.uploaded.Load(); state.Uploaded > previous; previous = p.uploaded.Load() {
+		if p.uploaded.CompareAndSwap(previous, state.Uploaded) {
+			break
+		}
+	}
+	delivery(ctx, "uploading", p.uploaded.Load(), state.Total, nil)
 	return ctx.Err()
 }
 

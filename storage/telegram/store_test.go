@@ -39,6 +39,10 @@ type archiveRPC struct {
 	albumErr   error
 	checks     int
 	afterSend  context.CancelFunc
+	afterQuery context.CancelFunc
+	afterCopy  context.CancelFunc
+	uploadErr  error
+	failPartAt int
 }
 
 func (r *archiveRPC) Invoke(ctx context.Context, in bin.Encoder, out bin.Decoder) error {
@@ -62,14 +66,23 @@ func (r *archiveRPC) Invoke(ctx context.Context, in bin.Encoder, out bin.Decoder
 			result.Messages = append(result.Messages, member)
 		}
 		out.(*tg.MessagesMessagesBox).Messages = result
+		if r.afterQuery != nil {
+			r.afterQuery()
+		}
 	case *tg.MessagesForwardMessagesRequest:
 		r.forward = request
 		if r.forwardErr != nil {
 			return r.forwardErr
 		}
 		out.(*tg.UpdatesBox).Updates = receipt(len(request.ID))
+		if r.afterCopy != nil {
+			r.afterCopy()
+		}
 	case *tg.UploadSaveFilePartRequest:
 		r.parts++
+		if r.parts == r.failPartAt {
+			return r.uploadErr
+		}
 		if string(request.Bytes) != "data" {
 			return fmt.Errorf("upload corrupt: %q", request.Bytes)
 		}

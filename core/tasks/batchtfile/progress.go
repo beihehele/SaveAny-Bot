@@ -129,7 +129,9 @@ func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 		tgutil.EditProgress(ctx, p.ChatID, request, false)
 		return
 	}
-	if err != nil {
+	if taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled {
+		log.FromContext(ctx).Infof("Batch task %s cancelled", info.TaskID())
+	} else if err != nil {
 		log.FromContext(ctx).Errorf("Batch task %s failed: %s", info.TaskID(), err)
 	} else {
 		log.FromContext(ctx).Debugf("Batch task %s completed successfully", info.TaskID())

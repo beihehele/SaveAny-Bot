@@ -123,7 +123,9 @@ func (p *Progress) OnDone(ctx context.Context, info TaskInfo, err error) {
 		tgutil.EditProgress(ctx, p.ChatID, request, false)
 		return
 	}
-	if err != nil {
+	if taskresult.ClassifyOutcome(ctx, err) == taskresult.OutcomeCancelled {
+		log.FromContext(ctx).Infof("Progress cancelled for file [%s]", info.FileName())
+	} else if err != nil {
 		log.FromContext(ctx).Errorf("Progress error for file [%s]: %v", info.FileName(), err)
 	} else {
 		log.FromContext(ctx).Debugf("Progress done for file [%s]", info.FileName())
